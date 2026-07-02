@@ -1,0 +1,63 @@
+# --- Secrets & credentials — never commit these ---
+.env
+.env.*
+!.env.example
+credentials.json
+token.json
+service-account*.json
+*.pem
+*.key
+id_rsa
+id_rsa.pub
+
+# --- Dependencies ---
+node_modules/
+.pnpm-store/
+
+# --- Python tooling venvs (e.g. docs .docx generation) ---
+docs/.venv/
+.venv/
+
+# --- VitePress docs site (generated) ---
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+
+# --- Generated docs artifacts (rebuild from source; not committed) ---
+# architecture.html is regenerated from architecture.md by docs/scripts/render_architecture.py
+docs/architecture.html
+
+# --- Build output ---
+dist/
+build/
+.output/
+*.tsbuildinfo
+
+# --- Tests ---
+coverage/
+playwright-report/
+test-results/
+
+# --- Logs ---
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# --- OS / editor cruft ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# --- Local Claude Code state (personal, not shared) ---
+.claude/settings.local.json
+CLAUDE.local.md
+
+# --- Local dev data ---
+*.sqlite
+*.rdb
+docker-data/
+Software Requirements Specification Template.docx
+~$S - Centralized Notification System - 2026-07-01.docx
+SRS - Centralized Notification System - 2026-07-01.docx
+SRS - Centralized Notification System - 2026-07-02.docx

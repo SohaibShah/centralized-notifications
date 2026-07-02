@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "postgres": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@bytebase/dbhub",
+        "--dsn",
+        "${DATABASE_URL:-postgresql://postgres:postgres@localhost:5432/postgres}"
+      ]
+    }
+  }
+}
