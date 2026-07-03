@@ -1,8 +1,6 @@
-version: "3.8"
-
 services:
   postgres:
-    image: postgres:16
+    image: postgres:17
     restart: unless-stopped
     environment:
       POSTGRES_USER: postgres
@@ -11,7 +9,7 @@ services:
     ports:
       - "5432:5432"
     volumes:
-      - docker-data/postgres:/var/lib/postgresql/data
+      - ./docker-data/postgres:/var/lib/postgresql/data
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -24,7 +22,7 @@ services:
     ports:
       - "6379:6379"
     volumes:
-      - docker-data/redis:/data
+      - ./docker-data/redis:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

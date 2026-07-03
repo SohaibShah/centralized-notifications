@@ -1,0 +1,17 @@
+# Keep build context lean and prevent host artifacts / secrets from being baked
+# into images. The Dockerfiles COPY the repo root for the monorepo build.
+node_modules
+**/node_modules
+.git
+.github
+dist
+**/dist
+coverage
+**/coverage
+.env
+.env.*
+!.env.example
+docs
+docker-data
+*.log
+.DS_Store

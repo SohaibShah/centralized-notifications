@@ -60,10 +60,10 @@ One-line description: [fill in — what does this app do, who uses it]
   gets the same setup)
 
 ## Build & run
-_(fill in once these exist — Claude should update this section the first time it sets up the
-actual scripts, so it stays accurate)_
-- `pnpm install`
-- `docker compose up -d` — Postgres + Redis for local dev
-- `pnpm dev` — runs frontend + backend in watch mode
-- `pnpm test` — unit tests
-- `pnpm test:e2e` — Playwright e2e tests
+Keep this section accurate as scripts change.
+- `pnpm install` — install all workspace dependencies (`frontend/`, `backend/`, `packages/shared/`)
+- `docker compose up -d` — Postgres (and Redis, used from week 5) for local dev
+- `pnpm dev` — runs frontend + backend together in watch mode
+- `pnpm lint` / `pnpm typecheck` — must be clean before a change is "done"
+- `pnpm test` — Vitest unit tests across all packages
+- `pnpm test:e2e` — Playwright e2e (wired with the first user-facing flow, Week 1 Task 7)
