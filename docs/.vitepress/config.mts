@@ -19,6 +19,7 @@ export default defineConfig({
           text: 'API',
           items: [
             { text: 'Overview', link: '/api/' },
+            { text: 'Auth', link: '/api/auth' },
             { text: 'Notifications', link: '/api/notifications' },
           ],
         },

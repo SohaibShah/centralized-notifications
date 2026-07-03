@@ -27,6 +27,7 @@ export default tseslint.config(
       // Build tooling configs pull in devDependencies / node globals; keep lint
       // focused on application source.
       "**/vite.config.ts",
+      "**/vitest.config.ts",
       "**/tsup.config.ts",
     ],
   },

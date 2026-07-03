@@ -1,9 +1,17 @@
+import "./config/load-env";
+import { getEnv } from "./config/env";
 import { buildServer } from "./server";
 
-const app = buildServer();
-const port = Number(process.env.PORT ?? 3000);
+const env = getEnv();
 
-app.listen({ port, host: "0.0.0.0" }).catch((err: unknown) => {
-  app.log.error(err);
-  process.exit(1);
-});
+buildServer()
+  .then((app) =>
+    app.listen({ port: env.PORT, host: "0.0.0.0" }).catch((err: unknown) => {
+      app.log.error(err);
+      process.exit(1);
+    }),
+  )
+  .catch((err: unknown) => {
+    console.error(err);
+    process.exit(1);
+  });
