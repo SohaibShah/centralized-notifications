@@ -10,7 +10,12 @@ spec itself stays uncluttered. Update this file as the open items get resolved.
   configuration is the base policy applied to all users; per-user preferences layer on top.
   **Suppressions stack** — a global disable or snooze always wins, and a per-user setting may only
   further restrict, never re-enable something disabled globally.
-- **Administrator role** governs system-wide notification behavior through the Admin panel (Milestone 2).
+- **Administrator role** governs system-wide notification behavior through the Admin panel (basic in
+  week 2, expanding through week 5).
+- **Audience / scope** — a notification targets one of four scopes: **`global`** (company-wide),
+  **`team`**, **`role`**, or **`user`** (individual). All four are built. Teams and roles are modeled
+  as attributes of users (seeded via the prototype auth); the audience carries `{ scope, id? }`, where
+  `id` identifies the team/role/user for the non-global scopes.
 - **Generic, domain-agnostic backend** — one fixed notification contract plus an opaque `metadata`
   field the system stores and passes through but never interprets; transport and delivery abstracted;
   policy is data-driven with no per-module code; input strictly validated. A new source module or
@@ -19,58 +24,64 @@ spec itself stays uncluttered. Update this file as the open items get resolved.
   filters, admin controls, preferences) is rendered from JSON schemas/configuration by shared
   renderers, extending the shared `FormRenderer`.
 - **Notification contract** — `{ id, title, description, actions, priority, snoozable, module,
-  category?, timestamp, audience, metadata? }`; `id` is the idempotency key; all domain-specific data
-  is confined to the opaque `metadata`.
-- **Audience/scope concept** — `global` now; `team` and `user` reserved. Per-team targeting is not
-  built and will require specific team identifiers.
+  audience, category?, timestamp, metadata? }`; `id` is the idempotency key; `audience` =
+  `{ scope: 'global'|'team'|'role'|'user', id? }`; all domain-specific data is confined to the opaque
+  `metadata`.
 - **Auto-discovered modules** — no pre-registered allowlist; a module appears in the admin settings the
   first time it publishes.
 - **Admin configuration stored in PostgreSQL**, editable via the Admin panel, and exportable/importable
   as a single configuration artifact.
-- **AI retrieval uses PostgreSQL Full-Text Search**; similar-notification grouping uses text/metadata
-  matching. No vector embeddings (pgvector).
+- **LLM behind a pluggable adapter; hosted model by default — Anthropic (Claude) models** (the ones
+  available to the team) — with a local model via Ollama kept swappable. Rationale: privacy is not
+  required in this environment, so a hosted model is used for its much stronger summaries and answers
+  and its lack of any GPU/hardware dependency; the adapter preserves the option to run locally later.
+- **AI retrieval uses PostgreSQL Full-Text Search now**, behind a small retriever interface;
+  similar-notification grouping uses text/metadata matching. **Vector embeddings (pgvector) are a
+  planned later upgrade** (a stretch item) that the retriever interface localizes.
 - **Real-time delivery via Server-Sent Events (SSE)** — not WebSockets or polling; a shared
   publish/subscribe fan-out serves connected clients.
-- **LLM is locally hosted via Ollama** (default Llama 3.2 3B Instruct), used for generation only.
-  Rationale: avoids per-call cost, needs no external API access, and keeps notification content inside
-  the deployment.
 - **Backend framework: Fastify + TypeScript.**
 - **Database: latest stable PostgreSQL** (the dev `docker-compose` currently pins 16 — bump it to match).
 - **De-duplication uses the notification `id`** as the idempotency key.
-- **Action-callback authentication/authorization is the originating module's responsibility**; the
-  system only invokes the callback the module provided.
-- **Rate limiting** caps notifications per recipient / module / category (configurable, and
+- **Action-callback authentication/authorization is the originating module's responsibility** (its
+  simulator in the prototype); the system only invokes the callback the module provided.
+- **Rate limiting** caps notifications per recipient / source / category (configurable, and
   admin-overridable per module) to prevent flooding.
 - **Performance is a first-class requirement.** Frontend: list virtualization via a lightweight
   windowing library (not Vuetify), incremental / keyset-paginated loading, coalesced real-time updates,
   lean list rows with detail fetched on demand, and server-side grouping and filtering. Backend:
   indexed queries (including a full-text index), keyset pagination, in-memory caching of admin config
   and per-user preferences, batched ingest, shared pub/sub SSE fan-out, and time-partitioning with
-  retention.
+  retention. (These means live in the SRS's Tech Stack / Approaches, not its NFRs.)
 - **Recipient-data privacy handling is not required.** The system runs in a developer-studio
   environment where notification content is generated by developers; there is no PII detection or
   log-redaction requirement.
-- **Phased delivery.** Milestone 1: the frontend feed and its AI features over a basic backend (a
-  simple intake, not Redis), built one feature at a time. Milestone 2: the Admin panel and its
-  governance, full authorization, and the Redis Streams intake path. The Admin panel's first cut is a
-  proof-of-concept.
+- **Prototype scaffolding.** The system is not yet embedded in the host application, so the prototype
+  ships its own **simple authentication** (username/password + session; seedable users, roles, and team
+  memberships) and **module simulators** that emit notifications. In production these are replaced by
+  the host application's identity and real modules.
+- **Delivery — five weekly milestones, functional at each** (time-boxed to ~5 weeks; demoable at every
+  standup): (1) skeleton + live feed; (2) basic admin + organized feed; (3) AI features;
+  (4) audiences + preferences + interaction; (5) hardening + admin expansion (durable Redis Streams
+  intake, dead-letter, performance pass + tests, production-auth seam). The Admin panel starts basic in
+  week 2 and expands; the durable event-stream intake replaces the simple direct intake in week 5.
 
 ## Deferred / needs investigation
 
-- **Per-team targeting and the specific team-identifier scheme** — awaiting mentor confirmation (Teams
-  message out).
-- **Full authentication model** — administrator authentication and role, the feed session, and the
-  identity used to scope per-user data. Scaffolded in Milestone 1, completed in Milestone 2.
+- **Production auth & module integration** — replacing the prototype's built-in authentication with the
+  host application's identity, and the module simulators with the real modules. A clean seam is kept for
+  this; it is the main step from prototype to production.
+- **Semantic (vector) retrieval** — a planned quality upgrade over Full-Text Search once time allows;
+  the retriever interface localizes the switch.
 - **Additional admin-panel capabilities to brainstorm later** — AI-summary detail controls (length,
   which categories/priorities/modules are summarized, tone), a versioned template library, a
   categorization-rules editor, tiered/team admin roles, and a test/simulation mode.
 - **Choice of virtualization library** (e.g. vue-virtual-scroller vs. TanStack Virtual).
 - **Notification-contract evolution** via the opaque `metadata` field as the design matures.
-- **Host hardware for the local LLM**, which bounds the model size that can run acceptably.
 - **Production deployment host / orchestration** and the final CI/CD target.
 - **Detailed UI wireframes / screen layouts.**
 - **Quantitative performance / scalability / availability targets** — the engineering approach is
-  specified (see performance decision above and NFR-2); concrete numbers await measurement once the
+  specified (see the performance decision above and NFR-2); concrete numbers await measurement once the
   system is running.
 
 ## Retained scope cuts
@@ -84,6 +95,6 @@ spec itself stays uncluttered. Update this file as the open items get resolved.
 ## For the mentor — sign-off before build
 
 Two load-bearing items merit explicit sign-off before implementation:
-1. The **notification contract** (shape above).
+1. The **notification contract** (shape above, including the four-scope `audience`).
 2. The **global-vs-per-user precedence rule** (suppressions stack — a global disable always wins; a
    per-user setting may only further restrict).

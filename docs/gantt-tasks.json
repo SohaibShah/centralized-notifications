@@ -1,13 +1,7 @@
 [
-  { "id": "design", "name": "M1: Design & architecture (v1.3)", "start": 0, "duration": 2 },
-  { "id": "scaffold", "name": "M1: Scaffold monorepo + basic backend + generic contract", "start": 2, "duration": 3, "dependsOn": ["design"] },
-  { "id": "feed-shell", "name": "M1: Feed shell + live SSE (virtualized, paginated)", "start": 5, "duration": 4, "dependsOn": ["scaffold"] },
-  { "id": "organize", "name": "M1: Categorize + group + prioritize + filter", "start": 9, "duration": 3, "dependsOn": ["feed-shell"] },
-  { "id": "prefs-actions", "name": "M1: Snooze + actions + per-user prefs (JSON forms)", "start": 12, "duration": 3, "dependsOn": ["organize"] },
-  { "id": "ai", "name": "M1: AI summaries (on-demand + scheduled) + Q&A chatbot", "start": 15, "duration": 4, "dependsOn": ["prefs-actions"] },
-  { "id": "perf-tests", "name": "M1: Performance pass + tests", "start": 19, "duration": 2, "dependsOn": ["ai"] },
-  { "id": "admin-poc", "name": "M2: Admin panel PoC (module governance, kill-switches, AI config)", "start": 21, "duration": 4, "dependsOn": ["perf-tests"] },
-  { "id": "redis-auth", "name": "M2: Redis Streams intake + dead-letter + full authorization", "start": 25, "duration": 4, "dependsOn": ["admin-poc"] },
-  { "id": "admin-extras", "name": "M2: Observability + broadcasts + audit + config export/import", "start": 29, "duration": 3, "dependsOn": ["redis-auth"] },
-  { "id": "review", "name": "M2: Review + docs + e2e", "start": 32, "duration": 1, "dependsOn": ["admin-extras"] }
+  { "id": "w1", "name": "Week 1 — Skeleton + live feed (auth, simulator, intake→SSE, feed)", "start": 0, "duration": 5 },
+  { "id": "w2", "name": "Week 2 — Basic admin + organized feed (discovery, enable/disable, kill-switches, categorize/prioritize/filter)", "start": 5, "duration": 5, "dependsOn": ["w1"] },
+  { "id": "w3", "name": "Week 3 — AI features (LLM adapter, summaries, Q&A chatbot, AI config)", "start": 10, "duration": 5, "dependsOn": ["w2"] },
+  { "id": "w4", "name": "Week 4 — Audiences + prefs + interaction (global/team/role/user, prefs, grouping/snooze/actions)", "start": 15, "duration": 5, "dependsOn": ["w3"] },
+  { "id": "w5", "name": "Week 5 — Hardening + admin expansion (Redis intake+dead-letter, audit/observability, broadcasts, perf/tests, prod-auth seam)", "start": 20, "duration": 5, "dependsOn": ["w4"] }
 ]

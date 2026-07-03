@@ -2,7 +2,7 @@
 
 Companion to `docs/srs/SRS - Centralized Notification System - v1.3.docx`. This document covers the
 folder structure, the split-later strategy, the backend/frontend internal layout, the data model, the
-notification message contract, the local-LLM integration, and the architecture / process diagrams.
+notification message contract, the AI/LLM integration, and the architecture / process diagrams.
 Decisions, scope cuts, and open items are tracked in
 [`srs/open-questions-and-decisions.md`](./srs/open-questions-and-decisions.md). An interactive
 copy of the diagrams renders in `architecture.html` — generated from this file by
@@ -21,35 +21,39 @@ timeline is in [`gantt.html`](./gantt.html).
   admin controls, preferences — is rendered from schemas/configuration by shared renderers, so a
   notification of a new kind renders without frontend code.
 
-## Delivery phasing
+## Delivery roadmap (5 weekly milestones, functional at each)
 
-- **Milestone 1 (focus): the frontend feed + AI over a basic backend.** A simple intake (internal /
-  HTTP publish) feeds the generic pipeline → SSE → a virtualized, JSON-driven feed. Categorization,
-  grouping, prioritization, filtering, snoozing, actions, AI summaries, the Q&A chatbot, and the
-  per-user preferences panel. Built one feature at a time.
-- **Milestone 2: administration + the event stream.** The Admin panel and its governance, full
-  authorization, and the Redis Streams intake path (behind the same intake boundary — no pipeline
-  rewrite).
+1. **Skeleton + live feed** — prototype auth (login/session, seeded users/roles/teams); a module
+   simulator; generic intake → dedupe → persist → SSE; a live, JSON-driven feed with incremental loading.
+2. **Basic admin + organized feed** — module auto-discovery; a basic Admin panel (enable/disable
+   modules, feature kill-switches) enforcing global policy; categorization, prioritization, filtering.
+3. **AI features** — LLM adapter (hosted Anthropic/Claude default); on-demand + scheduled summaries;
+   Q&A chatbot (FTS via a retriever interface); admin AI configuration.
+4. **Audiences + prefs + interaction** — global/team/role/user targeting (seeded teams + roles);
+   per-user preferences beneath the global policy (suppressions stack); grouping, snooze, actions, navigate.
+5. **Hardening + admin expansion** — audit log, resource/health observability, broadcasts, config
+   export/import, global controls, TTL; **Redis Streams intake + dead-letter** behind the same boundary;
+   performance pass + tests; the production-auth seam. Stretch: semantic (vector) retrieval.
 
 ## Locked decisions
 
 | Area | Decision |
 |---|---|
 | Policy model | **Global, admin-governed base + per-user layer.** Suppressions stack — a global disable/snooze always wins; per-user settings may only further restrict. |
-| Administration | **Admin panel governs behavior for all users** (M2). First cut is a proof-of-concept. |
+| Administration | **Admin panel governs behavior for all users** — basic in week 2, expands through week 5. |
 | Backend shape | **Generic / domain-agnostic** — one contract + opaque `metadata`; abstracted transport; delivery behind a common adapter; no per-module code. |
 | Frontend shape | **Dynamic / JSON-driven** — cards, filters, admin, prefs rendered from schemas/config by shared renderers. |
-| Intake | **Abstracted boundary.** M1: simple internal/HTTP publish. M2: **Redis Streams** (consumer groups, XACK-after-durable, dead-letter). |
+| Intake | **Abstracted boundary.** Weeks 1–4: simple direct/HTTP publish (driven by the simulators). Week 5: **Redis Streams** (consumer groups, XACK-after-durable, dead-letter). |
+| Audience/scope | Notification carries an `audience` = `{ scope, id? }` with scope **`global` \| `team` \| `role` \| `user`** — all four built. Teams and roles are modeled on users. |
 | Delivery surface | **In-app only** (intake in → SSE out), with a shared pub/sub fan-out. No email/SMS/push/chat platforms. |
-| Modules | **Auto-discovered** on first publish — no pre-registered allowlist. |
-| Audience/scope | Notification carries an `audience`: **`global` now**; `team`/`user` reserved. Per-team needs specific team identifiers (deferred). |
-| Tenancy | **Single deployment**, not multi-tenant. |
+| Modules | **Auto-discovered** on first publish — no pre-registered allowlist. Simulated in the prototype. |
+| AI / LLM | **Pluggable LLM adapter; hosted Anthropic (Claude) model by default**; local (Ollama) swappable. Generation only. |
+| AI retrieval | **PostgreSQL Full-Text Search now, behind a retriever interface**; **vector embeddings (pgvector) later** (stretch). |
+| Auth | **Prototype: own simple auth** (username/password + session; users, roles, team membership; seeded). **Production: host-application identity** (a kept seam). |
 | Performance | **First-class.** FE: list virtualization (lightweight lib, not Vuetify), keyset-paginated/infinite scroll, coalesced SSE, server-side grouping/filtering. BE: indexes incl. FTS GIN, keyset pagination, config/prefs caching, batched ingest, shared SSE fan-out, time-partitioning + retention. |
-| AI retrieval | **PostgreSQL Full-Text Search** (`tsvector`/`tsquery`) + text/metadata grouping. **No pgvector.** |
-| LLM | **Local, via Ollama** co-located with the backend. Default **Llama 3.2 3B Instruct**; generation only. |
+| Tenancy | **Single deployment**, not multi-tenant. |
 | Backend framework | **Fastify** + TypeScript. |
 | Database | **Latest stable PostgreSQL** (dev `docker-compose` pins 16 — bump to match). |
-| Auth (NFR-4) | **Phased** — admin role + per-user identity scoping scaffolded in M1, fully enforced in M2. |
 | Privacy | **Not required** — developer-studio environment, notification content is dev-generated. |
 | Dedupe | On the notification **`id`** (used as the idempotency key). |
 
@@ -66,10 +70,10 @@ or vendor / git-submodule it — each app already has its own `package.json`, `t
 ├─ pnpm-workspace.yaml
 ├─ package.json              # root scripts + dev tooling only
 ├─ tsconfig.base.json        # extended by each package
-├─ docker-compose.yml        # postgres (bump 16 → latest) + ollama now; redis added in M2
-├─ .env.example              # add OLLAMA_URL, LLM_MODEL, rate-limit knobs (REDIS_URL in M2)
+├─ docker-compose.yml        # postgres now; redis added in week 5
+├─ .env.example              # DB_URL, SESSION_SECRET, ANTHROPIC_API_KEY, LLM_PROVIDER/MODEL, rate-limit knobs (REDIS_URL in wk5)
 ├─ frontend/                 # Vue 3 app — own package.json, tsconfig, Dockerfile
-├─ backend/                  # Fastify API + (M2) Redis consumers/workers — own package.json, Dockerfile
+├─ backend/                  # Fastify API + (wk5) Redis consumers/workers — own package.json, Dockerfile
 │  └─ migrations/            # SQL migration files (never hand-edit schema)
 ├─ packages/shared/          # zod schemas + TS types (the notification contract) — publishable
 └─ docs/                     # architecture.md, architecture.html, gantt-*, srs/
@@ -81,36 +85,41 @@ Aligns with `.claude/rules/redis-streams.md` and `.claude/rules/notifications-do
 ```
 backend/src/
 ├─ server.ts                 # Fastify bootstrap
-├─ config/env.ts             # zod-validated env at startup (DB, OLLAMA_URL, LLM_MODEL, rate-limit; REDIS_URL in M2)
+├─ config/env.ts             # zod-validated env at startup (DB, SESSION_SECRET, ANTHROPIC_API_KEY, LLM_PROVIDER/MODEL, rate-limit; REDIS_URL wk5)
+├─ auth/                     # PROTOTYPE simple auth: login/session, users/roles/teams, seed — swapped for host-app identity in prod
+├─ sim/                      # module simulator(s): emit notifications across modules/priorities/audiences
 ├─ http/
-│  ├─ routes/                # REST: publish (M1 intake), preferences, actions, summarize, chat
-│  ├─ admin/                 # (M2) config, module governance, broadcasts, audit, observability, dead-letter, export/import
+│  ├─ routes/                # REST: publish (direct intake), preferences, actions, summarize, chat
+│  ├─ admin/                 # config, module governance, broadcasts, audit, observability, dead-letter, export/import (grows wk2→wk5)
 │  └─ sse/                   # SSE endpoint + shared pub/sub fan-out (one query per event, not per client)
 ├─ intake/
 │  ├─ boundary.ts            # abstracted intake interface — the pipeline never cares HOW a notification arrived
-│  ├─ http-intake.ts         # M1: simple internal/HTTP publish path
-│  ├─ redis-consumer.ts      # M2: XREADGROUP loop; group "notifications-service", stream "notifications-events"
-│  └─ dead-letter.ts         # M2: XPENDING / retry-count → "notifications-events:dead-letter"
+│  ├─ http-intake.ts         # weeks 1–4: simple internal/HTTP publish path
+│  ├─ redis-consumer.ts      # week 5: XREADGROUP loop; group "notifications-service", stream "notifications-events"
+│  └─ dead-letter.ts         # week 5: XPENDING / retry-count → "notifications-events:dead-letter"
 ├─ pipeline/
 │  ├─ validate.ts            # zod validation of the envelope (malformed → safe handling, never crash)
 │  ├─ dedupe.ts              # dedupe on notification id (unique constraint / seen-ids ledger)
+│  ├─ audience.ts            # resolve audience {scope,id} → recipients (global/team/role/user)
 │  ├─ policy.ts              # GLOBAL admin config: module enable/disable, feature flags, priority ceiling, rate limit, snooze
 │  ├─ preferences.ts         # PER-USER layer — suppressions stack (global disable always wins)
 │  ├─ grouping.ts            # text/metadata matching-key grouping of similar notifications
 │  └─ persist.ts             # DB write (commit) THEN ack; fan-out to SSE
 ├─ channels/
 │  ├─ adapter.ts             # interface: send(notification): Promise<DeliveryResult>
-│  └─ in-app-sse.adapter.ts  # the only channel in M1
+│  └─ in-app-sse.adapter.ts  # the only channel for now
 ├─ ai/
-│  ├─ llm-client.ts          # Ollama HTTP client (streaming)
+│  ├─ llm/adapter.ts         # provider-agnostic LLM interface (streaming)
+│  ├─ llm/anthropic.ts       # default hosted provider (Claude); llm/ollama.ts = optional local
+│  ├─ retrieval/retriever.ts # retriever interface; retrieval/fts.ts now, pgvector later (stretch)
 │  ├─ summarize.ts           # on-demand + scheduled
-│  └─ qa.ts                  # FTS retrieval → prompt → stream (Q&A chatbot)
+│  └─ qa.ts                  # retrieve → prompt → stream (Q&A chatbot)
 ├─ db/
-│  ├─ pool.ts · scope.ts     # scope.ts sets the authenticated user for per-user tables (phased: scaffold M1, enforce M2)
+│  ├─ pool.ts · scope.ts     # scope.ts sets the authenticated user for per-user tables
 │  ├─ partitions.ts          # time-partition maintenance + retention
 │  └─ migrate.ts
 └─ workers/scheduled-summary.ts
-backend/test/                # vitest: dead-letter, idempotency, global-disable-wins, snooze, rate-limit, malformed paths
+backend/test/                # vitest: dedupe/idempotency, global-disable-wins, audience resolution, snooze, rate-limit, malformed, dead-letter
 ```
 
 ### Frontend internal layout
@@ -123,25 +132,27 @@ frontend/src/
 ├─ renderers/                # dynamic UI: NotificationCardRenderer (config-driven card), FilterRenderer
 ├─ forms/                    # *.form.ts schemas rendered by the shared FormRenderer (prefs, admin config)
 ├─ features/
+│  ├─ auth/                  # login screen (prototype auth)
 │  ├─ notifications/         # NotificationsView (virtualized, paginated feed), FilterBar, PriorityList, ThreadGroup
 │  ├─ chat/                  # ChatPanel (AI Q&A)
 │  ├─ settings/              # per-user preferences panel (module toggles, priority, snooze)
-│  └─ admin/                 # (M2) governance, kill-switches, AI config, observability, broadcasts, audit, export/import
-├─ stores/                   # Pinia: live SSE feed (shallowRef for large lists), preferences, chat, adminConfig
+│  └─ admin/                 # basic in wk2 → governance, kill-switches, AI config, observability, broadcasts, audit, export/import
+├─ stores/                   # Pinia: session, live SSE feed (shallowRef for large lists), preferences, chat, adminConfig
 └─ api/                      # REST client + SSE subscription (coalesced updates)
 ```
 Every data view ships **loading, empty, and error** states — not optional.
 
 ## Data model (PostgreSQL — latest stable)
 
-Notifications are **global** (all users see them, subject to policy), so the notification row is not
-per-user. **Per-user data** — read/dismiss/snooze status, preferences, and chat history — is scoped to
-the server-side authenticated identity (authorization is phased: scaffolded in M1, enforced in M2).
-`USERS` is the host application's existing identity, referenced by id (this system does not own the
-user table). Delivery/read state is a **durable fact stored separately** from the notification, keyed
-per user. De-duplication uses the notification **`id`**. Modules are **auto-discovered** on first
-publish. The notifications table is **time-partitioned** with a retention/TTL policy. (In M2 the
-dead-letter queue is a Redis stream, not a table.)
+Notifications carry an **audience** (`global` / `team` / `role` / `user`); recipients are resolved from
+the audience against the identity data (all users; a team's members; a role's holders; or one user).
+**Per-user data** — read/dismiss/snooze status, preferences, chat history — is scoped to the
+authenticated user. In the **prototype** the system owns `USERS`, `ROLES`, `TEAMS`, and their
+memberships (seeded via the built-in auth); in **production** identity comes from the host application
+and these local tables fall away. Delivery/read state is a **durable fact stored separately** from the
+notification, keyed per user. De-duplication uses the notification **`id`**. Modules are
+**auto-discovered** on first publish. The notifications table is **time-partitioned** with a
+retention/TTL policy. (In week 5 the dead-letter queue is a Redis stream, not a table.)
 
 ## Notification message contract (`packages/shared`)
 
@@ -157,21 +168,25 @@ generic backend — new needs are met by extending the opaque `metadata`, not by
   priority: 'low' | 'normal' | 'high' | 'critical',
   snoozable: boolean,              // may this notification be snoozed?
   actions?: { label: string; method: string; url: string }[],  // module-owned callbacks
-  audience?: { scope: 'global' | 'team' | 'user'; id?: string }, // 'global' now; team/user reserved (id = future team/user identifier)
+  audience: { scope: 'global' | 'team' | 'role' | 'user'; id?: string }, // id identifies the team/role/user for non-global scopes
   category?: string,               // optional; else derived from module/domain
   timestamp?: string,              // ISO; else set on intake
   metadata?: Record<string, unknown>, // opaque — stored & passed through, never interpreted by the system
 }
 ```
 
-## Local LLM integration (Ollama)
+## AI / LLM integration
 
-- Ollama runs as a container in `docker-compose` (or a host process), reachable at `OLLAMA_URL`
-  (default `http://localhost:11434`). Model in `LLM_MODEL` (default `llama3.2:3b-instruct`).
-- The backend `ai/llm-client.ts` streams completions; `summarize.ts` and `qa.ts` are the only
-  callers. **Retrieval is Postgres FTS** — the model does generation only, so no embedding pipeline.
-- Because the model is local, **notification content never leaves the deployment** — and there is no
-  per-call API cost or external-service dependency.
+- The LLM sits behind a provider-agnostic **adapter** (`ai/llm/adapter.ts`). The **default is a hosted
+  Anthropic (Claude) model** — the one the team has access to — configured via `ANTHROPIC_API_KEY` +
+  `LLM_MODEL` (API key is env config, validated at startup, never in code). A **local model via Ollama**
+  remains a swappable provider (`LLM_PROVIDER=ollama`).
+- `summarize.ts` and `qa.ts` are the only callers; both go through the adapter for generation and
+  through the **retriever interface** for context. Retrieval is **PostgreSQL Full-Text Search** now
+  (`retrieval/fts.ts`); **vector embeddings (pgvector)** are a later, localized upgrade behind the same
+  interface.
+- Privacy is not a constraint here (developer-generated content), which is why a hosted model is the
+  default; the adapter keeps the local option open if that ever changes.
 
 ---
 
@@ -181,50 +196,54 @@ generic backend — new needs are met by extending the opaque `metadata`, not by
 
 ```mermaid
 flowchart LR
-  subgraph Producers["Application modules (producers)"]
+  subgraph Producers["Modules (real in prod; simulated in prototype)"]
     M1[Module A]
     M2[Module B]
-    M3[Module C]
+    SIM["Module simulator<br/>(prototype)"]
   end
-  M1 & M2 & M3 -->|publish| INTK["Intake boundary<br/>(abstracted)"]
+  M1 & M2 & SIM -->|publish| INTK["Intake boundary<br/>(abstracted)"]
   subgraph Backend["Backend — Node.js + Fastify (generic, domain-agnostic)"]
-    INTK -->|M1: HTTP intake| PIPE
-    INTK -.->|M2: Redis Stream<br/>notifications-events| PIPE
-    PIPE["Pipeline<br/>validate → dedupe → global policy → per-user prefs → grouping → persist"]
+    INTK -->|wk1–4: HTTP intake| PIPE
+    INTK -.->|wk5: Redis Stream| PIPE
+    PIPE["Pipeline<br/>validate → dedupe → audience → global policy → per-user prefs → grouping → persist"]
     PIPE -->|reads| CFG["Admin config (global)<br/>+ per-user prefs"]
-    AI["AI<br/>summarize + Q&A (FTS retrieval)"]
+    AUTH["Auth (prototype)<br/>users / roles / teams"]
+    AI["AI<br/>summarize + Q&A"]
     SSE["SSE endpoint<br/>+ shared pub/sub fan-out"]
-    ADMIN["Admin panel API (M2)"]
+    ADMIN["Admin panel API<br/>(basic wk2 → expands)"]
     PIPE --> SSE
     ADMIN --> CFG
+    PIPE -->|resolve recipients| AUTH
   end
   PIPE -->|commit| PG[("PostgreSQL<br/>FTS + time-partitioned")]
-  AI --> PG
-  AI -->|localhost HTTP| OLL["Ollama<br/>Llama 3.2 3B (local)"]
+  AI -->|retriever interface| PG
+  AI -->|LLM adapter| LLM["Hosted Anthropic (Claude) — default<br/>(local Ollama optional)"]
   SSE -->|Server-Sent Events| FE["Frontend — Vue 3 + Pinia<br/>virtualized, JSON-driven feed"]
+  FE -->|login| AUTH
   FE -->|REST: actions, prefs, summarize, chat| INTK
-  ADMINUI["Admin UI (M2)"] --> ADMIN
+  ADMINUI["Admin UI (wk2+)"] --> ADMIN
 ```
 
 ### 2. Ingestion pipeline (sequence)
 
 ```mermaid
 sequenceDiagram
-  participant Mod as Producer module
-  participant IN as Intake (HTTP M1 / Redis M2)
+  participant Mod as Producer (module / simulator)
+  participant IN as Intake (HTTP wk1–4 / Redis wk5)
   participant P as Pipeline
   participant DB as PostgreSQL
   participant SSE as SSE fan-out / Browsers
-  Mod->>IN: publish notification (id, title, description, module, priority, ...)
+  Mod->>IN: publish notification (id, title, description, module, priority, audience, ...)
   IN->>P: hand to pipeline (same boundary either transport)
   P->>P: validate payload (zod)
   alt malformed
-    P->>IN: log + drop/dead-letter (M2), never crash
+    P->>IN: log + drop/dead-letter (wk5), never crash
   else valid
     P->>DB: check id (dedupe)
     alt duplicate
       P->>P: skip (already processed)
     else new
+      P->>DB: resolve audience → recipients (global/team/role/user)
       P->>DB: read GLOBAL admin config (module/feature/ceiling/rate/snooze)
       alt globally suppressed
         P->>DB: record suppressed status
@@ -232,7 +251,7 @@ sequenceDiagram
         P->>P: compute grouping key
         P->>DB: INSERT notification (commit)
         Note over P,SSE: per-user prefs applied at read/fan-out<br/>(suppressions stack: global wins)
-        P->>SSE: fan out to eligible connected users
+        P->>SSE: fan out to eligible connected recipients
       end
     end
   end
@@ -244,11 +263,14 @@ sequenceDiagram
 sequenceDiagram
   participant U as User (browser)
   participant API as Fastify REST
-  participant DB as PostgreSQL (FTS)
-  participant LLM as Ollama (local)
+  participant R as Retriever (FTS now / vectors later)
+  participant DB as PostgreSQL
+  participant LLM as LLM adapter (hosted Anthropic default)
   U->>API: question (chat session)
-  API->>DB: FTS query over the user's own notifications (identity-scoped)
-  DB-->>API: top matching notifications
+  API->>R: retrieve context over the user's own notifications (identity-scoped)
+  R->>DB: query (Full-Text Search)
+  DB-->>R: top matching notifications
+  R-->>API: context
   API->>API: build prompt (context + chat history)
   API->>LLM: generate (stream)
   LLM-->>API: token stream
@@ -261,10 +283,14 @@ sequenceDiagram
 ```mermaid
 erDiagram
   MODULES ||--o{ NOTIFICATIONS : emits
-  MODULES ||--|| MODULE_SETTINGS : "governed by (M2)"
+  MODULES ||--|| MODULE_SETTINGS : "governed by"
   NOTIFICATIONS ||--o{ NOTIFICATION_STATUS : "per-user state"
   USERS ||--o{ NOTIFICATION_STATUS : tracks
   USERS ||--|| USER_PREFERENCES : configures
+  USERS ||--o{ USER_ROLE : has
+  ROLES ||--o{ USER_ROLE : grants
+  USERS ||--o{ USER_TEAM : member
+  TEAMS ||--o{ USER_TEAM : has
   USERS ||--o{ CHAT_SESSIONS : owns
   USERS ||--o{ ADMIN_AUDIT_LOG : "(admin) writes"
   CHAT_SESSIONS ||--o{ CHAT_MESSAGES : contains
@@ -277,6 +303,7 @@ erDiagram
     boolean snoozable
     jsonb actions
     text audience_scope
+    text audience_id
     text category
     text group_key
     timestamptz created_at
@@ -288,6 +315,27 @@ erDiagram
     text user_id FK
     text state
     timestamptz updated_at
+  }
+  USERS {
+    text id PK
+    text username
+    text password_hash
+  }
+  ROLES {
+    text id PK
+    text name
+  }
+  TEAMS {
+    text id PK
+    text name
+  }
+  USER_ROLE {
+    text user_id FK
+    text role_id FK
+  }
+  USER_TEAM {
+    text user_id FK
+    text team_id FK
   }
   MODULES {
     text module PK
@@ -334,10 +382,11 @@ erDiagram
   }
 ```
 
-> `id`, `module`, `title`, `description`, `priority`, `snoozable`, `actions`, `audience`, `metadata`
-> come straight from the wire contract; `category`, `group_key`, `created_at`, and `search_tsv` are
-> system-managed. `GLOBAL_SETTINGS` (feature flags, AI config, quiet hours) and `MODULE_SETTINGS`
-> (per-module governance) are the "central settings" the Admin panel edits (M2) and can export/import.
+> `USERS` / `ROLES` / `TEAMS` (+ the join tables) are owned by the prototype auth and replaced by
+> host-application identity in production. `audience_scope` + `audience_id` come from the wire contract;
+> `GLOBAL_SETTINGS` (feature flags, AI config, quiet hours) and `MODULE_SETTINGS` (per-module governance)
+> are the "central settings" the Admin panel edits and can export/import. The admin role (in `ROLES`)
+> grants access to the Admin panel.
 
 ### 5. Notification lifecycle (state)
 
@@ -345,12 +394,13 @@ erDiagram
 stateDiagram-v2
   [*] --> Received
   Received --> Deduped: id check
-  Deduped --> Suppressed: global policy (module/feature/snooze) OR per-user pref
-  Deduped --> Delivered: allowed, SSE fan-out
+  Deduped --> Targeted: resolve audience (global/team/role/user)
+  Targeted --> Suppressed: global policy (module/feature/snooze) OR per-user pref
+  Targeted --> Delivered: allowed, SSE fan-out
   Delivered --> Read: user opens
   Delivered --> Dismissed: user dismisses
-  Read --> Archived: per TTL / retention config (M2)
-  Dismissed --> Archived: per TTL / retention config (M2)
+  Read --> Archived: per TTL / retention config
+  Dismissed --> Archived: per TTL / retention config
   Suppressed --> [*]
   Archived --> [*]
 ```
@@ -361,7 +411,7 @@ stateDiagram-v2
 flowchart TB
   subgraph Repo["pnpm monorepo (splittable later)"]
     FE["frontend/ (Vue 3)"]
-    BE["backend/ (Fastify + workers)"]
+    BE["backend/ (Fastify + auth + simulator + workers)"]
     SH["packages/shared/ (zod contract + types)"]
     FE -->|imports| SH
     BE -->|imports| SH
@@ -370,17 +420,16 @@ flowchart TB
     C_FE["frontend"]
     C_BE["backend"]
     C_PG[("postgres (latest)")]
-    C_OLL["ollama"]
-    C_RS[("redis (M2)")]
+    C_RS[("redis (week 5)")]
     C_FE --> C_BE
     C_BE --> C_PG
-    C_BE --> C_OLL
-    C_BE -.->|M2| C_RS
+    C_BE -.->|week 5| C_RS
   end
+  C_BE -->|LLM adapter| ANTH["Hosted Anthropic (Claude) API<br/>(local Ollama optional)"]
   FE -. build .-> C_FE
   BE -. build .-> C_BE
 ```
 
-> **Timeline:** the build phasing (M1 frontend + AI, then M2 admin + Redis) is rendered in
-> [`gantt.html`](./gantt.html), generated from [`gantt-tasks.json`](./gantt-tasks.json). Regenerate
-> with the `gantt-chart` skill after editing the JSON.
+> **Timeline:** the five weekly milestones are rendered in [`gantt.html`](./gantt.html), generated from
+> [`gantt-tasks.json`](./gantt-tasks.json). Regenerate with the `gantt-chart` skill after editing the JSON.
+```
