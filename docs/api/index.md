@@ -9,4 +9,5 @@ Every endpoint below is documented as it's built or changed — see
 looks stale, that's a bug in the process, not a doc you should just trust blindly —
 flag it.
 
-_No endpoints documented yet — this fills in as the backend gets built._
+- [Notifications](./notifications.md) — the notification contract every module publishes
+  and the frontend renders (publish endpoint coming in Week 1 Task 5).

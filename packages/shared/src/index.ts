@@ -6,6 +6,8 @@
  * separate repos/services later (publish this package to a registry and pin it).
  */
 
+export * from "./notification";
+
 /** Scaffolding marker retained so the placeholder app entrypoints can prove the
  *  workspace link resolves.
  *  TODO(scaffold): remove together with the placeholder backend/frontend

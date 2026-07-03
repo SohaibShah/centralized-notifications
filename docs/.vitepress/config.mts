@@ -19,8 +19,7 @@ export default defineConfig({
           text: 'API',
           items: [
             { text: 'Overview', link: '/api/' },
-            // docs-writer adds an entry here per resource, e.g.:
-            // { text: 'Expenses', link: '/api/expenses' },
+            { text: 'Notifications', link: '/api/notifications' },
           ],
         },
       ],
