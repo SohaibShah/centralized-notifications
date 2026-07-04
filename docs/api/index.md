@@ -15,3 +15,5 @@ flag it.
   where backend modules feed notifications into the ingestion pipeline.
 - [Notifications](./notifications.md) — the notification contract every module publishes
   and the frontend renders.
+- [SSE](./sse.md) — the real-time delivery stream (`GET /sse`) the frontend feed subscribes
+  to for live notifications.

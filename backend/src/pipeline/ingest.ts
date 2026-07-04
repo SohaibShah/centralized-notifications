@@ -1,3 +1,4 @@
+import { deliveryHub } from "../delivery/hub";
 import type { IngestResult } from "../intake/boundary";
 import { persist } from "./persist";
 import { validate } from "./validate";
@@ -17,5 +18,12 @@ export async function ingest(raw: unknown): Promise<IngestResult> {
     return { status: "invalid" };
   }
   const status = await persist(result.data);
+  if (status === "accepted") {
+    // Fan out only newly-persisted notifications (never duplicates). Week-1 shortcut:
+    // broadcast to everyone. Week 4 swaps this for resolveAudience -> publishToRecipients.
+    // TODO(week-4): enforce per-recipient preferences/opt-out here before publishing
+    // (notifications-domain.md) — the check belongs in this delivery path, not just the UI.
+    deliveryHub.broadcast(result.data);
+  }
   return { status, id: result.data.id };
 }

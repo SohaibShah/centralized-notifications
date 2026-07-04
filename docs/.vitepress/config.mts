@@ -22,6 +22,7 @@ export default defineConfig({
             { text: 'Auth', link: '/api/auth' },
             { text: 'Intake', link: '/api/intake' },
             { text: 'Notifications', link: '/api/notifications' },
+            { text: 'SSE', link: '/api/sse' },
           ],
         },
       ],
