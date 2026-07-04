@@ -4,6 +4,7 @@ import { loadEnv } from "../src/config/env";
 const base = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres",
   SESSION_SECRET: "a".repeat(64),
+  INTERNAL_INTAKE_TOKEN: "x".repeat(32),
 } satisfies NodeJS.ProcessEnv;
 
 describe("loadEnv", () => {
@@ -23,5 +24,13 @@ describe("loadEnv", () => {
 
   it("throws when SESSION_SECRET is not 64 hex characters", () => {
     expect(() => loadEnv({ ...base, SESSION_SECRET: "too-short" })).toThrow();
+  });
+
+  it("throws when INTERNAL_INTAKE_TOKEN is missing or too short", () => {
+    const { INTERNAL_INTAKE_TOKEN: _omit, ...withoutToken } = base;
+    expect(() => loadEnv(withoutToken)).toThrow(/INTERNAL_INTAKE_TOKEN/);
+    expect(() => loadEnv({ ...base, INTERNAL_INTAKE_TOKEN: "short" })).toThrow(
+      /INTERNAL_INTAKE_TOKEN/,
+    );
   });
 });

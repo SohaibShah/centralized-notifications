@@ -12,6 +12,10 @@ const envSchema = z.object({
   SESSION_SECRET: z
     .string()
     .regex(/^[0-9a-fA-F]{64}$/, "SESSION_SECRET must be 64 hex characters (32 bytes)"),
+  // Shared secret producers present as the `x-internal-token` header on
+  // POST /internal/publish (service-to-service intake boundary). Generate with
+  // `openssl rand -hex 24`; validated at startup like every other secret.
+  INTERNAL_INTAKE_TOKEN: z.string().min(16, "INTERNAL_INTAKE_TOKEN must be at least 16 characters"),
   PORT: z.coerce.number().int().positive().default(3000),
 });
 

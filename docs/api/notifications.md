@@ -16,10 +16,9 @@ Source of truth: [`packages/shared/src/notification.ts`](../../packages/shared/s
 The zod schema there is shared and validated on **both** the frontend and the backend, so
 there is exactly one definition of "a valid notification."
 
-> The HTTP publish endpoint (`POST /internal/publish`) does not exist yet — it lands in
-> Week 1 Task 5. This page documents the **contract** the endpoint will enforce. The
-> endpoint's request/response/auth section is stubbed at the bottom and will be filled in
-> then.
+> This page documents the **contract**. The HTTP publish endpoint that enforces it —
+> `POST /internal/publish` — is documented separately on the [Intake page](./intake.md)
+> (auth, batching, dedupe, response shape, side effects).
 
 ## Schema
 
@@ -216,19 +215,9 @@ Role-scoped, low priority.
 }
 ```
 
-## Publish API (coming in Task 5)
+## Publish API
 
-The contract above will be validated at:
-
-## POST /internal/publish
-
-_Not implemented yet — lands in Week 1 Task 5._
-
-This endpoint will accept a notification body, validate it against the shared schema in
-[`packages/shared/src/notification.ts`](../../packages/shared/src/notification.ts) (the same
-schema used on the frontend), and hand it to the ingestion pipeline (validate → dedupe →
-audience → policy → persist). When it exists, this section will be extended with its request
-shape, response shape, auth requirement, and side effects (e.g. any Redis Stream event it
-publishes once intake moves to Redis Streams in Week 5).
-
-Until then, treat the [Schema](#schema) section above as the authoritative contract.
+The contract above is validated at **`POST /internal/publish`** — the service-to-service
+intake endpoint where backend modules publish notifications. Its auth (shared internal
+token), batch behavior, dedupe/idempotency semantics, response shape, status codes, and
+side effects are documented on the [Intake page](./intake.md).

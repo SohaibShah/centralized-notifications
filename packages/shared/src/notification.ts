@@ -17,8 +17,8 @@ import { z } from "zod";
  * This is also the input-validation boundary, so it is defensive on purpose:
  * action URLs are restricted to http(s) (no javascript:/data:/file:), and every
  * free-text field and the actions array are length-bounded to keep a buggy or
- * hostile publisher from sending abusive payloads. (Overall body size is also
- * capped at the HTTP intake layer in Task 5.)
+ * hostile publisher from sending abusive payloads. (Overall request body size is
+ * capped explicitly at the HTTP intake route — see backend/src/intake/http-intake.ts.)
  */
 
 export const NOTIFICATION_PRIORITIES = ["low", "normal", "high", "critical"] as const;
@@ -74,7 +74,9 @@ export const notificationSchema = z.object({
   actions: z.array(actionSchema).max(10).optional(),
   audience: audienceSchema,
   category: z.string().min(1).max(100).optional(),
-  // ISO 8601, timezone offset allowed (…Z or …+05:30); set on intake if omitted.
+  // ISO 8601, timezone offset allowed (…Z or …+05:30). The module's own fired-at
+  // time (persisted as notifications.source_ts); optional. When omitted it stays
+  // null — server receive time is recorded separately as notifications.created_at.
   timestamp: z.string().datetime({ offset: true }).optional(),
   metadata: z.record(z.unknown()).optional(),
 });

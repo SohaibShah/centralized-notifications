@@ -11,5 +11,7 @@ flag it.
 
 - [Auth](./auth.md) — prototype username/password login, logout, and current-user
   endpoints backed by encrypted cookie sessions.
+- [Intake](./intake.md) — the service-to-service publish endpoint (`POST /internal/publish`)
+  where backend modules feed notifications into the ingestion pipeline.
 - [Notifications](./notifications.md) — the notification contract every module publishes
-  and the frontend renders (publish endpoint coming in Week 1 Task 5).
+  and the frontend renders.
