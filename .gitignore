@@ -36,6 +36,7 @@ build/
 coverage/
 playwright-report/
 test-results/
+.playwright-mcp/
 
 # --- Logs ---
 *.log
@@ -52,6 +53,9 @@ Thumbs.db
 # --- Local Claude Code state (personal, not shared) ---
 .claude/settings.local.json
 CLAUDE.local.md
+
+# --- Visual brainstorming companion scratch (local, not shared) ---
+.superpowers/
 
 # --- Local dev data ---
 *.sqlite

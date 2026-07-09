@@ -61,6 +61,16 @@ export default tseslint.config(
   },
 
   {
+    // Design-system primitives use short, single-word names by convention
+    // (`Button`, `Icon`, `Chip`) — the same pattern as shadcn/ui. Views and features
+    // still follow the multi-word rule.
+    files: ["frontend/src/components/ui/**/*.vue"],
+    rules: {
+      "vue/multi-word-component-names": "off",
+    },
+  },
+
+  {
     // Split-later boundary: frontend must not reach into backend.
     files: ["frontend/**/*.{ts,vue}"],
     rules: {

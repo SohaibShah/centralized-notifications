@@ -1,10 +1,10 @@
 import { createApp } from "vue";
-import { SHARED_PACKAGE } from "@notifications/shared";
+import { createPinia } from "pinia";
+import "@fontsource-variable/fraunces";
+import "@fontsource-variable/hanken-grotesk";
+import "@fontsource-variable/jetbrains-mono";
+import "./styles/main.css";
 import App from "./App.vue";
+import { router } from "./router";
 
-// Referencing the shared package here proves the @notifications/shared workspace
-// link resolves from the frontend too. The real contract-driven UI (design tokens,
-// FormRenderer, virtualized live feed) arrives in later Week 1 tasks.
-console.info(`notifications frontend wired to ${SHARED_PACKAGE}`);
-
-createApp(App).mount("#app");
+createApp(App).use(createPinia()).use(router).mount("#app");

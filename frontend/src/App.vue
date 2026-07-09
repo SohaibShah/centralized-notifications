@@ -1,12 +1,8 @@
 <script setup lang="ts">
-// Scaffold placeholder shell — intentionally unstyled. The real UI is built on the
-// design system (design/tokens.ts) and JSON-driven renderers in Week 1 Task 7;
-// see the frontend layout in docs/architecture.md and the `design-system` skill.
+// Root shell: the router renders either the login screen or the notifications feed.
+// Session bootstrapping + the route guard live in router/index.ts + stores/session.ts.
 </script>
 
 <template>
-  <main>
-    <h1>Centralized Notifications</h1>
-    <p>Scaffold placeholder — the login screen and live feed arrive in later tasks.</p>
-  </main>
+  <RouterView />
 </template>

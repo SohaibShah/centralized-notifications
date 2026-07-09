@@ -1,9 +1,27 @@
-import { defineConfig } from "vite";
+import { fileURLToPath, URL } from "node:url";
 import vue from "@vitejs/plugin-vue";
+import tailwindcss from "@tailwindcss/vite";
+import { defineConfig } from "vite";
+
+// The backend owns the API + the SSE stream. Proxying these paths in dev keeps the
+// session cookie same-origin (so EventSource and fetch both send it) and mirrors how
+// a single-origin deployment behaves in production.
+const backend = "http://localhost:3000";
 
 export default defineConfig({
-  plugins: [vue()],
+  plugins: [vue(), tailwindcss()],
+  resolve: {
+    alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) },
+  },
   server: {
     port: 5173,
+    proxy: {
+      "/auth": backend,
+      "/notifications": backend,
+      "/internal": backend,
+      "/health": backend,
+      // SSE: disable buffering so events stream through as they arrive.
+      "/sse": { target: backend, changeOrigin: false, ws: false },
+    },
   },
 });

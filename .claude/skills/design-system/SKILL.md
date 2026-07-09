@@ -26,14 +26,41 @@ session deciding:
   soft for consumer-friendly products) and use them consistently, not "rounded-lg on
   everything by default."
 
-Write the actual chosen values here once decided:
+**Chosen — "Editorial Command, ivory"** (decided in a visual-brainstorm session, Week 1 Task 7).
+Tokens live in `frontend/src/styles/main.css` (`@theme`, OKLCH) and `frontend/src/design/tokens.ts`;
+style via Tailwind utilities off these tokens — never hardcode a hex/px in a component.
 
 ```
-Color:      background=___  surface=___  accent=___  text-primary=___  text-secondary=___  danger=___
-Type:       display=___  body=___  scale=___
-Spacing:    ___
-Radius:     ___
+Color (OKLCH):
+  background     = oklch(0.975 0.012 85)   (warm ivory)   surface = oklch(0.995 0.006 85)
+  sunken         = oklch(0.965 0.013 85)
+  text-primary   = oklch(0.23 0.02 60)     text-secondary(muted) = oklch(0.5 0.02 60)
+  faint          = oklch(0.63 0.018 70)    line = oklch(0.9 0.012 80)  line-strong = oklch(0.87 0.014 80)
+  accent (pine)  = oklch(0.45 0.09 155)    accent-ink = oklch(0.98 0.01 155)
+  danger         = oklch(0.52 0.17 28)     warning = oklch(0.72 0.14 68)   success = oklch(0.55 0.10 150)
+Type (self-hosted via @fontsource; never a CDN):
+  display = "Fraunces Variable"        (serif — app title, section heads only)
+  body/UI = "Hanken Grotesk Variable"
+  mono    = "JetBrains Mono Variable"  (counts, times, IDs, module codes; tabular-nums)
+  scale   = 12 / 13 / 14 / 16 / 18 / 22 / 28   (~1.2 ratio)
+Spacing:  4 / 8 / 12 / 16 / 24 / 32 / 48 / 64
+Radius:   sm 6 · md 9 · lg 12 · pill 999   (hierarchy of intent, not one radius everywhere)
+Motion:   feedback ≤120ms · state ~200ms · overlay ~240ms; transform/opacity only;
+          ease-out cubic-bezier(0.16,1,0.3,1); new feed rows fade+rise; honor prefers-reduced-motion.
+Icons:    lucide (@lucide/vue) — never emoji.
 ```
+
+**Layout & component decisions (hold these so it stays a designed console, not a Linear clone):**
+
+- **Flat + hairline.** No drop shadows on cards/rows — separate with 1px `line` borders and background
+  shifts. Shadows are allowed only as *functional* elevation on overlays (dropdowns, popovers, modals).
+- **Priority = a small dot + weight**, never a wall of colored left-bars: critical→danger, high→warning,
+  normal→faint (filled), low→hollow ring. See `priorityDotClass` in `design/tokens.ts`.
+- **Role-aware sidebar.** `Admin` nav is gated to the `admin` role; every user gets a settings cog.
+  Drives off the session user's `roles`.
+- **Filters = quick chip presets + a searchable `FilterMenu` dropdown** (module/priority/custom tags),
+  applied filters shown as removable pills. Not a hand-rolled form (it's a `FilterRenderer`, not the
+  `FormRenderer`).
 
 ## Patterns to actively avoid
 
