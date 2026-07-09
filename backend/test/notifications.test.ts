@@ -188,4 +188,47 @@ describe("GET /notifications", () => {
     expect((await list("?limit=99999")).statusCode).toBe(400);
     expect((await list("?limit=abc")).statusCode).toBe(400);
   });
+
+  function markRead(id: string, cookie: string | null = sessionCookie) {
+    return app.inject({
+      method: "POST",
+      url: `/notifications/${encodeURIComponent(id)}/read`,
+      headers: cookie ? { cookie } : {},
+    });
+  }
+
+  describe("POST /notifications/:id/read", () => {
+    it("401s without a session cookie", async () => {
+      const res = await markRead(`${ID_PREFIX}4`, null);
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("404s for a notification that does not exist", async () => {
+      const res = await markRead(`${ID_PREFIX}does-not-exist`);
+      expect(res.statusCode).toBe(404);
+    });
+
+    it("400s for an id longer than the 200-char bound", async () => {
+      const res = await markRead("x".repeat(201));
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("marks a notification read (204) and the list reflects it", async () => {
+      const before = await list("?limit=100");
+      expect(before.body.items.find((n) => n.id === `${ID_PREFIX}4`)?.read).toBe(false);
+
+      const res = await markRead(`${ID_PREFIX}4`);
+      expect(res.statusCode).toBe(204);
+
+      const after = await list("?limit=100");
+      expect(after.body.items.find((n) => n.id === `${ID_PREFIX}4`)?.read).toBe(true);
+    });
+
+    it("is idempotent — marking read twice still succeeds", async () => {
+      expect((await markRead(`${ID_PREFIX}5`)).statusCode).toBe(204);
+      expect((await markRead(`${ID_PREFIX}5`)).statusCode).toBe(204);
+      const after = await list("?limit=100");
+      expect(after.body.items.find((n) => n.id === `${ID_PREFIX}5`)?.read).toBe(true);
+    });
+  });
 });

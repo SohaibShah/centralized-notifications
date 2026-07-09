@@ -13,6 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   loadMore: [];
+  open: [notification: FeedNotification];
   action: [action: NotificationAction, notification: FeedNotification];
 }>();
 
@@ -57,6 +58,7 @@ onBeforeUnmount(() => observer?.disconnect());
         v-for="n in group.items"
         :key="n.id"
         :notification="n"
+        @open="(notification) => emit('open', notification)"
         @action="(action, notification) => emit('action', action, notification)"
       />
     </section>

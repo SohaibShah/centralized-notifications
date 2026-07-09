@@ -129,7 +129,7 @@ Each item is the full [notification contract](#schema) above **plus** two server
 | `createdAt` | string (ISO 8601) | Server **receive** time (`notifications.created_at`), distinct from the module's own optional [`timestamp`](#schema). This is the feed's ordering key.                                           |
 | `read`      | boolean           | Whether **the requesting user** has read this notification (`LEFT JOIN` against `notification_reads`). Per-user: the same notification can be `read: true` for one user and `false` for another. |
 
-Read state lives in its own table — `notification_reads(user_id, notification_id, read_at, PRIMARY KEY(user_id, notification_id))`, both foreign keys `ON DELETE CASCADE` (see [`backend/migrations/003_notification_reads.sql`](../../backend/migrations/003_notification_reads.sql)). A row exists **iff** that user has read that notification; absence of a row means unread. The write endpoint that marks a notification read (`POST /notifications/:id/read`) is not built yet — it will be documented here when it lands.
+Read state lives in its own table — `notification_reads(user_id, notification_id, read_at, PRIMARY KEY(user_id, notification_id))`, both foreign keys `ON DELETE CASCADE` (see [`backend/migrations/003_notification_reads.sql`](../../backend/migrations/003_notification_reads.sql)). A row exists **iff** that user has read that notification; absence of a row means unread. The write endpoint that marks a notification read is [`POST /notifications/:id/read`](#post-notificationsidread), documented below.
 
 ### Errors
 
@@ -142,6 +142,42 @@ Read state lives in its own table — `notification_reads(user_id, notification_
 ### Side effects
 
 None — read-only.
+
+## POST /notifications/:id/read
+
+**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
+
+Marks a notification **read for the current user** (FR-6). Read state is per-user, so this only ever affects the caller's own `notification_reads` row — one user marking a notification read never changes another user's state.
+
+Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+
+### Request
+
+Path parameter:
+
+| Param | Type                 | Required | Notes                                                                                              |
+| ----- | -------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `id`  | string (1–200 chars) | yes      | The notification's contract [`id`](#schema). An id outside that shape (empty or too long) → `400`. |
+
+**No request body.** The client sends no body and no content-type.
+
+**Idempotent.** The mark is an `INSERT … ON CONFLICT (user_id, notification_id) DO NOTHING`, so repeating the call is a no-op — a double-click or an at-least-once retry never errors and never creates a duplicate row.
+
+### Response `204`
+
+`204 No Content` — no body. A subsequent [`GET /notifications`](#get-notifications) then returns `read: true` for this notification **for this user** (the list's `LEFT JOIN` against `notification_reads`).
+
+### Errors
+
+| Status | Body                                     | Reason                                                                                   |
+| ------ | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid notification id" }` | `id` is empty or longer than 200 chars.                                                  |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                 |
+| `404`  | `{ "error": "notification not found" }`  | No notification with that `id` exists — a client can't seed read rows for arbitrary ids. |
+
+### Side effects
+
+One upsert into `notification_reads` (`(user_id, notification_id)`, keyed by the authenticated user). No events published.
 
 ## Design decisions
 

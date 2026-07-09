@@ -4,12 +4,13 @@ import type { FeedNotification, Notification } from "@notifications/shared";
 
 // Mock the two I/O seams (HTTP + SSE) so the store's logic is tested in isolation.
 // vi.hoisted lets the mock factories reference these before the imports are evaluated.
-const { getMock, sseState } = vi.hoisted(() => ({
+const { getMock, postMock, sseState } = vi.hoisted(() => ({
   getMock: vi.fn(),
+  postMock: vi.fn(),
   sseState: { onBatch: null as null | ((batch: Notification[]) => void) },
 }));
 
-vi.mock("@/api/client", () => ({ api: { get: getMock } }));
+vi.mock("@/api/client", () => ({ api: { get: getMock, post: postMock } }));
 vi.mock("@/api/sse", () => ({
   connectSse: (opts: { onBatch: (batch: Notification[]) => void }) => {
     sseState.onBatch = opts.onBatch;
@@ -55,6 +56,8 @@ describe("feed store", () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     getMock.mockReset();
+    postMock.mockReset();
+    postMock.mockResolvedValue(undefined);
     sseState.onBatch = null;
   });
 
@@ -134,6 +137,43 @@ describe("feed store", () => {
     expect(groups[0]?.items.map((n) => n.id)).toEqual(["c1", "n1"]); // critical before normal
     expect(groups[1]?.items.map((n) => n.id)).toEqual(["r1"]);
     expect(feed.unreadCount).toBe(2);
+  });
+
+  it("markRead() optimistically flips the flag, moves the row to Earlier, and POSTs", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+    expect(feed.unreadCount).toBe(1);
+
+    await feed.markRead("a");
+
+    expect(feed.items.find((n) => n.id === "a")?.read).toBe(true);
+    expect(feed.unreadCount).toBe(0);
+    expect(feed.groups.map((g) => g.key)).toEqual(["earlier"]);
+    expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
+  });
+
+  it("markRead() reverts the flag when the POST fails", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+    postMock.mockRejectedValueOnce(new Error("500"));
+
+    await feed.markRead("a");
+
+    expect(feed.items.find((n) => n.id === "a")?.read).toBe(false); // reverted
+    expect(feed.unreadCount).toBe(1);
+  });
+
+  it("markRead() is a no-op for an already-read or unknown notification", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true })]));
+    await feed.load();
+
+    await feed.markRead("a"); // already read
+    await feed.markRead("missing"); // not in the list
+
+    expect(postMock).not.toHaveBeenCalled();
   });
 
   it("clearFilters() also clears the search query and resets isFiltered", async () => {

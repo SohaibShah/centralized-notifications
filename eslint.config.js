@@ -29,6 +29,7 @@ export default tseslint.config(
       "**/vite.config.ts",
       "**/vitest.config.ts",
       "**/tsup.config.ts",
+      "**/playwright.config.ts",
     ],
   },
 

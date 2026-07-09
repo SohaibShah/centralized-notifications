@@ -11,6 +11,7 @@ import { exactTime, relativeTime } from "@/lib/time";
 // buttons). Adding a field to the contract surfaces here without a new component.
 const props = defineProps<{ notification: FeedNotification }>();
 const emit = defineEmits<{
+  open: [notification: FeedNotification];
   action: [action: NotificationAction, notification: FeedNotification];
 }>();
 
@@ -23,8 +24,9 @@ const isFresh = Date.now() - new Date(props.notification.createdAt).getTime() < 
 
 <template>
   <article
-    class="group flex gap-3 border-b border-line px-4 py-3.5 transition-colors duration-100 hover:bg-sunken"
-    :class="[isFresh && 'animate-enter', item.read && 'opacity-60']"
+    class="group flex cursor-pointer gap-3 border-b border-line px-4 py-3.5 transition-colors duration-100 hover:bg-sunken"
+    :class="{ 'animate-enter': isFresh }"
+    @click="emit('open', item)"
   >
     <span
       role="img"
@@ -35,11 +37,19 @@ const isFresh = Date.now() - new Date(props.notification.createdAt).getTime() < 
 
     <div class="min-w-0 flex-1">
       <div class="flex items-baseline justify-between gap-3">
-        <h3
-          class="truncate font-sans text-[14px]"
-          :class="item.read ? 'font-normal text-muted' : 'font-semibold text-text'"
-        >
-          {{ item.title }}
+        <!-- Title is a button so the "open → mark read" action is keyboard-reachable;
+             the h3 keeps heading semantics. The whole card is also click-to-open for
+             mouse users (article @click above). -->
+        <h3 class="min-w-0 flex-1">
+          <button
+            type="button"
+            class="block w-full truncate text-left font-sans text-[14px]"
+            :class="item.read ? 'font-normal text-muted' : 'font-semibold text-text'"
+            :title="item.title"
+            @click.stop="emit('open', item)"
+          >
+            {{ item.title }}
+          </button>
         </h3>
         <time
           class="shrink-0 font-mono text-[12px] tabular-nums text-faint"
@@ -68,7 +78,7 @@ const isFresh = Date.now() - new Date(props.notification.createdAt).getTime() < 
           :key="action.label + action.url"
           type="button"
           class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken"
-          @click="emit('action', action, item)"
+          @click.stop="emit('action', action, item)"
         >
           <Icon v-if="actionIcon(action.icon)" :icon="actionIcon(action.icon)!" :size="13" />
           {{ action.label }}

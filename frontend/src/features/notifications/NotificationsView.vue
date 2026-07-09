@@ -98,6 +98,7 @@ function onAction(action: NotificationAction, _notification: FeedNotification) {
           :has-more="feed.hasMore"
           :loading-more="feed.loadingMore"
           @load-more="feed.loadMore()"
+          @open="(n) => feed.markRead(n.id)"
           @action="onAction"
         />
       </main>

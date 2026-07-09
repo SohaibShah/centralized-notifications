@@ -14,7 +14,11 @@ import { sseRoutes } from "./http/sse/routes";
  * tasks add admin routes here.
  */
 export async function buildServer(): Promise<FastifyInstance> {
-  const app = Fastify({ logger: true });
+  // maxParamLength defaults to 100, but a notification id (the contract PK, used as the
+  // :id path param on POST /notifications/:id/read) may be up to 200 chars — without
+  // this, the router would 414 a valid long id before the handler ever runs. 256 gives
+  // headroom above the 200-char contract bound.
+  const app = Fastify({ logger: true, maxParamLength: 256 });
 
   // global:false — only routes that opt in (e.g. /auth/login) are rate-limited,
   // so reads like /auth/me and /health aren't throttled.

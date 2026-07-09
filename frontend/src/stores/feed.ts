@@ -148,6 +148,29 @@ export const useFeedStore = defineStore("feed", () => {
     connection.value = "closed";
   }
 
+  function setRead(id: string, read: boolean): void {
+    // Replace matched item objects (new refs) so the shallowRef sees the change and the
+    // grouping/unread computeds recimpute — the row moves between Needs action / Earlier.
+    items.value = items.value.map((n) => (n.id === id ? { ...n, read } : n));
+  }
+
+  /**
+   * Mark one notification read for this user (FR-6). Optimistic: flip the flag locally
+   * first (instant feedback, moves the row to "Earlier"), then persist; revert on
+   * failure. No-op if it's unknown or already read, so a re-click costs nothing.
+   */
+  async function markRead(id: string): Promise<void> {
+    const target = items.value.find((n) => n.id === id);
+    if (!target || target.read) return;
+    setRead(id, true);
+    try {
+      await api.post(`/notifications/${encodeURIComponent(id)}/read`);
+    } catch {
+      setRead(id, false); // revert — the server didn't record it
+      console.warn(`[feed] failed to mark ${id} read; reverted`);
+    }
+  }
+
   // --- filtering + grouping -------------------------------------------------
   const availableModules = computed(() =>
     [...new Set(items.value.map((n) => n.module))].sort((a, b) => a.localeCompare(b)),
@@ -264,6 +287,7 @@ export const useFeedStore = defineStore("feed", () => {
     reset,
     connect,
     disconnect,
+    markRead,
     togglePriority,
     toggleModule,
     toggleUnreadOnly,

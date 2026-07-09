@@ -14,6 +14,9 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
 });
 
+// The route param is the notification id (the contract id, text PK up to 200 chars).
+const readParamsSchema = z.object({ id: z.string().min(1).max(200) });
+
 /**
  * Opaque keyset cursor: the (created_at, id) of the last row of the previous page,
  * base64url-encoded JSON. Opaque on purpose so a client can't turn it into an
@@ -153,5 +156,32 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       nextCursor: hasMore && last ? encodeCursor({ ts: last.created_iso, id: last.id }) : null,
     };
     return reply.code(200).send(body);
+  });
+
+  /**
+   * Mark a notification read for the current user (FR-6): `POST /notifications/:id/read`.
+   * Idempotent — a repeat is a no-op (ON CONFLICT DO NOTHING), so a double-click or an
+   * at-least-once retry can't error. Read state is per-user, so this only ever affects
+   * the caller's own row. 404 if the notification doesn't exist (so a client can't seed
+   * read rows for arbitrary ids). Returns 204 (no body).
+   */
+  app.post("/notifications/:id/read", { preHandler: requireUser }, async (req, reply) => {
+    const user = req.user;
+    if (!user) return reply.code(401).send({ error: "authentication required" });
+
+    const parsed = readParamsSchema.safeParse(req.params);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid notification id" });
+    const { id } = parsed.data;
+
+    const exists = await query("SELECT 1 FROM notifications WHERE id = $1", [id]);
+    if (exists.rowCount === 0) return reply.code(404).send({ error: "notification not found" });
+
+    await query(
+      `INSERT INTO notification_reads (user_id, notification_id)
+       VALUES ($1, $2)
+       ON CONFLICT (user_id, notification_id) DO NOTHING`,
+      [user.id, id],
+    );
+    return reply.code(204).send();
   });
 }
