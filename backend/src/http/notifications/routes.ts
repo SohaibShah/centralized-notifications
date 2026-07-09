@@ -1,0 +1,157 @@
+import type { FastifyInstance } from "fastify";
+import { z } from "zod";
+import type { FeedNotification, NotificationPage } from "@notifications/shared";
+import { requireUser } from "../../auth/guards";
+import { query } from "../../db/pool";
+
+const DEFAULT_LIMIT = 25;
+const MAX_LIMIT = 100;
+
+// Query params arrive as strings; `coerce` turns `?limit=50` into a number, and the
+// bounds keep a client from asking for an unboundedly large page.
+const listQuerySchema = z.object({
+  cursor: z.string().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
+});
+
+/**
+ * Opaque keyset cursor: the (created_at, id) of the last row of the previous page,
+ * base64url-encoded JSON. Opaque on purpose so a client can't turn it into an
+ * OFFSET-style deep scan (NFR-2) — the only valid cursor is one we handed out.
+ */
+interface Cursor {
+  ts: string; // ISO created_at
+  id: string;
+}
+
+const cursorSchema = z.object({
+  ts: z.string().datetime({ offset: true }),
+  id: z.string().min(1),
+});
+
+function encodeCursor(c: Cursor): string {
+  return Buffer.from(JSON.stringify(c)).toString("base64url");
+}
+
+function decodeCursor(raw: string): Cursor | null {
+  try {
+    const json: unknown = JSON.parse(Buffer.from(raw, "base64url").toString("utf8"));
+    const parsed = cursorSchema.safeParse(json);
+    return parsed.success ? parsed.data : null;
+  } catch {
+    return null;
+  }
+}
+
+// The raw shape of a joined row. jsonb columns (`actions`, `metadata`) are already
+// parsed to JS by node-pg; timestamptz columns come back as Date; the `read`
+// expression comes back as a JS boolean.
+interface FeedRow {
+  id: string;
+  module: string;
+  title: string;
+  description: string;
+  priority: FeedNotification["priority"];
+  snoozable: boolean;
+  category: string | null;
+  audience_scope: FeedNotification["audience"]["scope"];
+  audience_id: string | null;
+  actions: FeedNotification["actions"] | null;
+  metadata: Record<string, unknown> | null;
+  source_ts: Date | null;
+  // Full-precision UTC ISO string formatted in SQL (see the SELECT). node-pg parses
+  // timestamptz into a JS Date at *millisecond* precision, but the column stores
+  // microseconds — round-tripping the keyset cursor through a Date would truncate it
+  // and silently skip same-millisecond rows at page boundaries. So we never build a
+  // Date for the ordering column; we carry the exact string.
+  created_iso: string;
+  read: boolean;
+}
+
+/** Reconstruct the split DB columns back into the shared `FeedNotification` shape. */
+function toFeedNotification(row: FeedRow): FeedNotification {
+  return {
+    id: row.id,
+    module: row.module,
+    title: row.title,
+    description: row.description,
+    priority: row.priority,
+    snoozable: row.snoozable,
+    ...(row.category != null ? { category: row.category } : {}),
+    audience:
+      row.audience_scope === "global"
+        ? { scope: "global" }
+        : { scope: row.audience_scope, id: row.audience_id ?? undefined },
+    ...(row.actions != null ? { actions: row.actions } : {}),
+    ...(row.metadata != null ? { metadata: row.metadata } : {}),
+    ...(row.source_ts != null ? { timestamp: row.source_ts.toISOString() } : {}),
+    createdAt: row.created_iso,
+    read: row.read,
+  };
+}
+
+/**
+ * Feed read path (FR-5/FR-6): `GET /notifications?cursor=&limit=`. Returns a keyset
+ * page newest-first with each row carrying this user's `read` flag (LEFT JOIN on
+ * notification_reads). Keyset — ordered on (created_at desc, id desc) with a row-value
+ * comparison against the cursor — so deep pages cost the same as the first (NFR-2);
+ * there is no OFFSET and no total count.
+ *
+ * Week-1 limitation: every notification is returned to every authenticated user (no
+ * audience resolution yet — that is Week 4). SQL is parameterized throughout; the only
+ * interpolated fragments are constant `$N` placeholder strings, never user input.
+ */
+export async function notificationRoutes(app: FastifyInstance): Promise<void> {
+  app.get("/notifications", { preHandler: requireUser }, async (req, reply) => {
+    const user = req.user;
+    if (!user) return reply.code(401).send({ error: "authentication required" });
+
+    const parsed = listQuerySchema.safeParse(req.query);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid query parameters" });
+    const { cursor: rawCursor, limit } = parsed.data;
+
+    let cursor: Cursor | null = null;
+    if (rawCursor !== undefined) {
+      cursor = decodeCursor(rawCursor);
+      if (!cursor) return reply.code(400).send({ error: "invalid cursor" });
+    }
+
+    // $1 is always the user id (for the read LEFT JOIN). A cursor adds $2/$3; the
+    // limit is always the final positional parameter. Fetch one extra row to learn
+    // whether an older page exists without a second COUNT query.
+    const params: unknown[] = [user.id];
+    let where = "";
+    if (cursor) {
+      params.push(cursor.ts, cursor.id);
+      where = "WHERE (n.created_at, n.id) < ($2::timestamptz, $3::text)";
+    }
+    params.push(limit + 1);
+    const limitPlaceholder = `$${params.length}`;
+
+    const { rows } = await query<FeedRow>(
+      `SELECT n.id, n.module, n.title, n.description, n.priority, n.snoozable,
+              n.category, n.audience_scope, n.audience_id, n.actions, n.metadata,
+              n.source_ts,
+              to_char(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.USZ') AS created_iso,
+              (r.user_id IS NOT NULL) AS read
+         FROM notifications n
+         LEFT JOIN notification_reads r
+           ON r.notification_id = n.id AND r.user_id = $1
+         ${where}
+        ORDER BY n.created_at DESC, n.id DESC
+        LIMIT ${limitPlaceholder}`,
+      params,
+    );
+
+    const hasMore = rows.length > limit;
+    const pageRows = hasMore ? rows.slice(0, limit) : rows;
+    const last = pageRows[pageRows.length - 1];
+    const body: NotificationPage = {
+      // The cursor carries the exact microsecond string from SQL, so the next page's
+      // `(created_at, id) < ($ts, $id)` comparison is lossless — no boundary skips.
+      items: pageRows.map(toFeedNotification),
+      nextCursor: hasMore && last ? encodeCursor({ ts: last.created_iso, id: last.id }) : null,
+    };
+    return reply.code(200).send(body);
+  });
+}

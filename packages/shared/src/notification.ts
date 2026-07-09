@@ -88,3 +88,28 @@ export type Notification = z.infer<typeof notificationSchema>;
 export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[number];
 export type AudienceScope = (typeof AUDIENCE_SCOPES)[number];
 export type ActionMethod = (typeof ACTION_METHODS)[number];
+
+/**
+ * A notification as the feed *read* API returns it: the full publish contract plus
+ * the two server-derived, per-viewer facts the UI needs — when the server received
+ * it (`createdAt`, distinct from the module's own optional `timestamp`) and whether
+ * *this* user has marked it read (`read`). These are NOT part of the publish
+ * contract: producers never send them, and they don't exist until a notification is
+ * persisted and viewed. Kept here because the frontend feed consumes this shape.
+ */
+export interface FeedNotification extends Notification {
+  /** Server receive time (notifications.created_at), ISO 8601. Feed ordering key. */
+  createdAt: string;
+  /** Whether the requesting user has read this notification. */
+  read: boolean;
+}
+
+/**
+ * One keyset page of the feed. `nextCursor` is an opaque token to pass back as
+ * `?cursor=` for the following (older) page; it is null once the oldest row is
+ * reached. There is deliberately no total count — keyset paging never scans to one.
+ */
+export interface NotificationPage {
+  items: FeedNotification[];
+  nextCursor: string | null;
+}

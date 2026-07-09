@@ -59,6 +59,90 @@ Each entry in `actions`:
 | `scope` | `'global' \| 'team' \| 'role' \| 'user'` | yes         | Who the notification targets.                                                                                                                                                 |
 | `id`    | string (non-empty)                       | conditional | Identifies the team/role/user. **Required for `team`, `role`, `user`; absent for `global`** (everyone). Enforced by the schema — a non-global scope without `id` is rejected. |
 
+## GET /notifications
+
+**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in). The cookie is same-origin, so a browser `fetch`/`EventSource` sends it automatically through the dev proxy.
+
+The feed **read** path: returns the caller's notifications newest-first as one keyset-paginated page. Read-only — no side effects.
+
+Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+
+> **Week-1 limitation.** Every authenticated user currently receives **every** notification — there is no audience resolution yet (that lands in Week 4). This is intentional for the prototype; do not mistake it for the final per-audience feed.
+
+### Request
+
+Query parameters:
+
+| Param    | Type            | Required | Notes                                                                                                                                          |
+| -------- | --------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit`  | integer         | no       | Page size. Default `25`, min `1`, max `100`. Coerced from the query string; out-of-range or non-numeric → `400`.                               |
+| `cursor` | string (opaque) | no       | The `nextCursor` from a previous page. **Opaque** — only ever pass back a value the server handed out; a malformed/undecodable cursor → `400`. |
+
+**Ordering & pagination.** Newest-first, keyset on `(created_at DESC, id DESC)` — there is **no `OFFSET`** (NFR-2), so a deep page costs the same as the first. `cursor` is an opaque base64url token encoding the last returned row's `(created_at, id)`; clients must treat it as opaque. There is deliberately **no total count** — keyset paging never scans to one.
+
+### Response `200`
+
+A [`NotificationPage`](../../packages/shared/src/notification.ts): a page of `items` plus a `nextCursor`. `nextCursor` is the token to pass back as `?cursor=` for the next (older) page, and is `null` once the oldest row has been reached.
+
+```json
+{
+  "items": [
+    {
+      "id": "dsr-1234-sla-warning-72h",
+      "module": "dsr",
+      "title": "DSR #1234 is 3 days from SLA breach",
+      "description": "A data-subject deletion request for a CA resident is due 2026-07-06.",
+      "priority": "critical",
+      "snoozable": true,
+      "audience": { "scope": "team", "id": "privacy-ops" },
+      "category": "sla",
+      "actions": [
+        {
+          "label": "Open DSR",
+          "method": "GET",
+          "url": "https://app/dsr/1234",
+          "icon": "folder-open"
+        }
+      ],
+      "metadata": {
+        "dsrId": "1234",
+        "slaDueAt": "2026-07-06T00:00:00Z",
+        "subjectRegion": "us-ca",
+        "type": "erasure"
+      },
+      "createdAt": "2026-07-03T09:15:22.481Z",
+      "read": false
+    }
+  ],
+  "nextCursor": "eyJ0cyI6IjIwMjYtMDc…In0"
+}
+```
+
+> The item above mirrors example B from [Examples](#examples) as the read path returns it — the same publish-contract shape, with `createdAt` and `read` added. `nextCursor` is shown truncated because the token is opaque; treat it as a value you only ever hand straight back as `?cursor=`.
+
+#### `FeedNotification`
+
+Each item is the full [notification contract](#schema) above **plus** two server-derived, per-viewer fields. These are **not** part of the publish contract — producers never send them, and they don't exist until a notification has been persisted and viewed:
+
+| Field       | Type              | Notes                                                                                                                                                                                            |
+| ----------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createdAt` | string (ISO 8601) | Server **receive** time (`notifications.created_at`), distinct from the module's own optional [`timestamp`](#schema). This is the feed's ordering key.                                           |
+| `read`      | boolean           | Whether **the requesting user** has read this notification (`LEFT JOIN` against `notification_reads`). Per-user: the same notification can be `read: true` for one user and `false` for another. |
+
+Read state lives in its own table — `notification_reads(user_id, notification_id, read_at, PRIMARY KEY(user_id, notification_id))`, both foreign keys `ON DELETE CASCADE` (see [`backend/migrations/003_notification_reads.sql`](../../backend/migrations/003_notification_reads.sql)). A row exists **iff** that user has read that notification; absence of a row means unread. The write endpoint that marks a notification read (`POST /notifications/:id/read`) is not built yet — it will be documented here when it lands.
+
+### Errors
+
+| Status | Body                                      | Reason                                                  |
+| ------ | ----------------------------------------- | ------------------------------------------------------- |
+| `400`  | `{ "error": "invalid query parameters" }` | `limit` out of range (`< 1` or `> 100`) or non-numeric. |
+| `400`  | `{ "error": "invalid cursor" }`           | `cursor` is malformed or not a token the server issued. |
+| `401`  | `{ "error": "authentication required" }`  | No valid session cookie.                                |
+
+### Side effects
+
+None — read-only.
+
 ## Design decisions
 
 These are baked into the contract deliberately (contract checkpoint, see

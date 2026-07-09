@@ -14,6 +14,7 @@ component inventing its own.
 
 Don't start writing components with default Tailwind values "for now." Spend one short
 session deciding:
+
 - **Color**: 4–6 named values — a background, a surface color, one primary accent, one
   text-primary, one text-secondary, one semantic-danger. Not "Tailwind blue-500" by
   default — pick something specific to this product.
@@ -35,15 +36,20 @@ Color (OKLCH):
   background     = oklch(0.975 0.012 85)   (warm ivory)   surface = oklch(0.995 0.006 85)
   sunken         = oklch(0.965 0.013 85)
   text-primary   = oklch(0.23 0.02 60)     text-secondary(muted) = oklch(0.5 0.02 60)
-  faint          = oklch(0.63 0.018 70)    line = oklch(0.9 0.012 80)  line-strong = oklch(0.87 0.014 80)
+  faint          = oklch(0.55 0.018 70)    line = oklch(0.9 0.012 80)  line-strong = oklch(0.87 0.014 80)
+                   (faint is AA on bg (~4.5:1) — safe for the small 11–12px meta it carries)
   accent (pine)  = oklch(0.45 0.09 155)    accent-ink = oklch(0.98 0.01 155)
   danger         = oklch(0.52 0.17 28)     warning = oklch(0.72 0.14 68)   success = oklch(0.55 0.10 150)
 Type (self-hosted via @fontsource; never a CDN):
   display = "Fraunces Variable"        (serif — app title, section heads only)
   body/UI = "Hanken Grotesk Variable"
   mono    = "JetBrains Mono Variable"  (counts, times, IDs, module codes; tabular-nums)
-  scale   = 12 / 13 / 14 / 16 / 18 / 22 / 28   (~1.2 ratio)
-Spacing:  4 / 8 / 12 / 16 / 24 / 32 / 48 / 64
+  scale   = 11 / 12 / 13 / 14 / 16 / 18 / 22 / 28   (~1.2; 11 is the smallest step —
+            dense-UI meta only: timestamps, module codes, eyebrows, badges. Don't invent
+            off-scale sizes like 10 / 11.5 / 12.5.)
+Spacing:  4 / 8 / 12 / 16 / 24 / 32 / 48 / 64 is the primary rhythm. Tailwind's default
+          4px-based half-steps (e.g. py-1.5=6, gap-2.5=10, py-3.5=14) are allowed for
+          dense chrome; avoid arbitrary one-off px values (no `mt-[7px]`).
 Radius:   sm 6 · md 9 · lg 12 · pill 999   (hierarchy of intent, not one radius everywhere)
 Motion:   feedback ≤120ms · state ~200ms · overlay ~240ms; transform/opacity only;
           ease-out cubic-bezier(0.16,1,0.3,1); new feed rows fade+rise; honor prefers-reduced-motion.
@@ -53,7 +59,7 @@ Icons:    lucide (@lucide/vue) — never emoji.
 **Layout & component decisions (hold these so it stays a designed console, not a Linear clone):**
 
 - **Flat + hairline.** No drop shadows on cards/rows — separate with 1px `line` borders and background
-  shifts. Shadows are allowed only as *functional* elevation on overlays (dropdowns, popovers, modals).
+  shifts. Shadows are allowed only as _functional_ elevation on overlays (dropdowns, popovers, modals).
 - **Priority = a small dot + weight**, never a wall of colored left-bars: critical→danger, high→warning,
   normal→faint (filled), low→hollow ring. See `priorityDotClass` in `design/tokens.ts`.
 - **Role-aware sidebar.** `Admin` nav is gated to the `admin` role; every user gets a settings cog.
@@ -65,6 +71,7 @@ Icons:    lucide (@lucide/vue) — never emoji.
 ## Patterns to actively avoid
 
 These are the tells that make an app look AI-generated/templated rather than designed:
+
 - A centered card with a soft drop shadow as the default layout for everything
 - Purple-to-blue (or similar) gradient hero sections with no connection to the product
 - Every corner at the same rounded radius with no hierarchy of intent
@@ -78,6 +85,7 @@ These are the tells that make an app look AI-generated/templated rather than des
 ## States are part of the design, not an afterthought
 
 Every data-driven view needs an explicit:
+
 - **Loading state** — a skeleton or spinner that matches the shape of the real content
 - **Empty state** — tells the user what this space is for and what to do about it, not
   just a blank area or "No data."
