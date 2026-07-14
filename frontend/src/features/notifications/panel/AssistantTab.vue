@@ -28,7 +28,7 @@ const thread: { from: "ai" | "me"; text: string }[] = [
         :class="m.from === 'me' ? 'justify-end' : 'justify-start'"
       >
         <p
-          class="max-w-[82%] rounded-xl px-3 py-2 text-[13px] leading-relaxed"
+          class="max-w-[82%] rounded-lg px-3 py-2 text-[13px] leading-relaxed"
           :class="
             m.from === 'me'
               ? 'rounded-br-sm bg-accent text-accent-ink'

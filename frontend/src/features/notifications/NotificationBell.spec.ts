@@ -62,4 +62,20 @@ describe("NotificationBell", () => {
     expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
     wrapper.unmount();
   });
+
+  it("does not steal focus back to the bell when closed by an outside pointer press", async () => {
+    const outside = document.createElement("button");
+    document.body.appendChild(outside);
+    const wrapper = mount(NotificationBell, { attachTo: document.body });
+    const trigger = wrapper.get('button[aria-haspopup="dialog"]');
+    await trigger.trigger("click");
+    outside.focus();
+    expect(document.activeElement).toBe(outside);
+    document.body.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(false);
+    expect(document.activeElement).toBe(outside); // focus NOT yanked to the bell
+    wrapper.unmount();
+    outside.remove();
+  });
 });

@@ -117,7 +117,7 @@ async function signOut() {
           aria-label="Sign out"
           @click="signOut"
         >
-          <Icon :icon="LogOut" :size="15" />
+          <Icon :icon="LogOut" :size="16" />
         </button>
       </div>
     </div>

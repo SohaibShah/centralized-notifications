@@ -30,7 +30,7 @@ onMounted(() => inboxTabButton.value?.focus());
 
 <template>
   <div
-    class="flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-xl border border-line-strong bg-surface shadow-xl shadow-black/10"
+    class="flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-xl shadow-black/10"
     role="dialog"
     aria-label="Notifications"
   >
@@ -56,10 +56,12 @@ onMounted(() => inboxTabButton.value?.focus());
       aria-label="Notification views"
     >
       <button
+        id="tab-inbox"
         ref="inboxTabButton"
         type="button"
         role="tab"
         :aria-selected="tab === 'inbox'"
+        aria-controls="notif-tabpanel"
         class="rounded-t-md px-3 py-2 text-[12px] font-semibold transition-colors duration-100"
         :class="tab === 'inbox' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text'"
         @click="tab = 'inbox'"
@@ -67,10 +69,12 @@ onMounted(() => inboxTabButton.value?.focus());
         Inbox
       </button>
       <button
+        id="tab-assistant"
         type="button"
         role="tab"
         :aria-selected="tab === 'assistant'"
-        class="rounded-t-md px-3 py-2 text-[12px] font-semibold transition-colors duration-100"
+        aria-controls="notif-tabpanel"
+        class="inline-flex items-center gap-1 rounded-t-md px-3 py-2 text-[12px] font-semibold transition-colors duration-100"
         :class="tab === 'assistant' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text'"
         @click="tab = 'assistant'"
       >
@@ -78,7 +82,12 @@ onMounted(() => inboxTabButton.value?.focus());
       </button>
     </div>
 
-    <div class="min-h-0 flex-1" role="tabpanel">
+    <div
+      id="notif-tabpanel"
+      class="min-h-0 flex-1"
+      role="tabpanel"
+      :aria-labelledby="tab === 'inbox' ? 'tab-inbox' : 'tab-assistant'"
+    >
       <InboxTab v-if="tab === 'inbox'" />
       <AssistantTab v-else />
     </div>

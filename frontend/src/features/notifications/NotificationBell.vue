@@ -12,19 +12,21 @@ const bellButton = ref<HTMLButtonElement | null>(null);
 
 const badge = computed(() => (feed.unreadCount > 9 ? "9+" : String(feed.unreadCount)));
 
+function close(restoreFocus = true) {
+  open.value = false;
+  if (restoreFocus) bellButton.value?.focus();
+}
 function toggle() {
   open.value = !open.value;
-}
-function close() {
-  open.value = false;
 }
 
 // Dismissal: a pointer press outside the whole bell+popover, or Escape, closes it.
 function onDocumentPointer(event: MouseEvent) {
-  if (root.value && !root.value.contains(event.target as Node)) close();
+  // Outside-click leaves focus wherever the user clicked — don't yank it back.
+  if (root.value && !root.value.contains(event.target as Node)) close(false);
 }
 function onKeydown(event: KeyboardEvent) {
-  if (event.key === "Escape") close();
+  if (event.key === "Escape") close(true);
 }
 
 watch(open, (isOpen) => {
@@ -34,8 +36,6 @@ watch(open, (isOpen) => {
   } else {
     document.removeEventListener("mousedown", onDocumentPointer);
     document.removeEventListener("keydown", onKeydown);
-    // Return focus to the trigger when the panel closes (accessibility).
-    bellButton.value?.focus();
   }
 });
 
@@ -61,7 +61,7 @@ onBeforeUnmount(() => {
       <Icon :icon="Bell" :size="18" />
       <span
         v-if="feed.unreadCount > 0"
-        class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[10px] font-semibold tabular-nums text-white"
+        class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[11px] font-semibold tabular-nums text-white"
         aria-hidden="true"
       >
         {{ badge }}
@@ -69,7 +69,7 @@ onBeforeUnmount(() => {
     </button>
 
     <div v-if="open" class="absolute right-0 top-full z-40 mt-2">
-      <NotificationPopover @close="close" />
+      <NotificationPopover @close="() => close(true)" />
     </div>
   </div>
 </template>
