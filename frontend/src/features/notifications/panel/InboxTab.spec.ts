@@ -1,25 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { mount } from "@vue/test-utils";
-import type { FeedNotification } from "@notifications/shared";
 import InboxTab from "./InboxTab.vue";
 import { useFeedStore } from "@/stores/feed";
-
-// Mirrors the helper in stores/feed.spec.ts so the FeedNotification shape stays complete
-// and in sync with the contract as it evolves.
-function feedItem(over: Partial<FeedNotification> & { id: string }): FeedNotification {
-  return {
-    module: "mod",
-    title: "Title",
-    description: "",
-    priority: "normal",
-    snoozable: true,
-    audience: { scope: "global" },
-    createdAt: "2026-07-01T00:00:00.000000Z",
-    read: false,
-    ...over,
-  };
-}
+import { feedItem } from "@/test-support/feedItem";
 
 describe("InboxTab", () => {
   beforeEach(() => setActivePinia(createPinia()));

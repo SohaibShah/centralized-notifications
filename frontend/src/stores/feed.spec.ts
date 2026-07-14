@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import type { FeedNotification, Notification } from "@notifications/shared";
+import { feedItem } from "@/test-support/feedItem";
 
 // Mock the two I/O seams (HTTP + SSE) so the store's logic is tested in isolation.
 // vi.hoisted lets the mock factories reference these before the imports are evaluated.
@@ -20,20 +21,6 @@ vi.mock("@/api/sse", () => ({
 
 // Imported after the mocks are registered.
 const { useFeedStore } = await import("./feed");
-
-function feedItem(over: Partial<FeedNotification> & { id: string }): FeedNotification {
-  return {
-    module: "mod",
-    title: "Title",
-    description: "",
-    priority: "normal",
-    snoozable: true,
-    audience: { scope: "global" },
-    createdAt: "2026-07-01T00:00:00.000000Z",
-    read: false,
-    ...over,
-  };
-}
 
 function liveNotif(over: Partial<Notification> & { id: string }): Notification {
   return {

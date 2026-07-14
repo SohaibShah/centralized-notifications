@@ -38,6 +38,9 @@ function onAction(action: NotificationAction, _notification: FeedNotification) {
         class="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-accent"
       >
         <Icon :icon="Sparkles" :size="13" /> AI summary
+        <span class="ml-auto rounded-full bg-sunken px-1.5 py-0.5 tracking-wide text-faint"
+          >Sample</span
+        >
       </p>
       <p class="mt-1 text-[12px] leading-relaxed text-muted">
         2 need action today — an overdue DSAR and a new tracker finding. 4 lower-priority updates
