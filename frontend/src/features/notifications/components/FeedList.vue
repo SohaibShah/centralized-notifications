@@ -45,7 +45,7 @@ onBeforeUnmount(() => observer?.disconnect());
 </script>
 
 <template>
-  <div ref="scroller" class="h-full overflow-y-auto">
+  <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto">
     <section v-for="group in groups" :key="group.key">
       <div
         class="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur"

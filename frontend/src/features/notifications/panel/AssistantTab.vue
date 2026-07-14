@@ -19,8 +19,8 @@ const thread: { from: "ai" | "me"; text: string }[] = [
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
-    <div class="flex-1 space-y-3 overflow-y-auto px-4 py-4">
+  <div class="flex min-h-0 flex-1 flex-col">
+    <div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4">
       <div
         v-for="(m, i) in thread"
         :key="i"

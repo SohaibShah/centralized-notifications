@@ -84,7 +84,7 @@ onMounted(() => inboxTabButton.value?.focus());
 
     <div
       id="notif-tabpanel"
-      class="min-h-0 flex-1"
+      class="flex min-h-0 flex-1 flex-col"
       role="tabpanel"
       :aria-labelledby="tab === 'inbox' ? 'tab-inbox' : 'tab-assistant'"
     >

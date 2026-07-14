@@ -31,7 +31,7 @@ function onAction(action: NotificationAction, _notification: FeedNotification) {
 </script>
 
 <template>
-  <div class="flex h-full flex-col">
+  <div class="flex min-h-0 flex-1 flex-col">
     <!-- AI summary — static/canned this pass, labelled so it doesn't read as a live insight. -->
     <div class="m-3 rounded-lg border border-accent/20 bg-accent/5 px-3 py-2.5">
       <p
@@ -76,7 +76,7 @@ function onAction(action: NotificationAction, _notification: FeedNotification) {
     </div>
 
     <!-- Body: loading / error / empty / filtered-empty / populated -->
-    <div class="min-h-0 flex-1">
+    <div class="flex min-h-0 flex-1 flex-col">
       <div v-if="feed.status === 'loading'" class="px-3 py-2" aria-hidden="true">
         <div v-for="i in 5" :key="i" class="flex gap-3 border-b border-line py-3">
           <Skeleton class="mt-1 size-2 rounded-full" />
