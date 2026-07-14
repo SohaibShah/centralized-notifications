@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { X } from "@lucide/vue";
+import { Sparkles, X } from "@lucide/vue";
 import Icon from "@/components/ui/Icon.vue";
 import { useFeedStore } from "@/stores/feed";
 import InboxTab from "./panel/InboxTab.vue";
@@ -35,7 +35,7 @@ onMounted(() => inboxTabButton.value?.focus());
     aria-label="Notifications"
   >
     <div class="flex items-center gap-2 border-b border-line px-4 py-3">
-      <h2 class="font-display text-[15px] font-medium text-text">Notifications</h2>
+      <h2 class="font-display text-[16px] font-medium text-text">Notifications</h2>
       <span class="flex items-center gap-1.5 text-[11px] text-muted" aria-live="polite">
         <span class="size-2 rounded-full" :class="connection.dot" aria-hidden="true" />
         {{ connection.label }}
@@ -74,7 +74,7 @@ onMounted(() => inboxTabButton.value?.focus());
         :class="tab === 'assistant' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text'"
         @click="tab = 'assistant'"
       >
-        Ask AI ✦
+        Ask AI <Icon :icon="Sparkles" :size="13" />
       </button>
     </div>
 

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { Inbox, Search, SearchX, WifiOff } from "@lucide/vue";
+import { Inbox, Search, SearchX, Sparkles, WifiOff } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Button from "@/components/ui/Button.vue";
 import Chip from "@/components/ui/Chip.vue";
@@ -37,7 +37,7 @@ function onAction(action: NotificationAction, _notification: FeedNotification) {
       <p
         class="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-accent"
       >
-        <span aria-hidden="true">✦</span> AI summary
+        <Icon :icon="Sparkles" :size="13" /> AI summary
       </p>
       <p class="mt-1 text-[12px] leading-relaxed text-muted">
         2 need action today — an overdue DSAR and a new tracker finding. 4 lower-priority updates
