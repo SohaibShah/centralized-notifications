@@ -12,8 +12,19 @@ export const router = createRouter({
     },
     {
       path: "/",
-      name: "feed",
-      component: () => import("@/features/notifications/NotificationsView.vue"),
+      component: () => import("@/features/dashboard/DashboardLayout.vue"),
+      children: [
+        {
+          path: "",
+          name: "dashboard",
+          component: () => import("@/features/dashboard/DashboardHome.vue"),
+        },
+        {
+          path: "settings",
+          name: "settings",
+          component: () => import("@/features/settings/SettingsStub.vue"),
+        },
+      ],
     },
     { path: "/:pathMatch(.*)*", redirect: "/" },
   ],
@@ -28,7 +39,7 @@ router.beforeEach(async (to) => {
     return { name: "login", query: { redirect: to.fullPath } };
   }
   if (to.name === "login" && session.isAuthenticated) {
-    return { name: "feed" };
+    return { name: "dashboard" };
   }
   return true;
 });
