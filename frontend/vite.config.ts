@@ -28,5 +28,7 @@ export default defineConfig({
   // *.spec.ts, so scoping here keeps the two runners from picking up each other's files).
   test: {
     include: ["src/**/*.{test,spec}.ts"],
+    setupFiles: ["./src/test-setup.ts"],
+    environment: "jsdom",
   },
 });
