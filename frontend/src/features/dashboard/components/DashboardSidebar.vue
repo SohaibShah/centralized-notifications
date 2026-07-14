@@ -60,7 +60,7 @@ async function signOut() {
       <RouterLink
         :to="{ name: 'dashboard' }"
         class="flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-muted transition-colors duration-100 hover:bg-sunken hover:text-text"
-        active-class="!bg-accent/10 !text-accent"
+        exact-active-class="!bg-accent/10 !text-accent"
       >
         <Icon :icon="LayoutDashboard" :size="16" />
         Dashboard
@@ -71,6 +71,7 @@ async function signOut() {
         :key="item.label"
         class="flex cursor-default items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-faint"
         :title="`${item.label} — placeholder`"
+        aria-disabled="true"
       >
         <Icon :icon="item.icon" :size="16" />
         {{ item.label }}
