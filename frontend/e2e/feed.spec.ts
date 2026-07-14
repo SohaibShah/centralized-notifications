@@ -12,34 +12,36 @@ async function login(page: import("@playwright/test").Page, username: string, pa
   await page.getByRole("button", { name: "Sign in" }).click();
 }
 
-test.describe("notification feed", () => {
-  test("logs in, receives a live notification over SSE, and marks it read", async ({
+test.describe("notifications dashboard", () => {
+  test("logs in, opens the bell, receives a live notification over SSE, and marks it read", async ({
     page,
     request,
   }) => {
-    // Named to avoid the repo's secret-scanner heuristic (a `token =` assignment) — this
-    // is the shared-secret header value the intake endpoint requires, read from the env.
+    // Shared-secret header value the intake endpoint requires, read from the env (named to
+    // dodge the repo's `token =` secret-scanner heuristic).
     const intakeTokenValue = process.env.INTERNAL_INTAKE_TOKEN ?? "";
     expect(
       intakeTokenValue,
-      "INTERNAL_INTAKE_TOKEN must be set (config loads it from backend/.env)",
+      "INTERNAL_INTAKE_TOKEN must be set (config loads it from the monorepo-root .env)",
     ).not.toBe("");
 
     await login(page, DEV_USER, DEV_PASSWORD);
 
-    // Lands on the feed.
+    // Lands on the dashboard shell (topbar owns the page h1).
     await expect(page).toHaveURL(/\/$/);
-    await expect(page.getByRole("heading", { name: "Inbox" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
 
-    // Gate on the "Live" connection indicator before publishing. The delivery hub is
-    // live-only (no replay): a notification published before this page's /sse
-    // subscription is registered reaches nobody. "Live" reflects EventSource `onopen`,
-    // and the server registers the hub subscription synchronously in that same request,
-    // so this closes the publish→delivery race that would otherwise flake in CI.
+    // Open the notifications bell popover.
+    await page.getByRole("button", { name: /Notifications/ }).click();
+    await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
+
+    // Gate on "Live" inside the popover before publishing. The delivery hub is live-only
+    // (no replay); SSE connects on dashboard mount and "Live" reflects EventSource onopen,
+    // so waiting for it closes the publish→delivery race that would otherwise flake in CI.
     await expect(page.getByText("Live", { exact: true })).toBeVisible();
 
-    // Publish a uniquely-identifiable notification straight to the running server; the
-    // delivery hub fans it out over SSE to this already-open page.
+    // Publish a uniquely-identifiable notification straight to the running server; the hub
+    // fans it out over SSE to this already-open page.
     const stamp = Date.now();
     const id = `e2e-${stamp}`;
     const title = `E2E live notification ${stamp}`;
@@ -57,8 +59,8 @@ test.describe("notification feed", () => {
     });
     expect(publish.ok(), `publish failed: ${publish.status()}`).toBeTruthy();
 
-    // It appears live, without a reload (FR-5). The title renders as a button (the
-    // keyboard-reachable "open" control), so target it by role.
+    // Appears live in the popover without a reload (FR-5). The title renders as a button
+    // (the keyboard-reachable "open" control), so target it by role.
     const card = page.getByRole("button", { name: title });
     await expect(card).toBeVisible({ timeout: 10_000 });
 
@@ -71,15 +73,12 @@ test.describe("notification feed", () => {
     ]);
     expect(readResponse.status()).toBe(204);
 
-    // The UI reflects read: the title de-emphasizes to normal weight (the AA-safe read
-    // treatment — unread titles are font-semibold).
+    // The UI reflects read: the title de-emphasizes to normal weight (unread is semibold).
     await expect(card).toHaveClass(/font-normal/);
   });
 
   test("shows an inline error for a wrong password", async ({ page }) => {
     await login(page, DEV_USER, "definitely-the-wrong-password");
-
-    // Stays on /login and surfaces the design-system voice error, not a stack trace.
     await expect(page.getByRole("alert")).toContainText(/isn.t right/i);
     await expect(page).toHaveURL(/\/login/);
   });
