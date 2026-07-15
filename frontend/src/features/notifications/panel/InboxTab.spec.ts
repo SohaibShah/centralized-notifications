@@ -33,8 +33,12 @@ describe("InboxTab", () => {
   it("opens a new tab for a GET action surfaced on a card", async () => {
     const feed = useFeedStore();
     feed.items = [
+      // Already read: expanding must not flip read (markRead no-ops on an already-read
+      // item), which would otherwise move the row from "Needs action" to "Earlier" and
+      // remount the card mid-test, collapsing it again before we can click the action.
       feedItem({
         id: "a",
+        read: true,
         actions: [
           { label: "Open", url: "https://example.com", method: "GET", icon: "external-link" },
         ],
@@ -45,6 +49,7 @@ describe("InboxTab", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 
     const wrapper = mount(InboxTab);
+    await wrapper.get('[aria-label="Show actions"]').trigger("click");
     const actionButton = wrapper.findAll("button").find((btn) => btn.text().trim() === "Open");
     expect(actionButton).toBeTruthy();
 
