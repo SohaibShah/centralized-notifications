@@ -8,8 +8,9 @@ import { priorityDotClass, priorityLabel } from "@/design/tokens";
 import { exactTime, relativeTime } from "@/lib/time";
 
 // Config-driven feed row. Compact by default; a chevron (only when the notification has
-// actions) expands the card to reveal those actions with their icons. The card body /
-// title / expanding all mark the notification read (emit "open").
+// actions) expands the card to reveal those actions with their icons — expanding alone
+// does not mark it read. The card body / title mark it read (emit "open"); firing an
+// action marks it read too, but that's handled by the consumer (InboxTab), not here.
 const props = defineProps<{ notification: FeedNotification }>();
 const emit = defineEmits<{
   open: [notification: FeedNotification];
@@ -28,7 +29,6 @@ function open() {
 }
 function toggleExpand() {
   expanded.value = !expanded.value;
-  if (expanded.value) emit("open", item.value); // expanding also marks read
 }
 </script>
 

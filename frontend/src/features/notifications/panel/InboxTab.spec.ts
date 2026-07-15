@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { mount } from "@vue/test-utils";
-import InboxTab from "./InboxTab.vue";
-import { useFeedStore } from "@/stores/feed";
 import { feedItem } from "@/test-support/feedItem";
+
+// markRead (fired by onAction now that firing an action also marks read) hits
+// @/api/client — mock it so the test doesn't make a real fetch call and doesn't print
+// the "failed to mark read; reverted" warning feed.ts logs on a rejected request.
+const { postMock } = vi.hoisted(() => ({ postMock: vi.fn().mockResolvedValue(undefined) }));
+vi.mock("@/api/client", () => ({ api: { get: vi.fn(), post: postMock } }));
+
+const { useFeedStore } = await import("@/stores/feed");
+const { default: InboxTab } = await import("./InboxTab.vue");
 
 describe("InboxTab", () => {
   beforeEach(() => setActivePinia(createPinia()));
@@ -33,12 +40,9 @@ describe("InboxTab", () => {
   it("opens a new tab for a GET action surfaced on a card", async () => {
     const feed = useFeedStore();
     feed.items = [
-      // Already read: expanding must not flip read (markRead no-ops on an already-read
-      // item), which would otherwise move the row from "Needs action" to "Earlier" and
-      // remount the card mid-test, collapsing it again before we can click the action.
       feedItem({
         id: "a",
-        read: true,
+        read: false,
         actions: [
           { label: "Open", url: "https://example.com", method: "GET", icon: "external-link" },
         ],
@@ -49,6 +53,8 @@ describe("InboxTab", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 
     const wrapper = mount(InboxTab);
+    // Expanding only reveals the action — it must not mark the row read (and thus must
+    // not move/remount it) before the action button is clicked.
     await wrapper.get('[aria-label="Show actions"]').trigger("click");
     const actionButton = wrapper.findAll("button").find((btn) => btn.text().trim() === "Open");
     expect(actionButton).toBeTruthy();

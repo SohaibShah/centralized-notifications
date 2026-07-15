@@ -31,7 +31,7 @@ describe("NotificationCardRenderer", () => {
     expect(wrapper.emitted("open")).toHaveLength(1);
   });
 
-  it("expands via the chevron to reveal action buttons with icons, and expanding emits open", async () => {
+  it("expands via the chevron to reveal action buttons with icons, without marking read", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: withActions({ id: "a" }) },
     });
@@ -43,16 +43,16 @@ describe("NotificationCardRenderer", () => {
     expect(actions).toHaveLength(1);
     expect(actions[0]!.text()).toContain("Open");
     expect(actions[0]!.find("svg").exists()).toBe(true); // icon rendered
-    expect(wrapper.emitted("open")).toHaveLength(1); // expanding marked read
+    expect(wrapper.emitted("open")).toBeFalsy(); // expanding alone does not mark read
   });
 
-  it("clicking an action emits action and not a second open", async () => {
+  it("clicking an action emits action and not open", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: withActions({ id: "a" }) },
     });
     await wrapper.get('[aria-label="Show actions"]').trigger("click");
     await wrapper.get('[data-test="action"]').trigger("click");
     expect(wrapper.emitted("action")).toHaveLength(1);
-    expect(wrapper.emitted("open")).toHaveLength(1); // only the expand-open, not another
+    expect(wrapper.emitted("open")).toBeFalsy(); // action-marks-read is InboxTab's job, not the card's
   });
 });

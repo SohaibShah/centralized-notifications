@@ -21,7 +21,9 @@ const isFilteredEmpty = computed(
 
 // A module action is a module-owned callback. GET is safe to open directly; other methods
 // need the authenticated action-dispatch proxy (Week 4), so they're surfaced but not fired.
-function onAction(action: NotificationAction, _notification: FeedNotification) {
+// Firing any action also marks the notification read.
+function onAction(action: NotificationAction, notification: FeedNotification) {
+  feed.markRead(notification.id);
   if (action.method === "GET") {
     window.open(action.url, "_blank", "noopener,noreferrer");
   } else {
