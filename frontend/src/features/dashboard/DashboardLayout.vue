@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted } from "vue";
 import { useFeedStore } from "@/stores/feed";
 import { useToastStore } from "@/stores/toast";
+import { useSettingsStore } from "@/stores/settings";
 import DashboardSidebar from "./components/DashboardSidebar.vue";
 import DashboardTopBar from "./components/DashboardTopBar.vue";
 import CriticalToastViewport from "@/features/notifications/CriticalToastViewport.vue";
@@ -11,11 +12,14 @@ import CriticalToastViewport from "@/features/notifications/CriticalToastViewpor
 // prior user's feed; connect() subscribes before load() so a burst mid-load isn't lost.
 const feed = useFeedStore();
 const toast = useToastStore();
+const settings = useSettingsStore();
 onMounted(() => {
   feed.reset();
   toast.reset();
   feed.connect();
   void feed.load();
+  // Feature flags gate UI (e.g. the AI-summary band); fire-and-forget — flags default on.
+  void settings.load();
 });
 onBeforeUnmount(() => feed.disconnect());
 </script>

@@ -10,10 +10,30 @@ const { postMock } = vi.hoisted(() => ({ postMock: vi.fn().mockResolvedValue(und
 vi.mock("@/api/client", () => ({ api: { get: vi.fn(), post: postMock } }));
 
 const { useFeedStore } = await import("@/stores/feed");
+const { useSettingsStore } = await import("@/stores/settings");
 const { default: InboxTab } = await import("./InboxTab.vue");
 
 describe("InboxTab", () => {
   beforeEach(() => setActivePinia(createPinia()));
+
+  it("hides the AI-summary band when the ai_summary feature flag is off", () => {
+    const feed = useFeedStore();
+    feed.status = "ready";
+    useSettingsStore().flags.aiSummaryEnabled = false;
+
+    const wrapper = mount(InboxTab);
+
+    expect(wrapper.find('[aria-controls="ai-summary-detail"]').exists()).toBe(false);
+  });
+
+  it("shows the AI-summary band when the ai_summary feature flag is on (default)", () => {
+    const feed = useFeedStore();
+    feed.status = "ready";
+
+    const wrapper = mount(InboxTab);
+
+    expect(wrapper.find('[aria-controls="ai-summary-detail"]').exists()).toBe(true);
+  });
 
   it("renders the caught-up empty state when the feed is ready with no items", () => {
     const feed = useFeedStore();

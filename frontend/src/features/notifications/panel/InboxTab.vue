@@ -8,9 +8,11 @@ import Icon from "@/components/ui/Icon.vue";
 import Skeleton from "@/components/ui/Skeleton.vue";
 import StatePanel from "@/components/ui/StatePanel.vue";
 import { useFeedStore } from "@/stores/feed";
+import { useSettingsStore } from "@/stores/settings";
 import FeedList from "../components/FeedList.vue";
 
 const feed = useFeedStore();
+const settings = useSettingsStore();
 const aiOpen = ref(false);
 
 // Empty vs filtered-empty are different states with different remedies.
@@ -34,8 +36,12 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
-    <!-- AI summary — static/canned this pass; chevron expands the fuller digest. -->
-    <div class="m-3 rounded-lg border border-accent/20 bg-accent/5">
+    <!-- AI summary — static/canned this pass; chevron expands the fuller digest.
+         Hidden entirely when an admin disables the AI-summary feature (global kill-switch). -->
+    <div
+      v-if="settings.flags.aiSummaryEnabled"
+      class="m-3 rounded-lg border border-accent/20 bg-accent/5"
+    >
       <button
         type="button"
         class="flex w-full items-center gap-1.5 px-3 py-2.5 text-left transition-colors duration-100 hover:bg-accent/10"
