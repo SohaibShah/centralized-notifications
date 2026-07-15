@@ -231,4 +231,61 @@ describe("GET /notifications", () => {
       expect(after.body.items.find((n) => n.id === `${ID_PREFIX}5`)?.read).toBe(true);
     });
   });
+
+  describe("POST /notifications/read (bulk)", () => {
+    it("401 without a session", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/notifications/read",
+        payload: { ids: [IDS[0]] },
+      });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("400 on an invalid body", async () => {
+      const res = await app.inject({
+        method: "POST",
+        url: "/notifications/read",
+        headers: { cookie: sessionCookie },
+        payload: { ids: [] }, // empty not allowed
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("marks the given ids read for the caller, ignores unknown ids, and is idempotent", async () => {
+      const bogus = "does-not-exist-xyz";
+      const first = await app.inject({
+        method: "POST",
+        url: "/notifications/read",
+        headers: { cookie: sessionCookie },
+        payload: { ids: [IDS[0], IDS[1], bogus] },
+      });
+      expect(first.statusCode).toBe(204);
+
+      // A repeat is a no-op (idempotent).
+      const again = await app.inject({
+        method: "POST",
+        url: "/notifications/read",
+        headers: { cookie: sessionCookie },
+        payload: { ids: [IDS[0], IDS[1], bogus] },
+      });
+      expect(again.statusCode).toBe(204);
+
+      // The two real ids now read back as read; the bogus id created no row.
+      const list = await app.inject({
+        method: "GET",
+        url: "/notifications?limit=100",
+        headers: { cookie: sessionCookie },
+      });
+      const body = list.json() as NotificationPage;
+      const byId = new Map(body.items.map((n) => [n.id, n.read]));
+      expect(byId.get(IDS[0]!)).toBe(true);
+      expect(byId.get(IDS[1]!)).toBe(true);
+      const reads = await query<{ n: string }>(
+        "SELECT count(*)::text AS n FROM notification_reads WHERE user_id = $1 AND notification_id = $2",
+        [userId, bogus],
+      );
+      expect(reads.rows[0]!.n).toBe("0");
+    });
+  });
 });

@@ -17,6 +17,11 @@ const listQuerySchema = z.object({
 // The route param is the notification id (the contract id, text PK up to 200 chars).
 const readParamsSchema = z.object({ id: z.string().min(1).max(200) });
 
+// Bulk mark-read: cap the batch so one request can't ask to write an unbounded set.
+const bulkReadSchema = z.object({
+  ids: z.array(z.string().min(1).max(200)).min(1).max(500),
+});
+
 /**
  * Opaque keyset cursor: the (created_at, id) of the last row of the previous page,
  * base64url-encoded JSON. Opaque on purpose so a client can't turn it into an
@@ -181,6 +186,30 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
        VALUES ($1, $2)
        ON CONFLICT (user_id, notification_id) DO NOTHING`,
       [user.id, id],
+    );
+    return reply.code(204).send();
+  });
+
+  /**
+   * Bulk mark-read for the current user (mark-all-read in the panel): `POST
+   * /notifications/read` with `{ ids: string[] }`. One row per id that actually
+   * exists (the `= ANY` filter drops unknown ids silently, same effect as the
+   * single-id 404 guard but batched). Per-user and idempotent (ON CONFLICT DO
+   * NOTHING). Returns 204.
+   */
+  app.post("/notifications/read", { preHandler: requireUser }, async (req, reply) => {
+    const user = req.user;
+    if (!user) return reply.code(401).send({ error: "authentication required" });
+
+    const parsed = bulkReadSchema.safeParse(req.body);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid request body" });
+    const { ids } = parsed.data;
+
+    await query(
+      `INSERT INTO notification_reads (user_id, notification_id)
+         SELECT $1, n.id FROM notifications n WHERE n.id = ANY($2::text[])
+         ON CONFLICT (user_id, notification_id) DO NOTHING`,
+      [user.id, ids],
     );
     return reply.code(204).send();
   });

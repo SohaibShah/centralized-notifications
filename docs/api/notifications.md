@@ -179,6 +179,56 @@ Path parameter:
 
 One upsert into `notification_reads` (`(user_id, notification_id)`, keyed by the authenticated user). No events published.
 
+## POST /notifications/read
+
+**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
+
+Bulk mark-read for the current user — what the panel's "mark all read" calls. Marks each
+id in the batch read **for the caller**; read state is per-user, so this only ever affects
+the caller's own `notification_reads` rows, same as the single-id endpoint above.
+
+Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+
+### Request
+
+Body:
+
+| Field | Type       | Required | Notes                                                                                                                    |
+| ----- | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `ids` | `string[]` | yes      | 1–500 ids per request (batch capped so one call can't ask to write an unbounded set). Each id is 1–200 chars, non-empty. |
+
+```json
+{ "ids": ["dsr-1234-sla-warning-72h", "scan-run-556-sensitive-found"] }
+```
+
+**Unknown ids are silently ignored.** Unlike the single-id endpoint (which 404s for an id
+that doesn't exist), the bulk endpoint filters the batch down to ids that exist
+(`WHERE n.id = ANY($2::text[])`) and marks only those read — an id that isn't a real
+notification simply contributes no row, so a client doesn't need to pre-filter its batch
+and one stale id can't fail the whole request.
+
+**Idempotent.** Same mechanism as the single-id endpoint — `INSERT … ON CONFLICT
+(user_id, notification_id) DO NOTHING` — so repeating a batch (or overlapping it with a
+previous one) is a no-op; a retry or a double-click on "mark all read" never errors and
+never creates duplicate rows.
+
+### Response `204`
+
+`204 No Content` — no body. A subsequent [`GET /notifications`](#get-notifications) then
+returns `read: true` for every id in the batch that existed, for this user.
+
+### Errors
+
+| Status | Body                                     | Reason                                                                                                        |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid request body" }`    | `ids` is missing, empty, has more than 500 entries, or contains an id that is empty or longer than 200 chars. |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                                      |
+
+### Side effects
+
+Zero or more inserts into `notification_reads` — one per id in the batch that corresponds
+to an existing notification (keyed by the authenticated user). No events published.
+
 ## Design decisions
 
 These are baked into the contract deliberately (contract checkpoint, see
