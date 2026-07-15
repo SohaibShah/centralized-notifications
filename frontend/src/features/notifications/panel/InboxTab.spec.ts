@@ -62,5 +62,6 @@ describe("InboxTab", () => {
     await actionButton!.trigger("click");
 
     expect(openSpy).toHaveBeenCalledWith("https://example.com", "_blank", "noopener,noreferrer");
+    expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
   });
 });
