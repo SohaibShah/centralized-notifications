@@ -38,8 +38,9 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
     <div class="m-3 rounded-lg border border-accent/20 bg-accent/5">
       <button
         type="button"
-        class="flex w-full items-center gap-1.5 px-3 py-2.5 text-left"
+        class="flex w-full items-center gap-1.5 px-3 py-2.5 text-left transition-colors duration-100 hover:bg-accent/10"
         :aria-expanded="aiOpen"
+        aria-controls="ai-summary-detail"
         @click="aiOpen = !aiOpen"
       >
         <Icon :icon="Sparkles" :size="13" class="text-accent" />
@@ -55,7 +56,11 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
           :class="{ 'rotate-180': aiOpen }"
         />
       </button>
-      <p v-if="aiOpen" class="px-3 pb-2.5 text-[12px] leading-relaxed text-muted">
+      <p
+        v-if="aiOpen"
+        id="ai-summary-detail"
+        class="px-3 pb-2.5 text-[12px] leading-relaxed text-muted"
+      >
         2 need action today — an overdue DSAR and a new tracker finding. 4 lower-priority updates
         since yesterday.
       </p>

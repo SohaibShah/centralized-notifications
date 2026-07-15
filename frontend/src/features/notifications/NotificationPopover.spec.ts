@@ -30,4 +30,31 @@ describe("NotificationPopover", () => {
     await wrapper.find('button[aria-label="Close notifications"]').trigger("click");
     expect(wrapper.emitted("close")).toHaveLength(1);
   });
+
+  it("toggles the search field when the search button is clicked", async () => {
+    const wrapper = mount(NotificationPopover);
+    const searchButton = wrapper.find('button[aria-label="Search notifications"]');
+    expect(searchButton.exists()).toBe(true);
+
+    // Search input should not exist initially
+    let searchInput = wrapper.find('input[type="search"]');
+    expect(searchInput.exists()).toBe(false);
+
+    // Click to open search
+    await searchButton.trigger("click");
+    searchInput = wrapper.find('input[type="search"]');
+    expect(searchInput.exists()).toBe(true);
+  });
+
+  it("hides the search button when on the Assistant tab", async () => {
+    const wrapper = mount(NotificationPopover);
+    const tabs = wrapper.findAll('[role="tab"]');
+
+    // Switch to Assistant tab
+    await tabs[1]!.trigger("click");
+
+    // Search button should not exist in Assistant tab
+    const searchButton = wrapper.find('button[aria-label="Search notifications"]');
+    expect(searchButton.exists()).toBe(false);
+  });
 });

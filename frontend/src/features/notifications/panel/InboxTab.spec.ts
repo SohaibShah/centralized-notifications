@@ -64,4 +64,22 @@ describe("InboxTab", () => {
     expect(openSpy).toHaveBeenCalledWith("https://example.com", "_blank", "noopener,noreferrer");
     expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
   });
+
+  it("toggles the AI-summary detail visibility when the disclosure button is clicked", async () => {
+    const wrapper = mount(InboxTab);
+    const disclosureButton = wrapper.find('button[aria-controls="ai-summary-detail"]');
+    expect(disclosureButton.exists()).toBe(true);
+
+    // Detail should be hidden initially
+    const detail = wrapper.find("#ai-summary-detail");
+    expect(detail.exists()).toBe(false);
+
+    // Click the disclosure button to open
+    await disclosureButton.trigger("click");
+
+    // Detail should now be visible
+    const openDetail = wrapper.find("#ai-summary-detail");
+    expect(openDetail.exists()).toBe(true);
+    expect(openDetail.text()).toContain("2 need action today");
+  });
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { nextTick, onMounted, ref } from "vue";
 import { Search, Sparkles, X } from "@lucide/vue";
 import Icon from "@/components/ui/Icon.vue";
 import { useFeedStore } from "@/stores/feed";
@@ -18,7 +18,7 @@ const searchInput = ref<HTMLInputElement | null>(null);
 async function toggleSearch() {
   searchOpen.value = !searchOpen.value;
   if (searchOpen.value) {
-    await Promise.resolve();
+    await nextTick();
     searchInput.value?.focus();
   }
 }
