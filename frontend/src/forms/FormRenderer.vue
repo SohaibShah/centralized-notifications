@@ -2,6 +2,7 @@
 import { reactive, ref } from "vue";
 import Button from "@/components/ui/Button.vue";
 import Spinner from "@/components/ui/Spinner.vue";
+import SwitchField from "./fields/SwitchField.vue";
 import TextField from "./fields/TextField.vue";
 import type { FormSchema, FormValues } from "./types";
 import { buildSchema } from "./validation";
@@ -15,13 +16,21 @@ const props = defineProps<{
   submitting?: boolean;
   /** A server-side/form-level error (e.g. bad credentials), shown above the button. */
   error?: string | null;
+  /** Seed values (e.g. current settings loaded from the server) before user edits. */
+  initialValues?: FormValues;
 }>();
 const emit = defineEmits<{ submit: [values: FormValues] }>();
+
+const isBooleanField = (type: FormSchema["fields"][number]["type"]): boolean =>
+  type === "checkbox" || type === "switch";
 
 const formEl = ref<HTMLFormElement>();
 const values = reactive<FormValues>(
   Object.fromEntries(
-    props.schema.fields.map((f) => [f.name, f.default ?? (f.type === "checkbox" ? false : "")]),
+    props.schema.fields.map((f) => [
+      f.name,
+      props.initialValues?.[f.name] ?? f.default ?? (isBooleanField(f.type) ? false : ""),
+    ]),
   ),
 );
 const errors = reactive<Record<string, string>>({});
@@ -47,13 +56,15 @@ function handleSubmit() {
 
 <template>
   <form ref="formEl" novalidate class="flex flex-col gap-4" @submit.prevent="handleSubmit">
-    <TextField
-      v-for="field in schema.fields"
-      :key="field.name"
-      v-model="values[field.name]"
-      :field="field"
-      :error="errors[field.name]"
-    />
+    <template v-for="field in schema.fields" :key="field.name">
+      <SwitchField
+        v-if="field.type === 'switch'"
+        v-model="values[field.name]"
+        :field="field"
+        :error="errors[field.name]"
+      />
+      <TextField v-else v-model="values[field.name]" :field="field" :error="errors[field.name]" />
+    </template>
 
     <p v-if="error" role="alert" aria-live="polite" class="text-[13px] text-danger">{{ error }}</p>
 

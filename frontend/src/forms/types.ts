@@ -4,13 +4,7 @@
  */
 
 export type FieldType =
-  | "text"
-  | "email"
-  | "password"
-  | "number"
-  | "textarea"
-  | "select"
-  | "checkbox";
+  "text" | "email" | "password" | "number" | "textarea" | "select" | "checkbox" | "switch";
 
 export interface FormField {
   name: string;
@@ -20,6 +14,8 @@ export interface FormField {
   placeholder?: string;
   autocomplete?: string;
   maxLength?: number;
+  /** Secondary explanatory line under the label (e.g. a switch's effect / availability). */
+  hint?: string;
   default?: string | number | boolean;
   /** For select/radio-group (added as those field components land). */
   options?: { value: string; label: string }[];

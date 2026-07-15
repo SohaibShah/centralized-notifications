@@ -4,6 +4,10 @@ import type { FormField, FormSchema } from "./types";
 // Validation is generated from the same schema that renders the form, so the two can't
 // drift (json-form-conventions). Returns a zod object keyed by field name.
 function fieldSchema(field: FormField): ZodTypeAny {
+  // A switch is a plain boolean toggle (never "required true" the way an opt-in checkbox is).
+  if (field.type === "switch") {
+    return z.boolean().optional();
+  }
   if (field.type === "checkbox") {
     return field.required
       ? z.boolean().refine((v) => v === true, { message: `${field.label} is required` })
