@@ -63,7 +63,7 @@ Each entry in `actions`:
 
 **Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in). The cookie is same-origin, so a browser `fetch`/`EventSource` sends it automatically through the dev proxy.
 
-The feed **read** path: returns the caller's notifications newest-first as one keyset-paginated page. Read-only — no side effects.
+The feed **read** path: returns the caller's notifications newest-first as one keyset-paginated page. Read-only — no side effects. Notifications from a module an admin has disabled (`suppressed = true` — see the [Admin API](./admin.md)) are excluded from the returned list; they are still recorded, just never surfaced here.
 
 Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
 

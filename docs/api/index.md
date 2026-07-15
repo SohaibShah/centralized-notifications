@@ -9,6 +9,8 @@ Every endpoint below is documented as it's built or changed — see
 looks stale, that's a bug in the process, not a doc you should just trust blindly —
 flag it.
 
+- [Admin](./admin.md) — module enable/disable and global feature kill-switches
+  (admin-only, plus the user-facing feature-flags read endpoint).
 - [Auth](./auth.md) — prototype username/password login, logout, and current-user
   endpoints backed by encrypted cookie sessions.
 - [Intake](./intake.md) — the service-to-service publish endpoint (`POST /internal/publish`)
