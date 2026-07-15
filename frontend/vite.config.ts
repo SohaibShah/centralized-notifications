@@ -18,6 +18,8 @@ export default defineConfig({
     proxy: {
       "/auth": backend,
       "/notifications": backend,
+      "/admin": backend,
+      "/settings": backend,
       "/internal": backend,
       "/health": backend,
       // SSE: disable buffering so events stream through as they arrive.

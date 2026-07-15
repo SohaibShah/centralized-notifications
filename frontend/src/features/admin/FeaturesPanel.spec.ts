@@ -38,4 +38,13 @@ describe("FeaturesPanel", () => {
       expect.objectContaining({ aiSummaryEnabled: false }),
     );
   });
+
+  it("shows an error state (not a blank panel) when settings fail to load", async () => {
+    getMock.mockReset();
+    getMock.mockRejectedValueOnce(new Error("network"));
+    const wrapper = mount(FeaturesPanel);
+    await flushPromises();
+    expect(wrapper.text()).toContain("Couldn't load settings");
+    expect(wrapper.find("form").exists()).toBe(false);
+  });
 });
