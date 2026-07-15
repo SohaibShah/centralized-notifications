@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireAdmin, requireUser } from "../../auth/guards";
 import { query } from "../../db/pool";
+import { deriveLabel } from "../../pipeline/modules";
 import { getFeatureFlags, invalidatePolicyCache } from "../../pipeline/policy";
 
 const moduleParamsSchema = z.object({ key: z.string().min(1).max(100) });
@@ -16,15 +17,6 @@ const settingsPatchSchema = z
     actionsEnabled: z.boolean().optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "no fields to update");
-
-/** Title-case a module key, mirroring pipeline/modules.ts, for re-deriving a cleared label. */
-function deriveLabel(key: string): string {
-  return key
-    .split(/[_\-\s]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
 
 interface ModuleAggRow {
   key: string;

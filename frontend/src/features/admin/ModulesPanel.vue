@@ -192,7 +192,7 @@ async function commitRename(m: AdminModule): Promise<void> {
             >{{ m.byPriority.high }} high</span
           >
           <span>{{ m.byPriority.normal + m.byPriority.low }} other</span>
-          <span v-if="!m.enabled && m.suppressed" class="ml-2 text-warning"
+          <span v-if="m.suppressed > 0" class="ml-2 text-warning"
             >· {{ m.suppressed }} suppressed</span
           >
         </div>

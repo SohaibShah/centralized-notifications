@@ -23,14 +23,20 @@ export async function ingest(raw: unknown): Promise<IngestResult> {
   const delivered = await isModuleEnabled(result.data.module);
   const status = await persist(result.data, !delivered);
   if (status === "accepted") {
-    // Auto-discover the source module (FR-7): first sight registers it enabled.
-    await upsertModuleSeen(result.data.module);
-    // Fan out only newly-persisted, non-suppressed notifications (never duplicates).
-    // Week-1 shortcut: broadcast to everyone. Week 4 swaps this for resolveAudience ->
-    // publishToRecipients.
+    // Fan out first — delivery must never be gated behind bookkeeping. Week-1 shortcut:
+    // broadcast to everyone. Week 4 swaps this for resolveAudience -> publishToRecipients.
     // TODO(week-4): enforce per-recipient preferences/opt-out here before publishing
     // (notifications-domain.md) — the check belongs in this delivery path, not just the UI.
     if (delivered) deliveryHub.broadcast(result.data);
+    // Auto-discover the source module (FR-7), best-effort. If this write throws, the caller
+    // retries, persist returns "duplicate", and this block is skipped — so a discovery
+    // failure must not abort an already-delivered notification. Discovery self-heals on the
+    // module's next successful publish.
+    try {
+      await upsertModuleSeen(result.data.module);
+    } catch (err) {
+      console.error(`[intake] module discovery failed for ${result.data.module}`, err);
+    }
   }
   return { status, id: result.data.id };
 }

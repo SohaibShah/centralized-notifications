@@ -1,7 +1,7 @@
 import { query } from "../db/pool";
 
 /** Title-case a module key for the default human label: `vendor_risk` → `Vendor Risk`. */
-function deriveLabel(key: string): string {
+export function deriveLabel(key: string): string {
   return key
     .split(/[_\-\s]+/)
     .filter(Boolean)

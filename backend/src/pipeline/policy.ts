@@ -52,7 +52,16 @@ export async function getFeatureFlags(): Promise<FeatureFlags> {
   return (await get()).flags;
 }
 
-/** Drop the cache; the next read reloads from the DB. Call after any admin write. */
+/**
+ * Drop the cache; the next read reloads from the DB. Call after any admin write.
+ *
+ * NOTE (single-instance assumption): this only clears the cache in the process that served
+ * the write. The prototype runs one backend process, so that's complete. If this is ever
+ * scaled horizontally, an admin change on one instance won't invalidate the others — a
+ * disabled module could keep delivering on a stale replica. The fix at that point is a
+ * TTL here plus a Redis pub/sub invalidation channel (Redis is already a dependency).
+ * Flagged for the mentor with the audience-model discussion.
+ */
 export function invalidatePolicyCache(): void {
   cache = null;
 }
