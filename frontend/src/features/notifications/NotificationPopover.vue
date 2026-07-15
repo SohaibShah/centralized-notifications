@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { Sparkles, X } from "@lucide/vue";
+import { onMounted, ref } from "vue";
+import { Search, Sparkles, X } from "@lucide/vue";
 import Icon from "@/components/ui/Icon.vue";
 import { useFeedStore } from "@/stores/feed";
+import FilterMenu from "./components/FilterMenu.vue";
 import InboxTab from "./panel/InboxTab.vue";
 import AssistantTab from "./panel/AssistantTab.vue";
 
@@ -11,47 +12,29 @@ defineEmits<{ close: [] }>();
 const feed = useFeedStore();
 const tab = ref<"inbox" | "assistant">("inbox");
 const inboxTabButton = ref<HTMLButtonElement | null>(null);
+const searchOpen = ref(false);
+const searchInput = ref<HTMLInputElement | null>(null);
 
-// Reflect SSE connection health (reused from the retired TopBar).
-const connection = computed(() => {
-  switch (feed.connection) {
-    case "open":
-      return { label: "Live", dot: "bg-success" };
-    case "connecting":
-      return { label: "Connecting…", dot: "bg-warning" };
-    default:
-      return { label: "Offline", dot: "bg-faint" };
+async function toggleSearch() {
+  searchOpen.value = !searchOpen.value;
+  if (searchOpen.value) {
+    await Promise.resolve();
+    searchInput.value?.focus();
   }
-});
+}
 
-// Move focus into the panel when it opens (the bell restores focus to itself on close).
 onMounted(() => inboxTabButton.value?.focus());
 </script>
 
 <template>
   <div
-    class="flex max-h-[70vh] w-[380px] flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-xl shadow-black/10"
+    class="flex max-h-[80vh] w-[380px] flex-col overflow-hidden rounded-lg border border-line-strong bg-surface shadow-xl shadow-black/10"
     role="dialog"
     aria-label="Notifications"
   >
-    <div class="flex items-center gap-2 border-b border-line px-4 py-3">
-      <h2 class="font-display text-[16px] font-medium text-text">Notifications</h2>
-      <span class="flex items-center gap-1.5 text-[11px] text-muted" aria-live="polite">
-        <span class="size-2 rounded-full" :class="connection.dot" aria-hidden="true" />
-        {{ connection.label }}
-      </span>
-      <button
-        type="button"
-        class="ml-auto grid size-7 place-items-center rounded-md text-faint transition-colors duration-100 hover:bg-sunken hover:text-text"
-        aria-label="Close notifications"
-        @click="$emit('close')"
-      >
-        <Icon :icon="X" :size="16" />
-      </button>
-    </div>
-
+    <!-- One toolbar: tabs (always) + search & filter (Inbox only) + close (always) -->
     <div
-      class="flex gap-1 border-b border-line px-3 pt-2"
+      class="flex items-center gap-1 border-b border-line px-3 py-2"
       role="tablist"
       aria-label="Notification views"
     >
@@ -62,7 +45,7 @@ onMounted(() => inboxTabButton.value?.focus());
         role="tab"
         :aria-selected="tab === 'inbox'"
         aria-controls="notif-tabpanel"
-        class="rounded-t-md px-3 py-2 text-[12px] font-semibold transition-colors duration-100"
+        class="rounded-md px-3 py-1.5 text-[12px] font-semibold transition-colors duration-100"
         :class="tab === 'inbox' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text'"
         @click="tab = 'inbox'"
       >
@@ -74,12 +57,47 @@ onMounted(() => inboxTabButton.value?.focus());
         role="tab"
         :aria-selected="tab === 'assistant'"
         aria-controls="notif-tabpanel"
-        class="inline-flex items-center gap-1 rounded-t-md px-3 py-2 text-[12px] font-semibold transition-colors duration-100"
+        class="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-[12px] font-semibold transition-colors duration-100"
         :class="tab === 'assistant' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text'"
         @click="tab = 'assistant'"
       >
         Ask AI <Icon :icon="Sparkles" :size="13" />
       </button>
+
+      <div class="ml-auto flex items-center gap-1">
+        <button
+          v-if="tab === 'inbox'"
+          type="button"
+          class="grid size-8 place-items-center rounded-md transition-colors duration-100 hover:bg-sunken"
+          :class="searchOpen || feed.query ? 'text-accent' : 'text-faint hover:text-text'"
+          aria-label="Search notifications"
+          :aria-expanded="searchOpen"
+          @click="toggleSearch"
+        >
+          <Icon :icon="Search" :size="16" />
+        </button>
+        <FilterMenu v-if="tab === 'inbox'" />
+        <button
+          type="button"
+          class="grid size-8 place-items-center rounded-md text-faint transition-colors duration-100 hover:bg-sunken hover:text-text"
+          aria-label="Close notifications"
+          @click="$emit('close')"
+        >
+          <Icon :icon="X" :size="16" />
+        </button>
+      </div>
+    </div>
+
+    <!-- Search field appears only when toggled (Inbox only) -->
+    <div v-if="tab === 'inbox' && searchOpen" class="border-b border-line px-3 py-2">
+      <input
+        ref="searchInput"
+        v-model="feed.query"
+        type="search"
+        placeholder="Search notifications"
+        aria-label="Search notifications"
+        class="h-8 w-full rounded-md border border-line-strong bg-surface px-3 text-[13px] text-text placeholder:text-faint focus-visible:border-accent"
+      />
     </div>
 
     <div

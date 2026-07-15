@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed } from "vue";
-import { Inbox, Search, SearchX, Sparkles, WifiOff } from "@lucide/vue";
+import { computed, ref } from "vue";
+import { ChevronDown, Inbox, SearchX, Sparkles, WifiOff } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Button from "@/components/ui/Button.vue";
 import Chip from "@/components/ui/Chip.vue";
@@ -9,9 +9,9 @@ import Skeleton from "@/components/ui/Skeleton.vue";
 import StatePanel from "@/components/ui/StatePanel.vue";
 import { useFeedStore } from "@/stores/feed";
 import FeedList from "../components/FeedList.vue";
-import FilterMenu from "../components/FilterMenu.vue";
 
 const feed = useFeedStore();
+const aiOpen = ref(false);
 
 // Empty vs filtered-empty are different states with different remedies.
 const isEmpty = computed(() => feed.status === "ready" && feed.items.length === 0);
@@ -34,40 +34,33 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
 
 <template>
   <div class="flex min-h-0 flex-1 flex-col">
-    <!-- AI summary — static/canned this pass, labelled so it doesn't read as a live insight. -->
-    <div class="m-3 rounded-lg border border-accent/20 bg-accent/5 px-3 py-2.5">
-      <p
-        class="flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-accent"
+    <!-- AI summary — static/canned this pass; chevron expands the fuller digest. -->
+    <div class="m-3 rounded-lg border border-accent/20 bg-accent/5">
+      <button
+        type="button"
+        class="flex w-full items-center gap-1.5 px-3 py-2.5 text-left"
+        :aria-expanded="aiOpen"
+        @click="aiOpen = !aiOpen"
       >
-        <Icon :icon="Sparkles" :size="13" /> AI summary
-        <span class="ml-auto rounded-full bg-sunken px-1.5 py-0.5 tracking-wide text-faint"
+        <Icon :icon="Sparkles" :size="13" class="text-accent" />
+        <span class="font-mono text-[11px] uppercase tracking-wide text-accent">AI summary</span>
+        <span
+          class="ml-1 rounded-full bg-sunken px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wide text-faint"
           >Sample</span
         >
-      </p>
-      <p class="mt-1 text-[12px] leading-relaxed text-muted">
+        <Icon
+          :icon="ChevronDown"
+          :size="14"
+          class="ml-auto text-faint transition-transform"
+          :class="{ 'rotate-180': aiOpen }"
+        />
+      </button>
+      <p v-if="aiOpen" class="px-3 pb-2.5 text-[12px] leading-relaxed text-muted">
         2 need action today — an overdue DSAR and a new tracker finding. 4 lower-priority updates
         since yesterday.
       </p>
     </div>
 
-    <!-- Compact filters -->
-    <div class="flex items-center gap-2 px-3 pb-2">
-      <div class="relative flex-1">
-        <Icon
-          :icon="Search"
-          :size="14"
-          class="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-faint"
-        />
-        <input
-          v-model="feed.query"
-          type="search"
-          placeholder="Search"
-          aria-label="Search notifications"
-          class="h-8 w-full rounded-md border border-line-strong bg-surface pl-8 pr-2 text-[13px] text-text placeholder:text-faint focus-visible:border-accent"
-        />
-      </div>
-      <FilterMenu />
-    </div>
     <div class="flex items-center gap-1.5 px-3 pb-2">
       <Chip :active="!feed.isFiltered" @click="feed.clearFilters()">All</Chip>
       <Chip :active="feed.unreadOnly" @click="feed.toggleUnreadOnly()">Unread</Chip>
