@@ -59,5 +59,13 @@ export const useToastStore = defineStore("toast", () => {
     if (queue.value.some((t) => t.id === id)) startTimer(id);
   }
 
-  return { visible, overflowCount, pushCritical, dismiss, pause, resume };
+  /** Clear all toasts, timers, and dedupe memory — used on (re)login so one user never sees another's toasts. */
+  function reset(): void {
+    for (const t of timers.values()) clearTimeout(t);
+    timers.clear();
+    queue.value = [];
+    seen.clear();
+  }
+
+  return { visible, overflowCount, pushCritical, dismiss, pause, resume, reset };
 });

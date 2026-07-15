@@ -46,4 +46,34 @@ describe("toast store", () => {
     vi.advanceTimersByTime(AUTO_DISMISS_MS);
     expect(t.visible).toEqual([]);
   });
+
+  it("reset() empties visible, clears overflowCount, and re-enables seen ids", () => {
+    const t = useToastStore();
+    t.pushCritical([crit("a"), crit("b"), crit("c")]);
+    expect(t.visible.length).toBe(3);
+    expect(t.overflowCount).toBe(0);
+    t.reset();
+    expect(t.visible).toEqual([]);
+    expect(t.overflowCount).toBe(0);
+    // After reset, pushing the same id enqueues it again (seen was cleared)
+    t.pushCritical([crit("a")]);
+    expect(t.visible.map((x) => x.id)).toEqual(["a"]);
+  });
+
+  it("dismiss(id) cancels the pending auto-dismiss timer", () => {
+    const t = useToastStore();
+    t.pushCritical([crit("a")]);
+    t.dismiss("a");
+    vi.advanceTimersByTime(AUTO_DISMISS_MS);
+    expect(t.visible).toEqual([]);
+  });
+
+  it("resume(id) on an already-dismissed id is a no-op", () => {
+    const t = useToastStore();
+    t.pushCritical([crit("a")]);
+    t.dismiss("a");
+    t.resume("a");
+    vi.advanceTimersByTime(AUTO_DISMISS_MS);
+    expect(t.visible).toEqual([]);
+  });
 });
