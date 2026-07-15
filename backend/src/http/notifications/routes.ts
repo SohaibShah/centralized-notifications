@@ -128,10 +128,11 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     // limit is always the final positional parameter. Fetch one extra row to learn
     // whether an older page exists without a second COUNT query.
     const params: unknown[] = [user.id];
-    let where = "";
+    // Notifications from an admin-disabled module are recorded but never shown.
+    let where = "WHERE n.suppressed = false";
     if (cursor) {
       params.push(cursor.ts, cursor.id);
-      where = "WHERE (n.created_at, n.id) < ($2::timestamptz, $3::text)";
+      where += " AND (n.created_at, n.id) < ($2::timestamptz, $3::text)";
     }
     params.push(limit + 1);
     const limitPlaceholder = `$${params.length}`;

@@ -11,12 +11,15 @@ import { query } from "../db/pool";
  * existed. `actions`/`metadata` are stored as opaque jsonb (stringified so pg targets
  * jsonb, not a Postgres array); `audience` is split into scope/id columns.
  */
-export async function persist(n: Notification): Promise<"accepted" | "duplicate"> {
+export async function persist(
+  n: Notification,
+  suppressed: boolean,
+): Promise<"accepted" | "duplicate"> {
   const result = await query<{ id: string }>(
     `INSERT INTO notifications
        (id, module, title, description, priority, snoozable, category,
-        audience_scope, audience_id, actions, metadata, source_ts)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        audience_scope, audience_id, actions, metadata, source_ts, suppressed)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
     [
@@ -35,6 +38,7 @@ export async function persist(n: Notification): Promise<"accepted" | "duplicate"
       n.actions ? JSON.stringify(n.actions) : null,
       n.metadata ? JSON.stringify(n.metadata) : null,
       n.timestamp ?? null,
+      suppressed,
     ],
   );
   return result.rows.length > 0 ? "accepted" : "duplicate";
