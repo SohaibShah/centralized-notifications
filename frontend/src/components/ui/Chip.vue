@@ -6,7 +6,7 @@ import { cn } from "@/lib/cn";
 const props = defineProps<{ active?: boolean }>();
 const classes = computed(() =>
   cn(
-    "rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-100 ease-out",
+    "rounded-full px-3 py-1 text-[12px] font-medium transition-colors duration-100 ease-out hover:cursor-pointer",
     props.active ? "bg-accent/10 font-semibold text-accent" : "text-muted hover:text-text",
   ),
 );

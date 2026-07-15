@@ -5,7 +5,7 @@ import { cva } from "class-variance-authority";
 // Affordance comes from color/weight/spacing (not shadows), per the design system.
 // A caller's `class` and listeners fall through to the <button> automatically.
 const button = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-semibold transition-[background-color,color,border-color,opacity] duration-100 ease-out disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md font-semibold transition-[background-color,color,border-color,opacity] duration-100 ease-out disabled:pointer-events-none disabled:opacity-50 hover:cursor-pointer",
   {
     variants: {
       variant: {
