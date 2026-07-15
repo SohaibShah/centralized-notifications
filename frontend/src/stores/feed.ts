@@ -129,9 +129,20 @@ export const useFeedStore = defineStore("feed", () => {
     }
   }
 
-  /** Handle one coalesced SSE burst: prepend the genuinely-new notifications. */
+  // Critical-arrival subscribers (the toast listens here). Fired only with items that
+  // are genuinely new to the feed this batch, so a duplicate delivery never re-toasts.
+  const criticalSubs = new Set<(items: FeedNotification[]) => void>();
+  function onLiveCritical(cb: (items: FeedNotification[]) => void): () => void {
+    criticalSubs.add(cb);
+    return () => criticalSubs.delete(cb);
+  }
+
+  /** Handle one coalesced SSE burst: prepend new notifications, then notify critical subs. */
   function onLiveBatch(batch: Notification[]): void {
-    addFront(batch.map(toFeed));
+    const incoming = batch.map(toFeed);
+    const freshCriticals = incoming.filter((n) => !seen.has(n.id) && n.priority === "critical");
+    addFront(incoming); // dedupes on `seen` internally
+    if (freshCriticals.length > 0) for (const cb of criticalSubs) cb(freshCriticals);
   }
 
   function connect(): void {
@@ -168,6 +179,23 @@ export const useFeedStore = defineStore("feed", () => {
     } catch {
       setRead(id, false); // revert — the server didn't record it
       console.warn(`[feed] failed to mark ${id} read; reverted`);
+    }
+  }
+
+  /**
+   * Mark every currently-visible unread notification read (the panel's "Mark all read",
+   * scoped to the active filters). Optimistic: flip all locally, persist in one bulk
+   * request, revert all on failure.
+   */
+  async function markAllReadInScope(): Promise<void> {
+    const ids = visibleItems.value.filter((n) => !n.read).map((n) => n.id);
+    if (ids.length === 0) return;
+    for (const id of ids) setRead(id, true);
+    try {
+      await api.post("/notifications/read", { ids });
+    } catch {
+      for (const id of ids) setRead(id, false);
+      console.warn("[feed] mark-all-read failed; reverted");
     }
   }
 
@@ -288,6 +316,8 @@ export const useFeedStore = defineStore("feed", () => {
     connect,
     disconnect,
     markRead,
+    markAllReadInScope,
+    onLiveCritical,
     togglePriority,
     toggleModule,
     toggleUnreadOnly,

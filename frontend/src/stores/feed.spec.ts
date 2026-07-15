@@ -177,4 +177,56 @@ describe("feed store", () => {
     expect(feed.priorities.size).toBe(0);
     expect(feed.isFiltered).toBe(false);
   });
+
+  it("markAllReadInScope marks only visible unread items and posts their ids", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(
+      page([
+        feedItem({ id: "a", read: false, priority: "critical" }),
+        feedItem({ id: "b", read: true }),
+        feedItem({ id: "c", read: false, priority: "normal" }),
+      ]),
+    );
+    await feed.load();
+    feed.togglePriority("critical"); // scope now: only "a" is visible+unread
+
+    await feed.markAllReadInScope();
+
+    expect(postMock).toHaveBeenCalledWith("/notifications/read", { ids: ["a"] });
+    expect(feed.items.find((n) => n.id === "a")?.read).toBe(true);
+    expect(feed.items.find((n) => n.id === "c")?.read).toBe(false); // out of scope, untouched
+  });
+
+  it("markAllReadInScope reverts all optimistic flips when the POST fails", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a" }), feedItem({ id: "b" })]));
+    await feed.load();
+    postMock.mockRejectedValueOnce(new Error("500"));
+
+    await feed.markAllReadInScope();
+
+    expect(feed.items.every((n) => n.read === false)).toBe(true);
+    expect(feed.unreadCount).toBe(2);
+  });
+
+  it("onLiveCritical fires with only newly-arrived critical items", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "old-crit", priority: "critical" })], null));
+    feed.connect();
+    await feed.load();
+
+    const seen: string[][] = [];
+    const off = feed.onLiveCritical((items) => seen.push(items.map((n) => n.id)));
+
+    sseState.onBatch!([
+      liveNotif({ id: "x", priority: "critical" }),
+      liveNotif({ id: "y", priority: "normal" }), // not critical → excluded
+      liveNotif({ id: "old-crit", priority: "critical" }), // already loaded → excluded
+    ]);
+    expect(seen).toEqual([["x"]]);
+
+    off();
+    sseState.onBatch!([liveNotif({ id: "z", priority: "critical" })]);
+    expect(seen).toEqual([["x"]]); // unsubscribed → no further calls
+  });
 });
