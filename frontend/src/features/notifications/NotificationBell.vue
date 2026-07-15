@@ -3,41 +3,43 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Bell } from "@lucide/vue";
 import Icon from "@/components/ui/Icon.vue";
 import { useFeedStore } from "@/stores/feed";
+import { useNotificationPanelStore } from "@/stores/notificationPanel";
 import NotificationPopover from "./NotificationPopover.vue";
 
 const feed = useFeedStore();
-const open = ref(false);
+const panel = useNotificationPanelStore();
 const root = ref<HTMLElement | null>(null);
 const bellButton = ref<HTMLButtonElement | null>(null);
 
 const badge = computed(() => (feed.unreadCount > 9 ? "9+" : String(feed.unreadCount)));
 
 function close(restoreFocus = true) {
-  open.value = false;
+  panel.close();
   if (restoreFocus) bellButton.value?.focus();
 }
 function toggle() {
-  open.value = !open.value;
+  panel.toggle();
 }
 
-// Dismissal: a pointer press outside the whole bell+popover, or Escape, closes it.
 function onDocumentPointer(event: MouseEvent) {
-  // Outside-click leaves focus wherever the user clicked — don't yank it back.
   if (root.value && !root.value.contains(event.target as Node)) close(false);
 }
 function onKeydown(event: KeyboardEvent) {
   if (event.key === "Escape") close(true);
 }
 
-watch(open, (isOpen) => {
-  if (isOpen) {
-    document.addEventListener("mousedown", onDocumentPointer);
-    document.addEventListener("keydown", onKeydown);
-  } else {
-    document.removeEventListener("mousedown", onDocumentPointer);
-    document.removeEventListener("keydown", onKeydown);
-  }
-});
+watch(
+  () => panel.isOpen,
+  (isOpen) => {
+    if (isOpen) {
+      document.addEventListener("mousedown", onDocumentPointer);
+      document.addEventListener("keydown", onKeydown);
+    } else {
+      document.removeEventListener("mousedown", onDocumentPointer);
+      document.removeEventListener("keydown", onKeydown);
+    }
+  },
+);
 
 onBeforeUnmount(() => {
   document.removeEventListener("mousedown", onDocumentPointer);
@@ -55,7 +57,7 @@ onBeforeUnmount(() => {
         feed.unreadCount > 0 ? `Notifications, ${feed.unreadCount} unread` : 'Notifications'
       "
       aria-haspopup="dialog"
-      :aria-expanded="open"
+      :aria-expanded="panel.isOpen"
       @click="toggle"
     >
       <Icon :icon="Bell" :size="18" />
@@ -68,7 +70,7 @@ onBeforeUnmount(() => {
       </span>
     </button>
 
-    <div v-if="open" class="absolute right-0 top-full z-40 mt-2">
+    <div v-if="panel.isOpen" class="absolute right-0 top-full z-40 mt-2">
       <NotificationPopover @close="() => close(true)" />
     </div>
   </div>
