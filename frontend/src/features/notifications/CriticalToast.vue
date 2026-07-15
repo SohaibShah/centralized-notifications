@@ -1,38 +1,47 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref, watch } from "vue";
 import { AUTO_DISMISS_MS, useToastStore, type ToastItem } from "@/stores/toast";
+import { priorityDotClass } from "@/design/tokens";
 
 const props = defineProps<{ toast: ToastItem }>();
 const emit = defineEmits<{ dismiss: []; view: [] }>();
 const toasts = useToastStore();
 
-// The countdown hairline mirrors the store's auto-dismiss timer: it recedes over
-// AUTO_DISMISS_MS and pauses on hover/focus. The store RESTARTS a fresh timer on resume,
-// so we remount the bar (bump `cycle`) to restart its animation from full in sync.
-const paused = ref(false);
+// The auto-dismiss timer pauses while the toast is hovered OR keyboard-focused, and only
+// resumes once BOTH are clear — ref-counted via two booleans, not one flag, so moving the
+// pointer away while focus is still inside doesn't wrongly restart the timer. The store
+// starts a FRESH timer on resume, so we remount the countdown bar (bump `cycle`) to restart
+// its animation from full, in sync.
+const hovering = ref(false);
+const focused = ref(false);
+const paused = computed(() => hovering.value || focused.value);
 const cycle = ref(0);
-function onPause(): void {
-  toasts.pause(props.toast.id);
-  paused.value = true;
-}
-function onResume(): void {
-  toasts.resume(props.toast.id);
-  paused.value = false;
-  cycle.value += 1;
-}
+
+watch(paused, (isPaused, wasPaused) => {
+  if (isPaused && !wasPaused) {
+    toasts.pause(props.toast.id);
+  } else if (!isPaused && wasPaused) {
+    toasts.resume(props.toast.id);
+    cycle.value += 1;
+  }
+});
 </script>
 
 <template>
   <div
     role="alert"
-    class="animate-enter relative w-[290px] overflow-hidden rounded-lg border border-line-strong bg-surface p-3 shadow-lg shadow-black/10"
-    @mouseenter="onPause"
-    @mouseleave="onResume"
-    @focusin="onPause"
-    @focusout="onResume"
+    class="animate-enter relative w-[290px] overflow-hidden rounded-lg border border-line-strong bg-surface p-3 shadow-md shadow-black/10"
+    @mouseenter="hovering = true"
+    @mouseleave="hovering = false"
+    @focusin="focused = true"
+    @focusout="focused = false"
   >
     <div class="flex items-center gap-2">
-      <span class="size-2 shrink-0 rounded-full bg-danger" aria-hidden="true" />
+      <span
+        class="size-2 shrink-0 rounded-full"
+        :class="priorityDotClass.critical"
+        aria-hidden="true"
+      />
       <span class="font-mono text-[11px] uppercase tracking-wide text-danger">Critical</span>
       <button
         type="button"
@@ -44,8 +53,10 @@ function onResume(): void {
       </button>
     </div>
     <button type="button" class="mt-1.5 block w-full text-left" @click="emit('view')">
-      <span class="block text-[13px] font-semibold leading-snug text-text">{{ toast.title }}</span>
-      <span v-if="toast.description" class="mt-0.5 block truncate text-[12px] text-muted">
+      <span class="block font-sans text-[13px] font-semibold leading-snug text-text">{{
+        toast.title
+      }}</span>
+      <span v-if="toast.description" class="mt-0.5 block truncate font-sans text-[12px] text-muted">
         {{ toast.description }}
       </span>
     </button>

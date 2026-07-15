@@ -36,7 +36,7 @@ function view(id: string) {
   <div class="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
     <div
       v-if="toasts.overflowCount > 0"
-      class="pointer-events-auto rounded-full border border-line-strong bg-surface px-3 py-1 font-sans text-[11px] font-semibold text-muted shadow-lg shadow-black/5"
+      class="pointer-events-auto rounded-full border border-line-strong bg-surface px-3 py-1 font-sans text-[11px] font-semibold text-muted shadow-md shadow-black/5"
     >
       +{{ toasts.overflowCount }} earlier critical
     </div>
