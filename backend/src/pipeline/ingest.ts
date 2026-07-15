@@ -1,5 +1,6 @@
 import { deliveryHub } from "../delivery/hub";
 import type { IngestResult } from "../intake/boundary";
+import { upsertModuleSeen } from "./modules";
 import { persist } from "./persist";
 import { validate } from "./validate";
 
@@ -19,6 +20,8 @@ export async function ingest(raw: unknown): Promise<IngestResult> {
   }
   const status = await persist(result.data);
   if (status === "accepted") {
+    // Auto-discover the source module (FR-7): first sight registers it enabled.
+    await upsertModuleSeen(result.data.module);
     // Fan out only newly-persisted notifications (never duplicates). Week-1 shortcut:
     // broadcast to everyone. Week 4 swaps this for resolveAudience -> publishToRecipients.
     // TODO(week-4): enforce per-recipient preferences/opt-out here before publishing
