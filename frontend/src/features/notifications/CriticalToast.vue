@@ -1,5 +1,7 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { X } from "@lucide/vue";
+import Icon from "@/components/ui/Icon.vue";
 import { AUTO_DISMISS_MS, useToastStore, type ToastItem } from "@/stores/toast";
 import { priorityDotClass } from "@/design/tokens";
 
@@ -49,7 +51,7 @@ watch(paused, (isPaused, wasPaused) => {
         aria-label="Dismiss notification"
         @click="emit('dismiss')"
       >
-        <span aria-hidden="true" class="text-[13px] leading-none">✕</span>
+        <Icon :icon="X" :size="14" />
       </button>
     </div>
     <button type="button" class="mt-1.5 block w-full text-left" @click="emit('view')">

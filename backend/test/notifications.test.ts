@@ -287,5 +287,27 @@ describe("GET /notifications", () => {
       );
       expect(reads.rows[0]!.n).toBe("0");
     });
+
+    it("400 when ids array exceeds max(500)", async () => {
+      const tooManyIds = Array.from({ length: 501 }, (_, i) => `n${i}`);
+      const res = await app.inject({
+        method: "POST",
+        url: "/notifications/read",
+        headers: { cookie: sessionCookie },
+        payload: { ids: tooManyIds },
+      });
+      expect(res.statusCode).toBe(400);
+    });
+
+    it("400 when an id exceeds max(200) characters", async () => {
+      const longId = "x".repeat(201);
+      const res = await app.inject({
+        method: "POST",
+        url: "/notifications/read",
+        headers: { cookie: sessionCookie },
+        payload: { ids: [longId] },
+      });
+      expect(res.statusCode).toBe(400);
+    });
   });
 });
