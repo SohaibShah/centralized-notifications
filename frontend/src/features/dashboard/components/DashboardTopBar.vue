@@ -11,7 +11,9 @@ const title = computed(() => (route.name === "settings" ? "Settings" : "Dashboar
 </script>
 
 <template>
-  <header class="flex items-center gap-4 border-b border-line bg-bg/95 px-6 py-4 backdrop-blur">
+  <header
+    class="relative z-30 flex items-center gap-4 border-b border-line bg-bg/95 px-6 py-4 backdrop-blur"
+  >
     <h1 class="font-display text-[18px] font-medium tracking-tight text-text">{{ title }}</h1>
     <div class="ml-auto flex items-center gap-3">
       <NotificationBell />

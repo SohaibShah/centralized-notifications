@@ -18,8 +18,11 @@ export default defineConfig({
     proxy: {
       "/auth": backend,
       "/notifications": backend,
-      "/admin": backend,
-      "/settings": backend,
+      // Trailing slash: proxy the admin/settings *API* sub-paths to the backend, but let
+      // the bare `/admin` and `/settings` *page* routes fall through to the SPA (a hard
+      // reload of those pages must serve index.html, not hit the backend).
+      "/admin/": backend,
+      "/settings/": backend,
       "/internal": backend,
       "/health": backend,
       // SSE: disable buffering so events stream through as they arrive.

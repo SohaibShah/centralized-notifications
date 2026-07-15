@@ -8,7 +8,9 @@ import StatePanel from "@/components/ui/StatePanel.vue";
 import FormRenderer from "@/forms/FormRenderer.vue";
 import { featuresForm } from "@/forms/features.form";
 import type { FormValues } from "@/forms/types";
-import type { FeatureFlags } from "@/stores/settings";
+import { useSettingsStore, type FeatureFlags } from "@/stores/settings";
+
+const settings = useSettingsStore();
 
 const initial = ref<FormValues>({});
 const status = ref<"loading" | "ready" | "error">("loading");
@@ -32,6 +34,9 @@ async function onSubmit(values: FormValues): Promise<void> {
   error.value = null;
   try {
     await api.patch<void>("/admin/settings", values);
+    // Refresh the app-wide flags so open surfaces (e.g. the bell's AI-summary band)
+    // reflect the change immediately, without a page reload.
+    await settings.load();
   } catch {
     error.value = "Couldn't save. Try again.";
   } finally {
