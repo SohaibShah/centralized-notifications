@@ -77,18 +77,15 @@ async function signOut() {
         {{ item.label }}
       </div>
 
-      <div
+      <RouterLink
         v-if="session.isAdmin"
-        class="mt-1 flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-faint"
-        title="Admin console — a separate app, coming later"
+        :to="{ name: 'admin' }"
+        class="mt-1 flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-muted transition-colors duration-100 hover:bg-sunken hover:text-text"
+        exact-active-class="!bg-accent/10 !text-accent"
       >
         <Icon :icon="ShieldCheck" :size="16" />
         Admin
-        <span
-          class="ml-auto rounded-full bg-sunken px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wide text-faint"
-          >Soon</span
-        >
-      </div>
+      </RouterLink>
     </nav>
 
     <div class="border-t border-line px-3 py-3">

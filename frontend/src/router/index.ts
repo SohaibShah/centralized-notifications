@@ -24,6 +24,12 @@ export const router = createRouter({
           name: "settings",
           component: () => import("@/features/settings/SettingsStub.vue"),
         },
+        {
+          path: "admin",
+          name: "admin",
+          component: () => import("@/features/admin/AdminView.vue"),
+          meta: { requiresAdmin: true },
+        },
       ],
     },
     { path: "/:pathMatch(.*)*", redirect: "/" },
@@ -39,6 +45,11 @@ router.beforeEach(async (to) => {
     return { name: "login", query: { redirect: to.fullPath } };
   }
   if (to.name === "login" && session.isAuthenticated) {
+    return { name: "dashboard" };
+  }
+  // Admin-only areas: an authenticated non-admin is bounced to the dashboard. This is a
+  // front-of-house guard only — every /admin API also enforces requireAdmin server-side.
+  if (to.meta.requiresAdmin && !session.isAdmin) {
     return { name: "dashboard" };
   }
   return true;
