@@ -57,6 +57,11 @@ something.
    **priority-mix** cell (mono counts with priority dots — e.g. critical/high/normal breakdown), a
    **total** count, and an **enable/disable toggle**. A disabled module also surfaces a
    **suppressed** count (notifications recorded-but-not-delivered while off).
+   4b. **Inline label rename.** The `key` is immutable (it's what modules publish under); the human
+   **label** is editable. It auto-derives as title-case of the `key` on discovery, and an admin can
+   rename it **inline**: hover a row → a pencil appears → click (or the label) turns it into an
+   in-place text field; `Enter`/blur saves (optimistic `PATCH`), `Esc` reverts. No modal. Clearing
+   the field reverts to the auto label. A small "auto-labelled / edited" cue shows provenance.
 5. **Toolbar — filter + sort.** _Priority filter_ chips (`All` / `Critical` / `High` / `Normal` /
    `Low`) narrow the list to modules that have emitted the selected priority (the chip count = how
    many modules qualify). _Sort_: `Critical first`, `Total volume`, `Recently active`, `Name A–Z`.
@@ -92,8 +97,8 @@ something.
 
 - **`modules`**: `key text primary key`, `label text not null`, `enabled boolean not null default
 true`, `first_seen_at timestamptz not null default now()`, `last_seen_at timestamptz not null
-default now()`. `label` defaults to a derived title-case of `key` on first insert; admin does not
-  rename in this slice (future).
+default now()`. `label` defaults to a derived title-case of `key` on first insert and is
+  editable via inline admin rename (decision 4b); clearing it re-derives the auto label.
 - **`global_settings`**: single-row settings table (enforced e.g. `id boolean primary key default
 true check (id)`), columns `ai_summary_enabled`, `chatbot_enabled`, `grouping_enabled`,
   `actions_enabled` (boolean, sane defaults), `updated_at`. Seeded with one row.
@@ -110,7 +115,9 @@ true check (id)`), columns `ai_summary_enabled`, `chatbot_enabled`, `grouping_en
   `suppressed=true` and skip `deliveryHub.broadcast`.
 - **`http/admin/routes.ts`** (all `requireAdmin`, zod-validated):
   - `GET /admin/modules` → `[{ key, label, enabled, lastSeenAt, total, suppressed, byPriority: {critical,high,normal,low} }]` (the priority breakdown via a small `GROUP BY module, priority` aggregate joined to `modules`).
-  - `PATCH /admin/modules/:key` → `{ enabled: boolean }` → updates + invalidates cache → 204.
+  - `PATCH /admin/modules/:key` → `{ enabled?: boolean; label?: string }` (partial; `label`
+    zod-validated 1–100 chars, or empty/omitted to re-derive the auto title-case) → updates +
+    invalidates cache → 204.
   - `GET /admin/settings` → the feature flags.
   - `PATCH /admin/settings` → partial flag update → invalidates cache → 204.
   - Registered in `server.ts`. `docs/api/admin.md` written (api-documentation rule).
@@ -155,10 +162,12 @@ true check (id)`), columns `ai_summary_enabled`, `chatbot_enabled`, `grouping_en
   **policy suppression** — a disabled module's notification is persisted `suppressed=true`, not
   broadcast, and excluded from `GET /notifications`; settings read/write + cache invalidation takes
   effect on the next ingest; admin authz (403 non-admin, 401 unauth) on every admin route; the
-  priority-breakdown aggregate returns correct counts.
+  priority-breakdown aggregate returns correct counts; **label rename** — `PATCH … {label}` persists
+  a custom label, an empty/omitted label re-derives the auto title-case, and out-of-range labels 400.
 - **Frontend (Vitest + @vue/test-utils):** `/admin` guard redirects a non-admin; `FeaturesPanel`
   renders + submits through `FormRenderer`; `ModulesPanel` filter (priority chip) + sort logic;
-  `InboxTab` hides the AI band when `ai_summary_enabled` is false.
+  inline rename enters edit on pencil/label click, saves on Enter (optimistic PATCH) and reverts on
+  Esc; `InboxTab` hides the AI band when `ai_summary_enabled` is false.
 - **e2e (Playwright):** the Week-2 demo — log in as admin → disable a module in `/admin` → publish a
   notification from that module → it does **not** appear in the feed; re-enable → a new one does.
   Plus a non-admin cannot reach `/admin`.
@@ -181,7 +190,7 @@ true check (id)`), columns `ai_summary_enabled`, `chatbot_enabled`, `grouping_en
 - **No rate limit on admin writes** — low risk (admin-only, small payloads); a follow-up to add
   route-level `@fastify/rate-limit` alongside `/auth/login`, consistent with the notifications-domain
   guidance. Not in this slice.
-- **`label` derivation** (title-case of `key`) may look rough for multi-word keys; admin rename is a
-  future nicety, not blocking.
+- **`label` derivation** (title-case of `key`) may look rough for multi-word keys (e.g. `dsar` →
+  "Dsar") — inline admin rename (4b) is the escape hatch. Bulk/auto acronym handling is out of scope.
 - **Feature-flag drift**: switches for unbuilt features must stay clearly tagged (Live vs Wk N) so
   they don't read as broken; revisit copy when each feature lands.
