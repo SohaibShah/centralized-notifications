@@ -17,31 +17,31 @@ test.describe("notifications dashboard", () => {
     page,
     request,
   }) => {
-    // Shared-secret header value the intake endpoint requires, read from the env (named to
-    // dodge the repo's `token =` secret-scanner heuristic).
     const intakeTokenValue = process.env.INTERNAL_INTAKE_TOKEN ?? "";
     expect(
       intakeTokenValue,
       "INTERNAL_INTAKE_TOKEN must be set (config loads it from the monorepo-root .env)",
     ).not.toBe("");
 
+    // Register the SSE-connection gate BEFORE login: the feed's EventSource opens on
+    // dashboard mount (after a successful login) and the delivery hub is live-only (no
+    // replay), so we must not publish until this page's subscription exists. The old
+    // visible "Live" indicator was removed in the panel redesign, so we gate on the
+    // GET /sse response (received == headers, ~EventSource onopen) instead.
+    const sseConnected = page
+      .waitForResponse((r) => r.url().includes("/sse"), { timeout: 20_000 })
+      .catch(() => null);
+
     await login(page, DEV_USER, DEV_PASSWORD);
 
-    // Lands on the dashboard shell (topbar owns the page h1).
     await expect(page).toHaveURL(/\/$/);
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
 
-    // Open the notifications bell popover.
     await page.getByRole("button", { name: /Notifications/ }).click();
     await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
 
-    // Gate on "Live" inside the popover before publishing. The delivery hub is live-only
-    // (no replay); SSE connects on dashboard mount and "Live" reflects EventSource onopen,
-    // so waiting for it closes the publish→delivery race that would otherwise flake in CI.
-    await expect(page.getByText("Live", { exact: true })).toBeVisible();
+    await sseConnected;
 
-    // Publish a uniquely-identifiable notification straight to the running server; the hub
-    // fans it out over SSE to this already-open page.
     const stamp = Date.now();
     const id = `e2e-${stamp}`;
     const title = `E2E live notification ${stamp}`;
@@ -59,12 +59,12 @@ test.describe("notifications dashboard", () => {
     });
     expect(publish.ok(), `publish failed: ${publish.status()}`).toBeTruthy();
 
-    // Appears live in the popover without a reload (FR-5). The title renders as a button
-    // (the keyboard-reachable "open" control), so target it by role.
-    const card = page.getByRole("button", { name: title });
+    // Appears live in the "Needs action" group as a card. Its title renders as a button
+    // whose accessible name is exactly the title (the keyboard-reachable open control).
+    const card = page.getByRole("button", { name: title, exact: true });
     await expect(card).toBeVisible({ timeout: 10_000 });
 
-    // Clicking it marks it read (FR-6): the frontend POSTs to the read endpoint → 204.
+    // Clicking the card marks it read (FR-6): the frontend POSTs to the read endpoint → 204.
     const [readResponse] = await Promise.all([
       page.waitForResponse(
         (r) => /\/notifications\/.+\/read$/.test(r.url()) && r.request().method() === "POST",
@@ -73,8 +73,58 @@ test.describe("notifications dashboard", () => {
     ]);
     expect(readResponse.status()).toBe(204);
 
-    // The UI reflects read: the title de-emphasizes to normal weight (unread is semibold).
-    await expect(card).toHaveClass(/font-normal/);
+    // Redesign read behavior: the item leaves "Needs action" and relocates into the
+    // collapsed "Earlier" group, so its Needs-action card unmounts and a "Show N earlier"
+    // toggle appears; expanding it reveals the item as a compact read row.
+    await expect(card).toHaveCount(0);
+    const showEarlier = page.getByRole("button", { name: /Show \d+ earlier/ });
+    await expect(showEarlier).toBeVisible();
+    await showEarlier.click();
+    await expect(page.getByRole("button", { name: new RegExp(title) })).toBeVisible();
+  });
+
+  test("shows a bottom-right toast for a critical notification and View opens the panel", async ({
+    page,
+    request,
+  }) => {
+    const intakeTokenValue = process.env.INTERNAL_INTAKE_TOKEN ?? "";
+    expect(intakeTokenValue).not.toBe("");
+
+    const sseConnected = page
+      .waitForResponse((r) => r.url().includes("/sse"), { timeout: 20_000 })
+      .catch(() => null);
+
+    await login(page, DEV_USER, DEV_PASSWORD);
+    await expect(page).toHaveURL(/\/$/);
+    await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
+
+    // Keep the bell panel CLOSED (a toast is suppressed while it's open). Gate on the SSE
+    // connection before publishing so the live-only hub fans the critical out to this page.
+    await sseConnected;
+
+    const stamp = Date.now();
+    const title = `E2E critical ${stamp}`;
+    const publish = await request.post(`${BACKEND}/internal/publish`, {
+      headers: { "x-internal-token": intakeTokenValue, "content-type": "application/json" },
+      data: {
+        id: `e2e-crit-${stamp}`,
+        module: "e2e",
+        title,
+        description: "critical via SSE",
+        priority: "critical",
+        snoozable: true,
+        audience: { scope: "global" },
+      },
+    });
+    expect(publish.ok(), `publish failed: ${publish.status()}`).toBeTruthy();
+
+    // A toast (role="alert") for this critical appears bottom-right.
+    const toast = page.getByRole("alert").filter({ hasText: title });
+    await expect(toast).toBeVisible({ timeout: 10_000 });
+
+    // View opens the bell panel.
+    await toast.getByRole("button", { name: "View" }).click();
+    await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
   });
 
   test("shows an inline error for a wrong password", async ({ page }) => {
