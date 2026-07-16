@@ -75,12 +75,21 @@ function buildBatch(spec: SimulateInput): Notification[] {
     case "preset":
       return [{ ...buildPreset(spec.preset), id: makeSimId() }];
     case "burst":
-      // simulate() assigns its own unique per-burst ids — already server-controlled.
-      return simulate({ count: spec.count, seed: spec.seed });
+      // Reassign server-unique ids so a repeated burst never dedupes against itself. A
+      // `seed` makes simulate()'s *content* reproducible, but it also makes its ids
+      // deterministic — without this, re-running the same seeded burst would dedupe every
+      // notification and silently report `published: 0`. Seed controls variety, not identity.
+      return simulate({ count: spec.count, seed: spec.seed }).map((n) => ({
+        ...n,
+        id: makeSimId(),
+      }));
   }
 }
 
-const CHUNK = 500;
+// Ingest in bounded chunks: each chunk's notifications run concurrently, chunks run in
+// sequence. Keeps in-flight promises bounded even for a very large burst (up to
+// SIMULATE_MAX_BURST) rather than fanning out thousands of concurrent DB writes at once.
+const CHUNK = 100;
 
 /**
  * Ingest a batch, chunked, tallying published vs policy-suppressed. Since the pipeline's

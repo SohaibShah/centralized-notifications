@@ -163,6 +163,21 @@ describe("POST /admin/simulate", () => {
     expect(body.published + body.suppressed).toBe(12);
   });
 
+  it("re-running the same seeded burst still publishes N (server-unique ids, no self-dedupe)", async () => {
+    const cookie = await login("sim_admin");
+    const publish = () =>
+      app.inject({
+        method: "POST",
+        url: "/admin/simulate",
+        headers: { cookie },
+        payload: { mode: "burst", count: 6, seed: 42 },
+      });
+    const first = (await publish()).json() as { published: number; suppressed: number };
+    const second = (await publish()).json() as { published: number; suppressed: number };
+    expect(first.published + first.suppressed).toBe(6);
+    expect(second.published + second.suppressed).toBe(6);
+  });
+
   it("rejects a bad body, a non-positive count, and an over-ceiling count with 400", async () => {
     const cookie = await login("sim_admin");
     const bad = await app.inject({

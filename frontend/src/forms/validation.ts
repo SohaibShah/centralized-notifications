@@ -14,8 +14,16 @@ function fieldSchema(field: FormField): ZodTypeAny {
       : z.boolean().optional();
   }
   if (field.type === "number") {
-    const base = z.coerce.number();
-    return field.required ? base : base.optional();
+    // Treat blank/empty as "no value" BEFORE coercion — otherwise z.coerce.number() turns
+    // "" into 0, so a cleared required number would pass as 0 and only fail at the server.
+    const blankToUndefined = (v: unknown) => (v === "" || v === null ? undefined : v);
+    if (field.required) {
+      return z.preprocess(
+        blankToUndefined,
+        z.coerce.number({ invalid_type_error: `${field.label} is required` }),
+      );
+    }
+    return z.preprocess(blankToUndefined, z.coerce.number().optional());
   }
 
   if (field.type === "select" && field.options?.length) {

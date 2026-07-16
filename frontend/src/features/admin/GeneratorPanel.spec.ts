@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { ApiError } from "@/api/client";
 
 const { simulateMock, modulesMock } = vi.hoisted(() => ({
   simulateMock: vi.fn(),
@@ -50,6 +51,31 @@ describe("GeneratorPanel", () => {
     await w.get("form").trigger("submit");
     await flushPromises();
     expect(simulateMock).toHaveBeenCalledWith({ mode: "burst", count: 8, seed: 3 });
+  });
+
+  it("surfaces the server's message on a 400 rather than blaming auth", async () => {
+    simulateMock.mockReset();
+    simulateMock.mockRejectedValueOnce(new ApiError(400, "invalid request body"));
+    const w = mount(GeneratorPanel);
+    await flushPromises();
+    await w.get('input[name="module"]').setValue("dsr");
+    await w.get('input[name="title"]').setValue("x");
+    await w.get("form").trigger("submit");
+    await flushPromises();
+    expect(w.text()).toContain("invalid request body");
+    expect(w.text()).not.toContain("signed in as an admin");
+  });
+
+  it("shows an auth message on a 401/403", async () => {
+    simulateMock.mockReset();
+    simulateMock.mockRejectedValueOnce(new ApiError(403, "admin role required"));
+    const w = mount(GeneratorPanel);
+    await flushPromises();
+    await w.get('input[name="module"]').setValue("dsr");
+    await w.get('input[name="title"]').setValue("x");
+    await w.get("form").trigger("submit");
+    await flushPromises();
+    expect(w.text()).toContain("signed in as an admin");
   });
 
   it("drip start publishes on each tick and stop clears the timer", async () => {

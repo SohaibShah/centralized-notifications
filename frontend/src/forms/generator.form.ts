@@ -65,7 +65,9 @@ export function toCustomSpec(values: FormValues): CustomSpec {
     scope === "global"
       ? { scope: "global" as const }
       : { scope, id: String(values.audienceId ?? "") };
-  const n = Number(values.sampleActions ?? 0);
+  // Clamp to the server's accepted 0–3 range so a stray value fails the form here with a
+  // clear message rather than round-tripping to a generic 400.
+  const n = Math.max(0, Math.min(3, Math.floor(Number(values.sampleActions ?? 0)) || 0));
   return {
     mode: "custom",
     notification: {
