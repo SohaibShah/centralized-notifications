@@ -6,6 +6,7 @@ import { registerSession } from "./auth/session";
 import { getEnv, type Env } from "./config/env";
 import { httpIntake } from "./intake/http-intake";
 import { adminRoutes } from "./http/admin/routes";
+import { maintenanceRoutes } from "./http/admin/maintenance";
 import { simulateRoutes } from "./http/admin/simulate";
 import { notificationRoutes } from "./http/notifications/routes";
 import { sseRoutes } from "./http/sse/routes";
@@ -44,7 +45,10 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(httpIntake);
   await app.register(notificationRoutes);
   await app.register(adminRoutes);
-  if (isSimulatorEnabled()) await app.register(simulateRoutes);
+  if (isSimulatorEnabled()) {
+    await app.register(simulateRoutes);
+    await app.register(maintenanceRoutes);
+  }
   await app.register(sseRoutes);
 
   app.get("/health", async () => ({ status: "ok", shared: SHARED_PACKAGE }));

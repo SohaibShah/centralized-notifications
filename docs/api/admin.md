@@ -354,3 +354,172 @@ pipeline: each is persisted, deduped on its server-assigned id, checked against 
 and — for enabled modules — delivered live over SSE, exactly as a real publish. A notification
 generated for a **disabled** module is counted in `suppressed` and does **not** appear in the
 feed. No `x-internal-token` is used or exposed.
+
+## Maintenance (dev/QA)
+
+The `/admin/maintenance/*` routes are dev/QA database-reset helpers, all
+`POST` and all **destructive**. Like [`POST /admin/simulate`](#post-adminsimulate), they
+are registered **only when `NODE_ENV !== "production"`** (same
+[`isSimulatorEnabled`](../../backend/src/server.ts) guard — registered together with the
+simulator). In production every route on this page below is genuinely **absent**: a request
+hits Fastify's not-found handler and returns `404`, it is not merely hidden behind the admin
+gate.
+
+> **Operational requirement:** `NODE_ENV` defaults to `"development"`, so this gate fails
+> **open** — any production deployment **must set `NODE_ENV=production` explicitly**. An unset
+> value leaves these endpoints registered.
+
+Every route requires the `admin` role ([`requireAdmin`](../../backend/src/auth/guards.ts) —
+`401` if not logged in, `403` if logged in but not an admin) and runs **immediately** against
+the real database — there is no confirmation step, dry-run, or undo. SQL is parameterized
+throughout.
+
+Source: [`backend/src/http/admin/maintenance.ts`](../../backend/src/http/admin/maintenance.ts).
+
+The shared error responses for all five routes:
+
+| Status | Body                                     | Reason                                                                          |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------- |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                        |
+| `403`  | `{ "error": "admin role required" }`     | Logged in, but the session user lacks the `admin` role.                         |
+| `404`  | (Fastify not-found)                      | The route is not registered at all in production (`NODE_ENV === "production"`). |
+
+### POST /admin/maintenance/notifications/delete-all
+
+Deletes **every row** in the `notifications` table. Each row's `notification_reads` rows
+cascade away with it (`ON DELETE CASCADE`, migration 003).
+
+#### Request
+
+No parameters.
+
+#### Response `200`
+
+```json
+{ "deleted": 42 }
+```
+
+| Field     | Type   | Notes                                  |
+| --------- | ------ | -------------------------------------- |
+| `deleted` | number | Count of `notifications` rows deleted. |
+
+#### Side effects
+
+Deletes all `notifications` rows; their `notification_reads` cascade away. Does **not** touch
+`modules` or `global_settings`, and does not invalidate the policy cache.
+
+### POST /admin/maintenance/notifications/delete-read
+
+Deletes every notification whose id appears in `notification_reads` — i.e. every notification
+read by **anyone**. Under the current global-broadcast semantic (a single `notification_reads`
+row marks a notification read), this is an interim "clear everything someone has read" helper,
+not a per-recipient operation.
+
+#### Request
+
+No parameters.
+
+#### Response `200`
+
+```json
+{ "deleted": 17 }
+```
+
+| Field     | Type   | Notes                                                   |
+| --------- | ------ | ------------------------------------------------------- |
+| `deleted` | number | Count of `notifications` rows deleted (read by anyone). |
+
+#### Side effects
+
+Deletes matching `notifications` rows; their `notification_reads` cascade away. No policy-cache
+invalidation.
+
+### POST /admin/maintenance/notifications/delete-older-than
+
+Deletes notifications whose `created_at` is older than `days` days ago (via
+`now() - make_interval(days => $1)`).
+
+#### Request
+
+| Field  | Type    | Required | Notes                                                               |
+| ------ | ------- | -------- | ------------------------------------------------------------------- |
+| `days` | integer | yes      | Positive. A non-positive or non-integer value is rejected as `400`. |
+
+```json
+{ "days": 30 }
+```
+
+#### Response `200`
+
+```json
+{ "deleted": 8 }
+```
+
+| Field     | Type   | Notes                                  |
+| --------- | ------ | -------------------------------------- |
+| `deleted` | number | Count of `notifications` rows deleted. |
+
+#### Errors
+
+In addition to the shared `401`/`403`/`404` above:
+
+| Status | Body                                  | Reason                                           |
+| ------ | ------------------------------------- | ------------------------------------------------ |
+| `400`  | `{ "error": "invalid request body" }` | `days` is missing, non-integer, or not positive. |
+
+#### Side effects
+
+Deletes matching `notifications` rows; their `notification_reads` cascade away. No policy-cache
+invalidation.
+
+### POST /admin/maintenance/modules/reset
+
+Deletes **all rows** in the `modules` table. Modules re-discover themselves on their next
+publish (per the [notification contract](./notifications.md)), so this also clears any
+admin enable/disable and label overrides.
+
+#### Request
+
+No parameters.
+
+#### Response `200`
+
+```json
+{ "deleted": 6 }
+```
+
+| Field     | Type   | Notes                            |
+| --------- | ------ | -------------------------------- |
+| `deleted` | number | Count of `modules` rows deleted. |
+
+#### Side effects
+
+Deletes all `modules` rows and **invalidates the in-memory policy cache**
+([`invalidatePolicyCache`](../../backend/src/pipeline/policy.ts)). Modules re-appear (enabled,
+auto-derived label) on their next ingest.
+
+### POST /admin/maintenance/settings/reset
+
+Restores the singleton `global_settings` row to defaults: all four feature flags
+(`ai_summary_enabled`, `chatbot_enabled`, `grouping_enabled`, `actions_enabled`) back to
+`true` and `retention_days` back to `30`, and bumps `updated_at`.
+
+#### Request
+
+No parameters.
+
+#### Response `200`
+
+```json
+{ "ok": true }
+```
+
+| Field | Type    | Notes                     |
+| ----- | ------- | ------------------------- |
+| `ok`  | boolean | Always `true` on success. |
+
+#### Side effects
+
+Resets the `global_settings` feature flags and `retention_days`, and **invalidates the
+in-memory policy cache** ([`invalidatePolicyCache`](../../backend/src/pipeline/policy.ts)) — the
+restored flag values take effect on the next read.
