@@ -23,7 +23,10 @@ async function toggleSearch() {
   }
 }
 
-onMounted(() => inboxTabButton.value?.focus());
+onMounted(() => {
+  feed.flushSessionReads(); // reopening the panel settles this-session reads into "Earlier"
+  inboxTabButton.value?.focus();
+});
 </script>
 
 <template>

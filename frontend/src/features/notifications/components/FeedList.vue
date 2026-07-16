@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { Check } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
+import Icon from "@/components/ui/Icon.vue";
 import Spinner from "@/components/ui/Spinner.vue";
 import type { FeedGroup } from "@/stores/feed";
 import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue";
@@ -17,6 +19,11 @@ const emit = defineEmits<{
 const needsAction = computed(() => props.groups.find((g) => g.key === "needs-action"));
 const earlier = computed(() => props.groups.find((g) => g.key === "earlier"));
 const showEarlier = ref(false);
+
+// Only genuinely-unread rows count — sticky-read items sitting in Needs action don't inflate it.
+const unreadInNeedsAction = computed(
+  () => needsAction.value?.items.filter((n) => !n.read).length ?? 0,
+);
 
 // Plain scroll container + IntersectionObserver sentinel drive keyset pagination.
 const scroller = ref<HTMLElement | null>(null);
@@ -45,16 +52,19 @@ onBeforeUnmount(() => observer?.disconnect());
         class="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur"
       >
         <h2 class="font-display text-[13px] font-medium text-text">{{ needsAction.label }}</h2>
-        <span class="font-mono text-[12px] tabular-nums text-faint">{{
-          needsAction.items.length
-        }}</span>
+        <span
+          data-test="needs-action-count"
+          class="rounded-full bg-accent/10 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-accent"
+        >
+          {{ unreadInNeedsAction }} unread
+        </span>
         <button
           type="button"
           data-test="mark-all"
-          class="ml-auto font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:text-text"
+          class="ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:bg-sunken"
           @click="emit('markAll')"
         >
-          Mark all read
+          <Icon :icon="Check" :size="12" /> Mark all read
         </button>
       </div>
       <NotificationCardRenderer

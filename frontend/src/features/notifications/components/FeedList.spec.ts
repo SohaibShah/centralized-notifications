@@ -28,6 +28,21 @@ describe("FeedList", () => {
     expect(wrapper.emitted("markAll")).toHaveLength(1);
   });
 
+  it("shows the unread count in the Needs action header and a Mark all read control", () => {
+    const withRead: FeedGroup[] = [
+      {
+        key: "needs-action",
+        label: "Needs action",
+        items: [feedItem({ id: "u1" }), feedItem({ id: "r1", read: true })], // 1 unread, 1 sticky-read
+      },
+    ];
+    const wrapper = mount(FeedList, {
+      props: { groups: withRead, hasMore: false, loadingMore: false },
+    });
+    expect(wrapper.get('[data-test="needs-action-count"]').text()).toContain("1 unread");
+    expect(wrapper.find('[data-test="mark-all"]').exists()).toBe(true);
+  });
+
   it("collapses the earlier group behind a toggle that reveals the read rows", async () => {
     const wrapper = mount(FeedList, { props: { groups, hasMore: false, loadingMore: false } });
     const toggle = wrapper.get('[data-test="show-earlier"]');

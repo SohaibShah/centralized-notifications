@@ -1,10 +1,18 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import { mount } from "@vue/test-utils";
 import NotificationPopover from "./NotificationPopover.vue";
+import { useFeedStore } from "@/stores/feed";
 
 describe("NotificationPopover", () => {
   beforeEach(() => setActivePinia(createPinia()));
+
+  it("flushes this-session reads when the panel opens", () => {
+    const feed = useFeedStore();
+    const spy = vi.spyOn(feed, "flushSessionReads");
+    mount(NotificationPopover);
+    expect(spy).toHaveBeenCalled();
+  });
 
   it("renders the Inbox tab selected by default", () => {
     const wrapper = mount(NotificationPopover);
