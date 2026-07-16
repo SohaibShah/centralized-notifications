@@ -60,6 +60,19 @@
     outline: 2px solid var(--color-accent);
     outline-offset: 2px;
   }
+  /* Tailwind v4 Preflight defaults <button> to `cursor: default`. Restore the pointer for
+     every interactable from one place so raw buttons/tabs/links all read as clickable. */
+  button:not(:disabled),
+  [role="button"],
+  [role="tab"],
+  label[for],
+  summary,
+  a[href] {
+    cursor: pointer;
+  }
+  :disabled {
+    cursor: not-allowed;
+  }
   /* Keep Chrome's autofill from painting inputs pale blue over the ivory palette. */
   input:-webkit-autofill,
   input:-webkit-autofill:hover,
