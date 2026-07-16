@@ -4,16 +4,16 @@ import { Boxes, FlaskConical, ScrollText, Sparkles, ToggleRight } from "@lucide/
 import Icon from "@/components/ui/Icon.vue";
 import ModulesPanel from "./ModulesPanel.vue";
 import FeaturesPanel from "./FeaturesPanel.vue";
-import GeneratorPanel from "./GeneratorPanel.vue";
+import DevLabsPanel from "./DevLabsPanel.vue";
 
-type Section = "modules" | "features" | "generator";
+type Section = "modules" | "features" | "dev-labs";
 const section = ref<Section>("modules");
 const items: { id: Section; label: string; icon: typeof Boxes }[] = [
   { id: "modules", label: "Modules", icon: Boxes },
   { id: "features", label: "Features", icon: ToggleRight },
-  // Dev/QA only: the generator route (POST /admin/simulate) is absent in production.
+  // Dev/QA only: the generator + maintenance routes are absent in production.
   ...(import.meta.env.DEV
-    ? [{ id: "generator" as const, label: "Generator", icon: FlaskConical }]
+    ? [{ id: "dev-labs" as const, label: "Dev Labs", icon: FlaskConical }]
     : []),
 ];
 </script>
@@ -54,7 +54,7 @@ const items: { id: Section; label: string; icon: typeof Boxes }[] = [
     </nav>
     <div class="min-w-0 flex-1 overflow-y-auto p-6">
       <ModulesPanel v-if="section === 'modules'" />
-      <GeneratorPanel v-else-if="section === 'generator'" />
+      <DevLabsPanel v-else-if="section === 'dev-labs'" />
       <FeaturesPanel v-else />
     </div>
   </div>

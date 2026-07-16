@@ -8,12 +8,12 @@ describe("AdminView", () => {
 
   it("switches between the Modules and Features sections", async () => {
     const wrapper = mount(AdminView, {
-      global: { stubs: { ModulesPanel: true, FeaturesPanel: true, GeneratorPanel: true } },
+      global: { stubs: { ModulesPanel: true, FeaturesPanel: true, DevLabsPanel: true } },
     });
     const buttons = wrapper.findAll("nav button");
-    // Modules, Features, and (dev-only) Generator — the generator route is absent in prod builds.
+    // Modules, Features, and (dev-only) Dev Labs — those routes are absent in prod builds.
     expect(buttons).toHaveLength(3);
-    expect(buttons[2]?.text()).toContain("Generator");
+    expect(buttons[2]?.text()).toContain("Dev Labs");
     expect(buttons[0]?.attributes("aria-current")).toBe("page"); // Modules default
     expect(buttons[1]?.attributes("aria-current")).toBeUndefined();
 
