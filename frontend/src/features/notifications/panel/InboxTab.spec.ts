@@ -73,9 +73,9 @@ describe("InboxTab", () => {
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
 
     const wrapper = mount(InboxTab);
-    // Expanding only reveals the action — it must not mark the row read (and thus must
-    // not move/remount it) before the action button is clicked.
-    await wrapper.get('[aria-label="Show actions"]').trigger("click");
+    // Open the card (title) to reveal its actions. Open-and-seen marks it read, but sticky
+    // read keeps it in place (same key → same instance), so the action stays mounted/clickable.
+    await wrapper.get("h3 button").trigger("click");
     const actionButton = wrapper.findAll("button").find((btn) => btn.text().trim() === "Open");
     expect(actionButton).toBeTruthy();
 

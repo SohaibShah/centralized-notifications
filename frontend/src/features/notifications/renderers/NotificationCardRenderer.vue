@@ -1,17 +1,17 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ChevronDown } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Icon from "@/components/ui/Icon.vue";
 import { actionIcon } from "@/design/icons";
 import { priorityDotClass, priorityLabel } from "@/design/tokens";
 import { exactTime, relativeTime } from "@/lib/time";
 
-// Config-driven feed row. Compact by default; a chevron (only when the notification has
-// actions or a long body) expands the card to reveal that extra content. Clicking the card
-// (body, title, or chevron) opens it — expands any extra content AND marks it read
-// (open-and-seen, emit "open"). Actions and "Mark as unread" stop propagation and don't mark
-// read here; firing an action marks it read too, but that's the consumer's (InboxTab) job.
+// Config-driven feed row. Compact by default; clicking anywhere on the card (body or title)
+// opens it — expands any extra content (actions or a long body) AND marks it read
+// (open-and-seen, emit "open"). There is no separate chevron: the whole card is the expand
+// control, and the title button carries the aria-expanded disclosure state for keyboard/SR
+// users. Actions and "Mark as unread" stop propagation and don't mark read here; firing an
+// action marks it read too, but that's the consumer's (InboxTab) job.
 const props = defineProps<{ notification: FeedNotification }>();
 const emit = defineEmits<{
   open: [notification: FeedNotification];
@@ -63,6 +63,7 @@ function markUnread() {
               class="block w-full truncate text-left font-sans text-[14px]"
               :class="item.read ? 'font-normal text-muted' : 'font-semibold text-text'"
               :title="item.title"
+              :aria-expanded="canExpand ? expanded : undefined"
               @click.stop="activate"
             >
               {{ item.title }}
@@ -115,29 +116,6 @@ function markUnread() {
           </button>
         </div>
       </div>
-
-      <button
-        v-if="canExpand"
-        type="button"
-        class="mt-0.5 grid size-6 shrink-0 place-items-center self-start rounded-md text-faint transition-colors duration-100 hover:bg-sunken hover:text-text"
-        :aria-label="
-          expanded
-            ? hasActions
-              ? 'Hide actions'
-              : 'Hide details'
-            : hasActions
-              ? 'Show actions'
-              : 'Show details'
-        "
-        :aria-expanded="expanded"
-        @click.stop="activate"
-      >
-        <Icon
-          :icon="ChevronDown"
-          :size="15"
-          :class="expanded ? 'rotate-180 transition-transform' : 'transition-transform'"
-        />
-      </button>
     </div>
 
     <div v-if="expanded && hasActions" class="mt-2.5 flex flex-wrap gap-2 pl-5">

@@ -15,12 +15,16 @@ function withActions(over: Partial<FeedNotification> & { id: string }): FeedNoti
 describe("NotificationCardRenderer", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("shows no chevron and no action bar for a notification without actions", () => {
+  it("shows no action bar for a card without actions, even after a click (still marks read)", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: feedItem({ id: "a" }) },
     });
-    expect(wrapper.find('[aria-label="Show actions"]').exists()).toBe(false);
     expect(wrapper.find("button").text()).toContain("Title");
+    // Not expandable → no aria-expanded disclosure on the title.
+    expect(wrapper.get("h3 button").attributes("aria-expanded")).toBeUndefined();
+    await wrapper.get("h3 button").trigger("click");
+    expect(wrapper.find('[data-test="action"]').exists()).toBe(false);
+    expect(wrapper.emitted("open")).toHaveLength(1); // clicking still marks read
   });
 
   it("clicking the title button emits open (mark read)", async () => {
@@ -31,25 +35,34 @@ describe("NotificationCardRenderer", () => {
     expect(wrapper.emitted("open")).toHaveLength(1);
   });
 
-  it("expands via the chevron to reveal actions AND marks read (open-and-seen)", async () => {
+  it("clicking the title expands to reveal actions AND marks read (open-and-seen)", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: withActions({ id: "a" }) },
     });
-    const chevron = wrapper.get('[aria-label="Show actions"]');
     expect(wrapper.find('[data-test="action"]').exists()).toBe(false); // collapsed
-    await chevron.trigger("click");
+    await wrapper.get("h3 button").trigger("click");
     const actions = wrapper.findAll('[data-test="action"]');
     expect(actions).toHaveLength(1);
     expect(actions[0]!.text()).toContain("Open");
     expect(actions[0]!.find("svg").exists()).toBe(true); // icon rendered
-    expect(wrapper.emitted("open")).toHaveLength(1); // opening now marks read
+    expect(wrapper.emitted("open")).toHaveLength(1); // opening marks read
+  });
+
+  it("marks an expandable card's title as a disclosure via aria-expanded that flips on open", async () => {
+    const wrapper = mount(NotificationCardRenderer, {
+      props: { notification: withActions({ id: "a" }) },
+    });
+    const title = wrapper.get("h3 button");
+    expect(title.attributes("aria-expanded")).toBe("false");
+    await title.trigger("click");
+    expect(title.attributes("aria-expanded")).toBe("true");
   });
 
   it("clicking an action emits action without an extra open beyond the expand", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: withActions({ id: "a" }) },
     });
-    await wrapper.get('[aria-label="Show actions"]').trigger("click"); // expand → open (1)
+    await wrapper.get("h3 button").trigger("click"); // expand → open (1)
     await wrapper.get('[data-test="action"]').trigger("click");
     expect(wrapper.emitted("action")).toHaveLength(1);
     expect(wrapper.emitted("open")).toHaveLength(1); // the action itself did not emit another open
@@ -57,14 +70,13 @@ describe("NotificationCardRenderer", () => {
 
   const LONG = "x".repeat(200);
 
-  it("shows an expand chevron for a long body even without actions, and reveals the full body", async () => {
+  it("clicking the title reveals the full body of a long-body card without actions", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: feedItem({ id: "a", description: LONG }) },
     });
-    const chevron = wrapper.get('[aria-label="Show details"]');
     const body = wrapper.get('[data-test="card-body"]');
     expect(body.classes()).toContain("truncate"); // collapsed
-    await chevron.trigger("click");
+    await wrapper.get("h3 button").trigger("click");
     expect(body.classes()).not.toContain("truncate"); // expanded reveals full text
   });
 
