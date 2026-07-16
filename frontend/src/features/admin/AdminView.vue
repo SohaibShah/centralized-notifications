@@ -1,15 +1,20 @@
 <script setup lang="ts">
 import { ref } from "vue";
-import { Boxes, ScrollText, Sparkles, ToggleRight } from "@lucide/vue";
+import { Boxes, FlaskConical, ScrollText, Sparkles, ToggleRight } from "@lucide/vue";
 import Icon from "@/components/ui/Icon.vue";
 import ModulesPanel from "./ModulesPanel.vue";
 import FeaturesPanel from "./FeaturesPanel.vue";
+import GeneratorPanel from "./GeneratorPanel.vue";
 
-type Section = "modules" | "features";
+type Section = "modules" | "features" | "generator";
 const section = ref<Section>("modules");
 const items: { id: Section; label: string; icon: typeof Boxes }[] = [
   { id: "modules", label: "Modules", icon: Boxes },
   { id: "features", label: "Features", icon: ToggleRight },
+  // Dev/QA only: the generator route (POST /admin/simulate) is absent in production.
+  ...(import.meta.env.DEV
+    ? [{ id: "generator" as const, label: "Generator", icon: FlaskConical }]
+    : []),
 ];
 </script>
 
@@ -49,6 +54,7 @@ const items: { id: Section; label: string; icon: typeof Boxes }[] = [
     </nav>
     <div class="min-w-0 flex-1 overflow-y-auto p-6">
       <ModulesPanel v-if="section === 'modules'" />
+      <GeneratorPanel v-else-if="section === 'generator'" />
       <FeaturesPanel v-else />
     </div>
   </div>
