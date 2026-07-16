@@ -15,8 +15,8 @@ test.describe("notification generator", () => {
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
 
     await page.goto("/admin");
-    // The admin sidebar entry is a nav button; the mode switcher inside the panel uses tabs.
-    await page.getByRole("button", { name: "Generator" }).click();
+    // The admin sidebar entry is now "Dev Labs"; the generator is its default "Generate" tab.
+    await page.getByRole("button", { name: "Dev Labs" }).click();
     await page.locator('[data-test="mode-preset"]').click();
     await page.locator('[data-test="preset-critical-dsr"]').click();
 
