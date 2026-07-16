@@ -3,8 +3,6 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Spinner from "@/components/ui/Spinner.vue";
 import type { FeedGroup } from "@/stores/feed";
-import { relativeTime } from "@/lib/time";
-import { priorityDotClass, priorityLabel } from "@/design/tokens";
 import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue";
 
 const props = defineProps<{ groups: FeedGroup[]; hasMore: boolean; loadingMore: boolean }>();
@@ -12,6 +10,7 @@ const emit = defineEmits<{
   loadMore: [];
   open: [notification: FeedNotification];
   action: [action: NotificationAction, notification: FeedNotification];
+  unread: [notification: FeedNotification];
   markAll: [];
 }>();
 
@@ -64,6 +63,7 @@ onBeforeUnmount(() => observer?.disconnect());
         :notification="n"
         @open="(x) => emit('open', x)"
         @action="(a, x) => emit('action', a, x)"
+        @unread="(x) => emit('unread', x)"
       />
     </section>
 
@@ -80,29 +80,14 @@ onBeforeUnmount(() => observer?.disconnect());
         </button>
       </div>
       <div v-if="showEarlier" data-test="earlier-list">
-        <button
+        <NotificationCardRenderer
           v-for="n in earlier.items"
           :key="n.id"
-          type="button"
-          class="flex w-full items-center gap-2.5 border-b border-line px-4 py-2 text-left transition-colors duration-100 hover:bg-sunken"
-          @click="emit('open', n)"
-        >
-          <span
-            role="img"
-            :aria-label="`${priorityLabel[n.priority]} priority`"
-            class="size-1.5 shrink-0 rounded-full"
-            :class="priorityDotClass[n.priority]"
-          />
-          <span class="min-w-0 flex-1 truncate text-[12px] text-muted" :title="n.title">{{
-            n.title
-          }}</span>
-          <time
-            class="shrink-0 font-mono text-[11px] tabular-nums text-faint"
-            :datetime="n.createdAt"
-          >
-            {{ relativeTime(n.createdAt) }}
-          </time>
-        </button>
+          :notification="n"
+          @open="(x) => emit('open', x)"
+          @action="(a, x) => emit('action', a, x)"
+          @unread="(x) => emit('unread', x)"
+        />
       </div>
     </section>
 

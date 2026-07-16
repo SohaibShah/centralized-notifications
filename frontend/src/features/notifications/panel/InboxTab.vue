@@ -126,6 +126,7 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
         @load-more="feed.loadMore()"
         @open="(n) => feed.markRead(n.id)"
         @action="onAction"
+        @unread="(n) => feed.markUnread(n.id)"
         @mark-all="feed.markAllReadInScope()"
       />
     </div>

@@ -43,4 +43,13 @@ describe("FeedList", () => {
     });
     expect(wrapper.find('[data-test="show-earlier"]').exists()).toBe(false);
   });
+
+  it("renders earlier items with the full card and re-emits unread", async () => {
+    const wrapper = mount(FeedList, { props: { groups, hasMore: false, loadingMore: false } });
+    await wrapper.get('[data-test="show-earlier"]').trigger("click");
+    const list = wrapper.get('[data-test="earlier-list"]');
+    // The read cards expose the mark-unread control (proves the full card, not the stripped row).
+    await list.get('[data-test="mark-unread"]').trigger("click");
+    expect(wrapper.emitted("unread")).toBeTruthy();
+  });
 });
