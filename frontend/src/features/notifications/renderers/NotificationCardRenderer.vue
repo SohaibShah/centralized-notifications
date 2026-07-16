@@ -8,9 +8,10 @@ import { priorityDotClass, priorityLabel } from "@/design/tokens";
 import { exactTime, relativeTime } from "@/lib/time";
 
 // Config-driven feed row. Compact by default; a chevron (only when the notification has
-// actions) expands the card to reveal those actions with their icons — expanding alone
-// does not mark it read. The card body / title mark it read (emit "open"); firing an
-// action marks it read too, but that's handled by the consumer (InboxTab), not here.
+// actions or a long body) expands the card to reveal that extra content. Clicking the card
+// (body, title, or chevron) opens it — expands any extra content AND marks it read
+// (open-and-seen, emit "open"). Actions and "Mark as unread" stop propagation and don't mark
+// read here; firing an action marks it read too, but that's the consumer's (InboxTab) job.
 const props = defineProps<{ notification: FeedNotification }>();
 const emit = defineEmits<{
   open: [notification: FeedNotification];
@@ -28,11 +29,10 @@ const expanded = ref(false);
 // Only genuinely-live rows (createdAt ≈ now) get the fade+rise entrance.
 const isFresh = Date.now() - new Date(props.notification.createdAt).getTime() < 4000;
 
-function open() {
-  emit("open", item.value);
-}
-function toggleExpand() {
-  expanded.value = !expanded.value;
+function activate() {
+  // Open-and-seen: clicking a card opens it (expands, if there's more to show) AND marks it read.
+  if (canExpand.value) expanded.value = !expanded.value;
+  emit("open", item.value); // parent → markRead (no-op if already read)
 }
 function markUnread() {
   emit("unread", item.value);
@@ -42,9 +42,12 @@ function markUnread() {
 <template>
   <article
     class="group border-b border-line px-4 py-2.5 transition-colors duration-100 hover:bg-sunken"
-    :class="{ 'animate-enter': isFresh }"
+    :class="[
+      { 'animate-enter': isFresh },
+      item.read ? '' : 'shadow-[inset_2px_0_0_var(--color-accent)]',
+    ]"
   >
-    <div class="flex cursor-pointer gap-3" @click="open">
+    <div class="flex cursor-pointer gap-3" @click="activate">
       <span
         role="img"
         :aria-label="`${priorityLabel[item.priority]} priority`"
@@ -60,7 +63,7 @@ function markUnread() {
               class="block w-full truncate text-left font-sans text-[14px]"
               :class="item.read ? 'font-normal text-muted' : 'font-semibold text-text'"
               :title="item.title"
-              @click.stop="open"
+              @click.stop="activate"
             >
               {{ item.title }}
             </button>
@@ -89,6 +92,13 @@ function markUnread() {
             <span aria-hidden="true">·</span>
             <span>{{ item.category }}</span>
           </template>
+          <span
+            v-if="!item.read && !expanded"
+            aria-hidden="true"
+            class="ml-auto hidden font-mono text-[11px] uppercase tracking-wide text-accent group-hover:inline"
+          >
+            click to open
+          </span>
           <button
             v-if="item.read"
             type="button"
@@ -115,7 +125,7 @@ function markUnread() {
               : 'Show details'
         "
         :aria-expanded="expanded"
-        @click.stop="toggleExpand"
+        @click.stop="activate"
       >
         <Icon
           :icon="ChevronDown"
