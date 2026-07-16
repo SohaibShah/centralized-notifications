@@ -3,7 +3,7 @@ import { z } from "zod";
 import { requireAdmin, requireUser } from "../../auth/guards";
 import { query } from "../../db/pool";
 import { deriveLabel } from "../../pipeline/modules";
-import { getFeatureFlags, invalidatePolicyCache } from "../../pipeline/policy";
+import { getFeatureFlags, getRetentionDays, invalidatePolicyCache } from "../../pipeline/policy";
 
 const moduleParamsSchema = z.object({ key: z.string().min(1).max(100) });
 const modulePatchSchema = z
@@ -15,6 +15,7 @@ const settingsPatchSchema = z
     chatbotEnabled: z.boolean().optional(),
     groupingEnabled: z.boolean().optional(),
     actionsEnabled: z.boolean().optional(),
+    retentionDays: z.number().int().positive().optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "no fields to update");
 
@@ -90,7 +91,9 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
   });
 
   app.get("/admin/settings", { preHandler: requireAdmin }, async (_req, reply) => {
-    return reply.code(200).send(await getFeatureFlags());
+    return reply
+      .code(200)
+      .send({ ...(await getFeatureFlags()), retentionDays: await getRetentionDays() });
   });
 
   app.patch("/admin/settings", { preHandler: requireAdmin }, async (req, reply) => {
@@ -101,11 +104,12 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
       chatbotEnabled: "chatbot_enabled",
       groupingEnabled: "grouping_enabled",
       actionsEnabled: "actions_enabled",
+      retentionDays: "retention_days",
     };
     const sets: string[] = [];
     const vals: unknown[] = [];
     for (const [k, col] of Object.entries(map)) {
-      const v = (body.data as Record<string, boolean | undefined>)[k];
+      const v = (body.data as Record<string, boolean | number | undefined>)[k];
       if (v !== undefined) {
         vals.push(v);
         sets.push(`${col} = $${vals.length}`);

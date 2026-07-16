@@ -10,6 +10,7 @@ export interface FeatureFlags {
 interface PolicyState {
   disabledModules: Set<string>;
   flags: FeatureFlags;
+  retentionDays: number;
 }
 
 let cache: PolicyState | null = null;
@@ -21,8 +22,9 @@ async function load(): Promise<PolicyState> {
     chatbot_enabled: boolean;
     grouping_enabled: boolean;
     actions_enabled: boolean;
+    retention_days: number;
   }>(
-    `SELECT ai_summary_enabled, chatbot_enabled, grouping_enabled, actions_enabled
+    `SELECT ai_summary_enabled, chatbot_enabled, grouping_enabled, actions_enabled, retention_days
        FROM global_settings WHERE id = true`,
   );
   const s = settings.rows[0];
@@ -34,6 +36,7 @@ async function load(): Promise<PolicyState> {
       groupingEnabled: s?.grouping_enabled ?? true,
       actionsEnabled: s?.actions_enabled ?? true,
     },
+    retentionDays: s?.retention_days ?? 30,
   };
 }
 
@@ -50,6 +53,11 @@ export async function isModuleEnabled(key: string): Promise<boolean> {
 
 export async function getFeatureFlags(): Promise<FeatureFlags> {
   return (await get()).flags;
+}
+
+/** Retention window in days (config only; Week-5 partitioning enforces it). Admin-facing. */
+export async function getRetentionDays(): Promise<number> {
+  return (await get()).retentionDays;
 }
 
 /**

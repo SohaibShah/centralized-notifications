@@ -253,4 +253,55 @@ describe("admin API", () => {
     });
     invalidatePolicyCache();
   });
+
+  it("exposes and updates retention_days via /admin/settings", async () => {
+    const get1 = await app.inject({
+      method: "GET",
+      url: "/admin/settings",
+      headers: { cookie: adminCookie },
+    });
+    expect((get1.json() as { retentionDays: number }).retentionDays).toBe(30); // migration default
+
+    const patch = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      headers: { cookie: adminCookie },
+      payload: { retentionDays: 14 },
+    });
+    expect(patch.statusCode).toBe(204);
+
+    const get2 = await app.inject({
+      method: "GET",
+      url: "/admin/settings",
+      headers: { cookie: adminCookie },
+    });
+    expect((get2.json() as { retentionDays: number }).retentionDays).toBe(14);
+
+    // /settings/features stays booleans-only — retention is admin config, not user-facing.
+    const userView = await app.inject({
+      method: "GET",
+      url: "/settings/features",
+      headers: { cookie: userCookie },
+    });
+    expect((userView.json() as Record<string, unknown>).retentionDays).toBeUndefined();
+
+    // Restore the default + reset the cache for other suites.
+    await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      headers: { cookie: adminCookie },
+      payload: { retentionDays: 30 },
+    });
+    invalidatePolicyCache();
+  });
+
+  it("rejects a non-positive retention_days", async () => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      headers: { cookie: adminCookie },
+      payload: { retentionDays: 0 },
+    });
+    expect(res.statusCode).toBe(400);
+  });
 });
