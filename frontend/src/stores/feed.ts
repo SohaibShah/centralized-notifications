@@ -183,6 +183,23 @@ export const useFeedStore = defineStore("feed", () => {
   }
 
   /**
+   * Undo a read for this user (mirror of markRead). Optimistic: flip to unread locally
+   * (the row moves back to "Needs action"), then persist the delete; revert on failure.
+   * No-op if unknown or already unread.
+   */
+  async function markUnread(id: string): Promise<void> {
+    const target = items.value.find((n) => n.id === id);
+    if (!target || !target.read) return;
+    setRead(id, false);
+    try {
+      await api.del(`/notifications/${encodeURIComponent(id)}/read`);
+    } catch {
+      setRead(id, true); // revert — the server didn't clear it
+      console.warn(`[feed] failed to mark ${id} unread; reverted`);
+    }
+  }
+
+  /**
    * Mark every currently-visible unread notification read (the panel's "Mark all read",
    * scoped to the active filters). Optimistic: flip all locally, persist in one bulk
    * request, revert all on failure.
@@ -316,6 +333,7 @@ export const useFeedStore = defineStore("feed", () => {
     connect,
     disconnect,
     markRead,
+    markUnread,
     markAllReadInScope,
     onLiveCritical,
     togglePriority,

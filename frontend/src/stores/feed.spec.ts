@@ -5,13 +5,14 @@ import { feedItem } from "@/test-support/feedItem";
 
 // Mock the two I/O seams (HTTP + SSE) so the store's logic is tested in isolation.
 // vi.hoisted lets the mock factories reference these before the imports are evaluated.
-const { getMock, postMock, sseState } = vi.hoisted(() => ({
+const { getMock, postMock, delMock, sseState } = vi.hoisted(() => ({
   getMock: vi.fn(),
   postMock: vi.fn(),
+  delMock: vi.fn(),
   sseState: { onBatch: null as null | ((batch: Notification[]) => void) },
 }));
 
-vi.mock("@/api/client", () => ({ api: { get: getMock, post: postMock } }));
+vi.mock("@/api/client", () => ({ api: { get: getMock, post: postMock, del: delMock } }));
 vi.mock("@/api/sse", () => ({
   connectSse: (opts: { onBatch: (batch: Notification[]) => void }) => {
     sseState.onBatch = opts.onBatch;
@@ -44,7 +45,9 @@ describe("feed store", () => {
     setActivePinia(createPinia());
     getMock.mockReset();
     postMock.mockReset();
+    delMock.mockReset();
     postMock.mockResolvedValue(undefined);
+    delMock.mockResolvedValue(undefined);
     sseState.onBatch = null;
   });
 
@@ -161,6 +164,43 @@ describe("feed store", () => {
     await feed.markRead("missing"); // not in the list
 
     expect(postMock).not.toHaveBeenCalled();
+  });
+
+  it("markUnread() optimistically un-reads, moves the row to Needs action, and DELETEs", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true })]));
+    await feed.load();
+    expect(feed.unreadCount).toBe(0);
+
+    await feed.markUnread("a");
+
+    expect(feed.items.find((n) => n.id === "a")?.read).toBe(false);
+    expect(feed.unreadCount).toBe(1);
+    expect(feed.groups.map((g) => g.key)).toEqual(["needs-action"]);
+    expect(delMock).toHaveBeenCalledWith("/notifications/a/read");
+  });
+
+  it("markUnread() reverts the flag when the DELETE fails", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true })]));
+    await feed.load();
+    delMock.mockRejectedValueOnce(new Error("500"));
+
+    await feed.markUnread("a");
+
+    expect(feed.items.find((n) => n.id === "a")?.read).toBe(true); // reverted
+    expect(feed.unreadCount).toBe(0);
+  });
+
+  it("markUnread() is a no-op for an already-unread or unknown notification", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+
+    await feed.markUnread("a"); // already unread
+    await feed.markUnread("missing"); // not in the list
+
+    expect(delMock).not.toHaveBeenCalled();
   });
 
   it("clearFilters() also clears the search query and resets isFiltered", async () => {
