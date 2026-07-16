@@ -18,6 +18,12 @@ function fieldSchema(field: FormField): ZodTypeAny {
     return field.required ? base : base.optional();
   }
 
+  if (field.type === "select" && field.options?.length) {
+    const optionValues = field.options.map((o) => o.value) as [string, ...string[]];
+    const base = z.enum(optionValues);
+    return field.required ? base : base.optional();
+  }
+
   let base = z.string();
   if (field.type === "email") base = base.email({ message: "Enter a valid email address" });
   if (field.maxLength) base = base.max(field.maxLength);

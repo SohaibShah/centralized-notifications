@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import Button from "@/components/ui/Button.vue";
 import Spinner from "@/components/ui/Spinner.vue";
+import SelectField from "./fields/SelectField.vue";
 import SwitchField from "./fields/SwitchField.vue";
 import TextField from "./fields/TextField.vue";
 import type { FormSchema, FormValues } from "./types";
@@ -35,6 +36,19 @@ const values = reactive<FormValues>(
 );
 const errors = reactive<Record<string, string>>({});
 
+// showIf: a field is shown only when its referenced field currently matches the condition.
+// Fields using showIf must be optional — a hidden field's value stays in `values` and is
+// still validated on submit.
+function isVisible(field: FormSchema["fields"][number]): boolean {
+  const cond = field.showIf;
+  if (!cond) return true;
+  const current = values[cond.field];
+  if (cond.equals !== undefined) return current === cond.equals;
+  if (cond.notEquals !== undefined) return current !== cond.notEquals;
+  return true;
+}
+const visibleFields = computed(() => props.schema.fields.filter(isVisible));
+
 function handleSubmit() {
   for (const key of Object.keys(errors)) delete errors[key];
   const result = buildSchema(props.schema).safeParse(values);
@@ -56,9 +70,15 @@ function handleSubmit() {
 
 <template>
   <form ref="formEl" novalidate class="flex flex-col gap-4" @submit.prevent="handleSubmit">
-    <template v-for="field in schema.fields" :key="field.name">
+    <template v-for="field in visibleFields" :key="field.name">
       <SwitchField
         v-if="field.type === 'switch'"
+        v-model="values[field.name]"
+        :field="field"
+        :error="errors[field.name]"
+      />
+      <SelectField
+        v-else-if="field.type === 'select'"
         v-model="values[field.name]"
         :field="field"
         :error="errors[field.name]"

@@ -19,8 +19,12 @@ export interface FormField {
   default?: string | number | boolean;
   /** For select/radio-group (added as those field components land). */
   options?: { value: string; label: string }[];
-  /** Show this field only when another field currently equals a value. */
-  showIf?: { field: string; equals: string | number | boolean };
+  /** Show this field only when another field's current value matches (equals) / differs from (notEquals). */
+  showIf?: {
+    field: string;
+    equals?: string | number | boolean;
+    notEquals?: string | number | boolean;
+  };
 }
 
 export interface FormSchema {
