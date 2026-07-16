@@ -233,3 +233,120 @@ See the field table under [`GET /admin/settings`](#get-adminsettings) — identi
 ### Side effects
 
 None — read-only.
+
+## POST /admin/simulate
+
+**Auth:** required, admin only ([`requireAdmin`](../../backend/src/auth/guards.ts) — `401` if
+not logged in, `403` if logged in but not an admin).
+
+**Non-production only.** The route is registered **only when `NODE_ENV !== "production"`**
+(see [`isSimulatorEnabled`](../../backend/src/server.ts)). In production it is genuinely
+**absent** — a request hits Fastify's not-found handler and returns `404`, it is not merely
+hidden behind the admin gate.
+
+The dev/QA notification generator. It fabricates notifications and pushes each one through the
+**real** [`ingest()`](../../backend/src/pipeline/ingest.ts) pipeline, so dedupe, module
+policy/suppression, and SSE delivery all behave exactly as they do for a genuine publish. This
+endpoint exists so the browser can generate test traffic **without ever holding the
+service-to-service `x-internal-token`** used by [`POST /internal/publish`](./notifications.md) —
+that token is never exposed to the client.
+
+Source: [`backend/src/http/admin/simulate.ts`](../../backend/src/http/admin/simulate.ts),
+presets in [`backend/src/sim/presets.ts`](../../backend/src/sim/presets.ts).
+
+### Request
+
+Body is a **discriminated union on `mode`** — exactly one of the three shapes below. Any
+invalid body (bad `priority`, missing `title`, unknown `preset`, out-of-range `count`, etc.)
+is rejected as `400` **before any pipeline work runs**.
+
+#### `mode: "custom"`
+
+| Field           | Type    | Required | Notes                                                                                                                                          |
+| --------------- | ------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`          | string  | yes      | Literal `"custom"`.                                                                                                                            |
+| `notification`  | object  | yes      | The shared [notification contract](./notifications.md) **minus `id`**. Any client-supplied `id` is not accepted — the server assigns its own.  |
+| `sampleActions` | integer | no       | `0`–`3`. When the notification carries no `actions` of its own, the server attaches this many canned sample actions. Ignored if `actions` set. |
+
+The server always assigns its own id of the form `sim-<ts>-<counter>-<rand>`, so repeated
+generation of the same body never dedupes against itself.
+
+```json
+{
+  "mode": "custom",
+  "notification": {
+    "module": "dsr",
+    "title": "DSR approaching SLA breach",
+    "description": "A data-subject request is within 24 hours of its statutory deadline.",
+    "priority": "critical",
+    "snoozable": false,
+    "category": "sla",
+    "audience": { "scope": "global" }
+  },
+  "sampleActions": 2
+}
+```
+
+#### `mode: "preset"`
+
+| Field    | Type   | Required | Notes                                     |
+| -------- | ------ | -------- | ----------------------------------------- |
+| `mode`   | string | yes      | Literal `"preset"`.                       |
+| `preset` | string | yes      | One of the fixed preset ids listed below. |
+
+Presets are deterministic (no RNG) — a given preset always produces the same body:
+
+| `preset`         | Label                     | Description                                        |
+| ---------------- | ------------------------- | -------------------------------------------------- |
+| `critical-dsr`   | Critical DSR              | A data-subject request about to breach SLA.        |
+| `high-access`    | High · access request     | Access approval with Approve/Deny/Review actions.  |
+| `normal-finding` | Normal · data finding     | A routine scan classification result.              |
+| `low-assessment` | Low · assessment reminder | A low-priority reminder with a single link.        |
+| `long-body`      | Long body                 | A very long description to test truncation/expand. |
+
+```json
+{ "mode": "preset", "preset": "critical-dsr" }
+```
+
+#### `mode: "burst"`
+
+| Field   | Type    | Required | Notes                                                                                                           |
+| ------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------- |
+| `mode`  | string  | yes      | Literal `"burst"`.                                                                                              |
+| `count` | integer | yes      | Positive, and `≤ SIMULATE_MAX_BURST` (env var, default `10000`). Over-ceiling or non-positive counts are `400`. |
+| `seed`  | integer | no       | Makes the generated batch reproducible — same seed produces the same batch of bodies.                           |
+
+Large bursts are ingested in **chunks of 500**. The generated notifications get their own
+unique per-burst ids (server-controlled).
+
+```json
+{ "mode": "burst", "count": 250, "seed": 42 }
+```
+
+### Response `200`
+
+| Field        | Type   | Notes                                                                                                                                    |
+| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| `published`  | number | How many generated notifications were accepted **and** belong to an enabled module (delivered).                                          |
+| `suppressed` | number | How many were accepted but belong to an **admin-disabled** module — recorded/policy-suppressed, not delivered and not shown in the feed. |
+
+```json
+{ "published": 250, "suppressed": 0 }
+```
+
+### Errors
+
+| Status | Body                                     | Reason                                                                                                                          |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid request body" }`    | Body fails validation — bad/missing notification fields, unknown `preset`, or `count` non-positive / over `SIMULATE_MAX_BURST`. |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                                                        |
+| `403`  | `{ "error": "admin role required" }`     | Logged in, but not an admin.                                                                                                    |
+| `404`  | (Fastify not-found)                      | The route is not registered at all in production (`NODE_ENV === "production"`).                                                 |
+
+### Side effects
+
+Runs every generated notification through the real [`ingest()`](../../backend/src/pipeline/ingest.ts)
+pipeline: each is persisted, deduped on its server-assigned id, checked against module policy,
+and — for enabled modules — delivered live over SSE, exactly as a real publish. A notification
+generated for a **disabled** module is counted in `suppressed` and does **not** appear in the
+feed. No `x-internal-token` is used or exposed.
