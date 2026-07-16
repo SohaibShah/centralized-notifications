@@ -13,6 +13,11 @@ import { sseRoutes } from "./http/sse/routes";
 /**
  * The dev/QA notification generator is a non-production tool: its route (POST /admin/simulate)
  * is registered only outside production, so it is genuinely absent — not merely hidden — in prod.
+ *
+ * OPERATIONAL REQUIREMENT: `NODE_ENV` defaults to "development" (see config/env.ts), so this
+ * gate fails OPEN — a production deployment MUST set `NODE_ENV=production` explicitly. An unset
+ * or misspelled value leaves this endpoint registered. (A fail-closed `ENABLE_SIMULATOR` opt-in
+ * was considered and deferred while there is no production deployment.)
  */
 export function isSimulatorEnabled(env: Env = getEnv()): boolean {
   return env.NODE_ENV !== "production";

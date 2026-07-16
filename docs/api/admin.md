@@ -244,6 +244,10 @@ not logged in, `403` if logged in but not an admin).
 **absent** — a request hits Fastify's not-found handler and returns `404`, it is not merely
 hidden behind the admin gate.
 
+> **Operational requirement:** `NODE_ENV` defaults to `"development"`, so this gate fails
+> **open** — any production deployment **must set `NODE_ENV=production` explicitly**. An unset
+> value leaves this endpoint registered.
+
 The dev/QA notification generator. It fabricates notifications and pushes each one through the
 **real** [`ingest()`](../../backend/src/pipeline/ingest.ts) pipeline, so dedupe, module
 policy/suppression, and SSE delivery all behave exactly as they do for a genuine publish. This
