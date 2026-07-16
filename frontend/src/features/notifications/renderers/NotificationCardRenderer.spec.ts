@@ -93,6 +93,24 @@ describe("NotificationCardRenderer", () => {
     expect(wrapper.emitted("unread")).toHaveLength(1);
   });
 
+  it("shows a decorative expand caret on an expandable card, rotating when open", async () => {
+    const wrapper = mount(NotificationCardRenderer, {
+      props: { notification: withActions({ id: "a" }) },
+    });
+    const caret = wrapper.find('[data-test="expand-caret"]');
+    expect(caret.exists()).toBe(true);
+    expect(caret.classes()).not.toContain("rotate-180"); // collapsed
+    await wrapper.get("h3 button").trigger("click");
+    expect(wrapper.get('[data-test="expand-caret"]').classes()).toContain("rotate-180");
+  });
+
+  it("shows no expand caret on a card with nothing to expand", () => {
+    const wrapper = mount(NotificationCardRenderer, {
+      props: { notification: feedItem({ id: "a" }) },
+    });
+    expect(wrapper.find('[data-test="expand-caret"]').exists()).toBe(false);
+  });
+
   it("marks an unread card with an inset left accent; a read card has none", () => {
     const unread = mount(NotificationCardRenderer, {
       props: { notification: feedItem({ id: "a" }) },

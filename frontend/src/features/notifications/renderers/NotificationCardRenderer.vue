@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import { ChevronDown } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Icon from "@/components/ui/Icon.vue";
 import { actionIcon } from "@/design/icons";
@@ -8,10 +9,11 @@ import { exactTime, relativeTime } from "@/lib/time";
 
 // Config-driven feed row. Compact by default; clicking anywhere on the card (body or title)
 // opens it — expands any extra content (actions or a long body) AND marks it read
-// (open-and-seen, emit "open"). There is no separate chevron: the whole card is the expand
-// control, and the title button carries the aria-expanded disclosure state for keyboard/SR
-// users. Actions and "Mark as unread" stop propagation and don't mark read here; firing an
-// action marks it read too, but that's the consumer's (InboxTab) job.
+// (open-and-seen, emit "open"). A decorative caret next to the timestamp signals that a card
+// is expandable and rotates when open; it is not a separate control (it sits inside the
+// clickable card, and the title button carries the aria-expanded disclosure state for
+// keyboard/SR users). Actions and "Mark as unread" stop propagation and don't mark read here;
+// firing an action marks it read too, but that's the consumer's (InboxTab) job.
 const props = defineProps<{ notification: FeedNotification }>();
 const emit = defineEmits<{
   open: [notification: FeedNotification];
@@ -69,6 +71,14 @@ function markUnread() {
               {{ item.title }}
             </button>
           </h3>
+          <Icon
+            v-if="canExpand"
+            :icon="ChevronDown"
+            :size="14"
+            data-test="expand-caret"
+            class="shrink-0 self-center text-faint transition-transform duration-150"
+            :class="{ 'rotate-180': expanded }"
+          />
           <time
             class="shrink-0 font-mono text-[12px] tabular-nums text-faint"
             :datetime="item.createdAt"
