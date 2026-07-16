@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { ApiError } from "@/api/client";
 import Button from "@/components/ui/Button.vue";
 import {
@@ -22,6 +22,15 @@ const deleteAllText = ref("");
 const olderThanDays = ref(30);
 const retentionDays = ref(30);
 
+// v-model.number yields NaN/0 for a cleared field; guard the destructive/save buttons so an
+// invalid value can't be submitted (the backend also rejects it with a 400).
+const olderThanValid = computed(
+  () => Number.isFinite(olderThanDays.value) && olderThanDays.value >= 1,
+);
+const retentionValid = computed(
+  () => Number.isFinite(retentionDays.value) && retentionDays.value >= 1,
+);
+
 onMounted(async () => {
   try {
     const s = await getAdminSettings();
@@ -42,7 +51,7 @@ async function run(
   try {
     const res = await fn();
     const deleted = "deleted" in res ? res.deleted : undefined;
-    message.value = deleted === undefined ? `${label} done` : `Deleted ${deleted}`;
+    message.value = deleted === undefined ? label : `Deleted ${deleted}`;
     confirming.value = null;
     deleteAllText.value = "";
   } catch (err) {
@@ -63,7 +72,7 @@ async function saveRetention(): Promise<void> {
 <template>
   <section class="flex flex-col gap-5">
     <div>
-      <h3 class="font-display text-[14px] font-medium text-text">Maintenance</h3>
+      <h2 class="font-display text-[16px] font-medium text-text">Maintenance</h2>
       <p class="mt-0.5 text-[12px] text-muted">
         Destructive, dev/QA only. These run immediately against the real database.
       </p>
@@ -78,6 +87,7 @@ async function saveRetention(): Promise<void> {
       <template v-if="confirming === 'delete-read'">
         <Button variant="secondary" size="sm" @click="confirming = null">Cancel</Button>
         <Button
+          variant="danger"
           size="sm"
           data-test="op-delete-read-confirm"
           :disabled="busy"
@@ -105,15 +115,16 @@ async function saveRetention(): Promise<void> {
         v-model.number="olderThanDays"
         type="number"
         min="1"
+        aria-label="Delete notifications older than, in days"
         data-test="older-than-input"
-        class="w-16 rounded-md border border-line-strong bg-surface px-2 py-1 text-[13px] tabular-nums text-text"
+        class="h-8 w-16 rounded-md border border-line-strong bg-surface px-2 text-[13px] tabular-nums text-text"
       />
       <span class="text-[12px] text-muted">days</span>
       <Button
-        variant="secondary"
+        variant="danger"
         size="sm"
         data-test="op-older-than"
-        :disabled="busy"
+        :disabled="busy || !olderThanValid"
         @click="run('Deleted', () => deleteNotificationsOlderThan(Number(olderThanDays)))"
         >Delete</Button
       >
@@ -153,9 +164,10 @@ async function saveRetention(): Promise<void> {
         <div class="flex items-center gap-2">
           <input
             v-model="deleteAllText"
+            aria-label="Type DELETE to confirm"
             data-test="op-delete-all-input"
             placeholder="DELETE"
-            class="w-28 rounded-md border border-line-strong bg-surface px-2 py-1 text-[13px] text-text"
+            class="h-8 w-28 rounded-md border border-line-strong bg-surface px-2 text-[13px] text-text"
           />
           <Button
             variant="secondary"
@@ -167,6 +179,7 @@ async function saveRetention(): Promise<void> {
             >Cancel</Button
           >
           <Button
+            variant="danger"
             size="sm"
             data-test="op-delete-all-confirm"
             :disabled="busy || deleteAllText !== 'DELETE'"
@@ -197,11 +210,16 @@ async function saveRetention(): Promise<void> {
         v-model.number="retentionDays"
         type="number"
         min="1"
+        aria-label="Retention window, in days"
         data-test="retention-input"
-        class="w-16 rounded-md border border-line-strong bg-surface px-2 py-1 text-[13px] tabular-nums text-text"
+        class="h-8 w-16 rounded-md border border-line-strong bg-surface px-2 text-[13px] tabular-nums text-text"
       />
       <span class="text-[12px] text-muted">days</span>
-      <Button size="sm" data-test="retention-save" :disabled="busy" @click="saveRetention"
+      <Button
+        size="sm"
+        data-test="retention-save"
+        :disabled="busy || !retentionValid"
+        @click="saveRetention"
         >Save</Button
       >
     </div>

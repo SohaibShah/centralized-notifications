@@ -59,4 +59,11 @@ describe("MaintenancePanel", () => {
     await flushPromises();
     expect(mocks.patchAdminSettings).toHaveBeenCalledWith({ retentionDays: 14 });
   });
+
+  it("disables the retention Save button when the input is cleared to an invalid value", async () => {
+    const w = mount(MaintenancePanel);
+    await flushPromises();
+    await w.get('[data-test="retention-input"]').setValue("");
+    expect(w.get('[data-test="retention-save"]').attributes("disabled")).toBeDefined();
+  });
 });

@@ -26,6 +26,7 @@
   --color-accent: oklch(0.45 0.09 155);
   --color-accent-ink: oklch(0.98 0.01 155);
   --color-danger: oklch(0.52 0.17 28);
+  --color-danger-ink: oklch(0.98 0.01 28);
   --color-warning: oklch(0.72 0.14 68);
   --color-success: oklch(0.55 0.1 150);
 

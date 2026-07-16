@@ -12,7 +12,7 @@ const button = cva(
         primary: "bg-accent text-accent-ink hover:opacity-90",
         secondary: "border border-line-strong bg-surface text-text hover:bg-sunken",
         ghost: "bg-transparent text-muted hover:bg-sunken hover:text-text",
-        danger: "bg-danger text-white hover:opacity-90",
+        danger: "bg-danger text-danger-ink hover:opacity-90",
       },
       size: {
         sm: "h-8 px-3 text-[12px]",
