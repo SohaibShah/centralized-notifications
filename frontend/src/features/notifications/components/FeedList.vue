@@ -53,12 +53,14 @@ onBeforeUnmount(() => observer?.disconnect());
       >
         <h2 class="font-display text-[13px] font-medium text-text">{{ needsAction.label }}</h2>
         <span
+          v-if="unreadInNeedsAction > 0"
           data-test="needs-action-count"
           class="rounded-full bg-accent/10 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-accent"
         >
           {{ unreadInNeedsAction }} unread
         </span>
         <button
+          v-if="unreadInNeedsAction > 0"
           type="button"
           data-test="mark-all"
           class="ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:bg-sunken"

@@ -210,6 +210,46 @@ describe("feed store", () => {
     expect(feed.unreadCount).toBe(1);
   });
 
+  it("markRead() failure also clears stickiness (no stale sticky entry left behind)", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+    postMock.mockRejectedValueOnce(new Error("500"));
+
+    await feed.markRead("a"); // fails → reverted to unread, un-stuck
+
+    // A subsequent bulk read must land it in Earlier — a lingering sticky id would wrongly pin it.
+    postMock.mockResolvedValueOnce(undefined);
+    await feed.markAllReadInScope();
+    expect(feed.groups.map((g) => g.key)).toEqual(["earlier"]);
+  });
+
+  it("markUnread() failure restores the sticky (in-place) position, not a jump to Earlier", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+    await feed.markRead("a"); // sticky read → still in Needs action
+    delMock.mockRejectedValueOnce(new Error("500"));
+
+    await feed.markUnread("a"); // fails → reverts to read AND re-sticks
+
+    expect(feed.items.find((n) => n.id === "a")?.read).toBe(true);
+    expect(feed.groups.map((g) => g.key)).toEqual(["needs-action"]); // not "earlier"
+  });
+
+  it("reset() clears the sticky-read set", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+    await feed.markRead("a"); // sticky
+
+    feed.reset();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true })]));
+    await feed.load();
+    // After reset+reload the earlier stickiness is gone: a read item groups to Earlier.
+    expect(feed.groups.map((g) => g.key)).toEqual(["earlier"]);
+  });
+
   it("markRead() is a no-op for an already-read or unknown notification", async () => {
     const feed = useFeedStore();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true })]));

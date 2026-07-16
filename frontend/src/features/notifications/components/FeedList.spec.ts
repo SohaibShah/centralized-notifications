@@ -43,6 +43,21 @@ describe("FeedList", () => {
     expect(wrapper.find('[data-test="mark-all"]').exists()).toBe(true);
   });
 
+  it("hides the unread pill and Mark all read when every Needs action row is sticky-read", () => {
+    const allRead: FeedGroup[] = [
+      {
+        key: "needs-action",
+        label: "Needs action",
+        items: [feedItem({ id: "r1", read: true }), feedItem({ id: "r2", read: true })],
+      },
+    ];
+    const wrapper = mount(FeedList, {
+      props: { groups: allRead, hasMore: false, loadingMore: false },
+    });
+    expect(wrapper.find('[data-test="needs-action-count"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="mark-all"]').exists()).toBe(false);
+  });
+
   it("collapses the earlier group behind a toggle that reveals the read rows", async () => {
     const wrapper = mount(FeedList, { props: { groups, hasMore: false, loadingMore: false } });
     const toggle = wrapper.get('[data-test="show-earlier"]');

@@ -70,7 +70,8 @@
   a[href] {
     cursor: pointer;
   }
-  :disabled {
+  :disabled,
+  [aria-disabled="true"] {
     cursor: not-allowed;
   }
   /* Keep Chrome's autofill from painting inputs pale blue over the ivory palette. */

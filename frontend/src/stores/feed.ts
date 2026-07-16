@@ -226,12 +226,14 @@ export const useFeedStore = defineStore("feed", () => {
   async function markUnread(id: string): Promise<void> {
     const target = items.value.find((n) => n.id === id);
     if (!target || !target.read) return;
+    const wasSticky = readThisSession.value.has(id);
     setRead(id, false);
     unstick(id);
     try {
       await api.del(`/notifications/${encodeURIComponent(id)}/read`);
     } catch {
       setRead(id, true); // revert — the server didn't clear it
+      if (wasSticky) stick(id); // restore its in-place (sticky) position too — a true inverse
       console.warn(`[feed] failed to mark ${id} unread; reverted`);
     }
   }
