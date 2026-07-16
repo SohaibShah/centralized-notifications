@@ -17,6 +17,10 @@ const envSchema = z.object({
   // `openssl rand -hex 24`; validated at startup like every other secret.
   INTERNAL_INTAKE_TOKEN: z.string().min(16, "INTERNAL_INTAKE_TOKEN must be at least 16 characters"),
   PORT: z.coerce.number().int().positive().default(3000),
+  // Runaway ceiling for the dev/QA generator's burst mode (backend/src/http/admin/simulate.ts).
+  // Not a product limit — stress testing is a goal — just a guard so one request can't loop
+  // unbounded and hang. Only consulted when the (non-prod) simulate route is registered.
+  SIMULATE_MAX_BURST: z.coerce.number().int().positive().default(10000),
 });
 
 export type Env = z.infer<typeof envSchema>;

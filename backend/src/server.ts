@@ -3,10 +3,20 @@ import Fastify, { type FastifyInstance } from "fastify";
 import { SHARED_PACKAGE } from "@notifications/shared";
 import { authRoutes } from "./auth/routes";
 import { registerSession } from "./auth/session";
+import { getEnv, type Env } from "./config/env";
 import { httpIntake } from "./intake/http-intake";
 import { adminRoutes } from "./http/admin/routes";
+import { simulateRoutes } from "./http/admin/simulate";
 import { notificationRoutes } from "./http/notifications/routes";
 import { sseRoutes } from "./http/sse/routes";
+
+/**
+ * The dev/QA notification generator is a non-production tool: its route (POST /admin/simulate)
+ * is registered only outside production, so it is genuinely absent — not merely hidden — in prod.
+ */
+export function isSimulatorEnabled(env: Env = getEnv()): boolean {
+  return env.NODE_ENV !== "production";
+}
 
 /**
  * Builds the Fastify app as a factory (no top-level `listen`) so tests can drive
@@ -29,6 +39,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(httpIntake);
   await app.register(notificationRoutes);
   await app.register(adminRoutes);
+  if (isSimulatorEnabled()) await app.register(simulateRoutes);
   await app.register(sseRoutes);
 
   app.get("/health", async () => ({ status: "ok", shared: SHARED_PACKAGE }));
