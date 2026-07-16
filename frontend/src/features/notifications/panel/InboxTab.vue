@@ -40,7 +40,7 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
          Hidden entirely when an admin disables the AI-summary feature (global kill-switch). -->
     <div
       v-if="settings.flags.aiSummaryEnabled"
-      class="m-3 rounded-lg border border-accent/20 bg-accent/5"
+      class="mx-3 mt-3 rounded-lg border border-accent/20 bg-accent/5"
     >
       <button
         type="button"
@@ -72,7 +72,7 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
       </p>
     </div>
 
-    <div class="flex items-center gap-1.5 px-3 pb-2">
+    <div class="flex items-center gap-1.5 px-3 pb-2 pt-3">
       <Chip :active="!feed.isFiltered" @click="feed.clearFilters()">All</Chip>
       <Chip :active="feed.unreadOnly" @click="feed.toggleUnreadOnly()">Unread</Chip>
       <Chip :active="feed.priorities.has('critical')" @click="feed.togglePriority('critical')"
