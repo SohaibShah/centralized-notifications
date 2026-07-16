@@ -40,6 +40,25 @@ export const useFeedStore = defineStore("feed", () => {
   // --- history + connection -------------------------------------------------
   const items = shallowRef<FeedNotification[]>([]);
   const seen = new Set<string>(); // id set backing O(1) dedupe across load + live
+
+  // Ids read *this session* via a single open-and-seen click. They stay in "Needs action"
+  // (shown read) instead of jumping to "Earlier", so a just-opened card can actually be read.
+  // Cleared by flushSessionReads() on panel reopen / load / reset.
+  const readThisSession = ref<Set<string>>(new Set());
+
+  function stick(id: string): void {
+    readThisSession.value = new Set(readThisSession.value).add(id);
+  }
+  function unstick(id: string): void {
+    if (!readThisSession.value.has(id)) return;
+    const next = new Set(readThisSession.value);
+    next.delete(id);
+    readThisSession.value = next;
+  }
+  function flushSessionReads(): void {
+    if (readThisSession.value.size === 0) return;
+    readThisSession.value = new Set();
+  }
   const status = ref<"idle" | "loading" | "ready" | "error">("idle");
   const error = ref<string | null>(null);
   const loadingMore = ref(false);
@@ -86,6 +105,7 @@ export const useFeedStore = defineStore("feed", () => {
     items.value = [];
     nextCursor.value = null;
     status.value = "idle";
+    readThisSession.value = new Set();
   }
 
   /**
@@ -95,6 +115,7 @@ export const useFeedStore = defineStore("feed", () => {
    * slate (login). Older, already-loaded pages are preserved.
    */
   async function load(): Promise<void> {
+    flushSessionReads(); // a fresh page reconciles positions — settle this-session reads first
     status.value = "loading";
     error.value = null;
     try {
@@ -167,6 +188,7 @@ export const useFeedStore = defineStore("feed", () => {
 
   /** Drop a notification the server no longer has (e.g. deleted out from under an open feed). */
   function remove(id: string): void {
+    unstick(id);
     items.value = items.value.filter((n) => n.id !== id);
   }
 
@@ -179,6 +201,7 @@ export const useFeedStore = defineStore("feed", () => {
     const target = items.value.find((n) => n.id === id);
     if (!target || target.read) return;
     setRead(id, true);
+    stick(id); // open-and-seen: keep it in place while it's read this session
     try {
       await api.post(`/notifications/${encodeURIComponent(id)}/read`);
     } catch (err) {
@@ -190,6 +213,7 @@ export const useFeedStore = defineStore("feed", () => {
         return;
       }
       setRead(id, false); // genuine failure — revert
+      unstick(id);
       console.warn(`[feed] failed to mark ${id} read; reverted`);
     }
   }
@@ -203,6 +227,7 @@ export const useFeedStore = defineStore("feed", () => {
     const target = items.value.find((n) => n.id === id);
     if (!target || !target.read) return;
     setRead(id, false);
+    unstick(id);
     try {
       await api.del(`/notifications/${encodeURIComponent(id)}/read`);
     } catch {
@@ -275,7 +300,11 @@ export const useFeedStore = defineStore("feed", () => {
   const groups = computed<FeedGroup[]>(() => {
     const needsAction: FeedNotification[] = [];
     const earlier: FeedNotification[] = [];
-    for (const n of visibleItems.value) (n.read ? earlier : needsAction).push(n);
+    for (const n of visibleItems.value) {
+      // Sticky read: a card read this session stays in Needs action until the next flush.
+      const sticky = n.read && readThisSession.value.has(n.id);
+      (n.read && !sticky ? earlier : needsAction).push(n);
+    }
     needsAction.sort(
       (a, b) =>
         priorityRank[a.priority] - priorityRank[b.priority] || cmpDesc(a.createdAt, b.createdAt),
@@ -346,6 +375,7 @@ export const useFeedStore = defineStore("feed", () => {
     disconnect,
     markRead,
     markUnread,
+    flushSessionReads,
     markAllReadInScope,
     onLiveCritical,
     togglePriority,

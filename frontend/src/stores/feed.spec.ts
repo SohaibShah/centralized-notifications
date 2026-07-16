@@ -133,7 +133,7 @@ describe("feed store", () => {
     expect(feed.unreadCount).toBe(2);
   });
 
-  it("markRead() optimistically flips the flag, moves the row to Earlier, and POSTs", async () => {
+  it("markRead() optimistically flips the flag and POSTs (row stays put — sticky read)", async () => {
     const feed = useFeedStore();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
@@ -143,8 +143,45 @@ describe("feed store", () => {
 
     expect(feed.items.find((n) => n.id === "a")?.read).toBe(true);
     expect(feed.unreadCount).toBe(0);
-    expect(feed.groups.map((g) => g.key)).toEqual(["earlier"]);
+    // Open-and-seen: read, but sticky — it stays in Needs action until flushed.
+    expect(feed.groups.map((g) => g.key)).toEqual(["needs-action"]);
     expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
+  });
+
+  it("markRead() keeps the item in Needs action (sticky) until flushed, then moves it to Earlier", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+
+    await feed.markRead("a");
+    expect(feed.items.find((n) => n.id === "a")?.read).toBe(true);
+    // Sticky: still grouped under needs-action even though it's read.
+    expect(feed.groups.map((g) => g.key)).toEqual(["needs-action"]);
+
+    feed.flushSessionReads();
+    expect(feed.groups.map((g) => g.key)).toEqual(["earlier"]);
+  });
+
+  it("markAllReadInScope() is NOT sticky — items move to Earlier immediately", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+
+    await feed.markAllReadInScope();
+    expect(feed.groups.map((g) => g.key)).toEqual(["earlier"]);
+  });
+
+  it("markUnread() clears stickiness so the item is genuinely unread again", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+    await feed.markRead("a"); // sticky read
+    await feed.markUnread("a");
+    expect(feed.items.find((n) => n.id === "a")?.read).toBe(false);
+    feed.flushSessionReads();
+    // Still unread after a flush (not left stuck as read).
+    expect(feed.items.find((n) => n.id === "a")?.read).toBe(false);
+    expect(feed.groups.map((g) => g.key)).toEqual(["needs-action"]);
   });
 
   it("markRead() drops a stale notification (404 = deleted server-side) instead of reverting", async () => {
