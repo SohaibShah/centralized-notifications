@@ -86,16 +86,21 @@ function markUnread() {
           {{ item.description }}
         </p>
 
-        <div class="mt-1 flex flex-wrap items-center gap-x-2 text-[12px] text-faint">
-          <span class="font-mono uppercase tracking-wide">{{ item.module }}</span>
-          <template v-if="item.category">
-            <span aria-hidden="true">·</span>
-            <span>{{ item.category }}</span>
-          </template>
+        <!-- Single-line meta row: the module/category text truncates in a flex-1 group so the
+             right-hand affordance (hint or Mark-as-unread) keeps a stable position on every card
+             and revealing the hover hint never wraps the row (no card-height jump). -->
+        <div class="mt-1 flex items-center gap-x-2 text-[12px] text-faint">
+          <div class="flex min-w-0 flex-1 items-center gap-x-2">
+            <span class="shrink-0 font-mono uppercase tracking-wide">{{ item.module }}</span>
+            <template v-if="item.category">
+              <span aria-hidden="true" class="shrink-0">·</span>
+              <span class="truncate">{{ item.category }}</span>
+            </template>
+          </div>
           <span
             v-if="!item.read && !expanded"
             aria-hidden="true"
-            class="ml-auto hidden font-mono text-[11px] uppercase tracking-wide text-accent group-hover:inline"
+            class="hidden shrink-0 font-mono text-[11px] uppercase tracking-wide text-accent group-hover:inline"
           >
             click to open
           </span>
@@ -103,7 +108,7 @@ function markUnread() {
             v-if="item.read"
             type="button"
             data-test="mark-unread"
-            class="ml-auto font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:text-text"
+            class="shrink-0 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:text-text"
             @click.stop="markUnread"
           >
             Mark as unread
