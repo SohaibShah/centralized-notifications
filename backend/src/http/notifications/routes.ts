@@ -192,6 +192,26 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /**
+   * Undo a read for the current user: `DELETE /notifications/:id/read`. Removes this user's
+   * row from notification_reads so the notification returns to "Needs action". Idempotent —
+   * deleting a row that isn't there is a no-op. Per-user; never touches another user's state.
+   * Returns 204.
+   */
+  app.delete("/notifications/:id/read", { preHandler: requireUser }, async (req, reply) => {
+    const user = req.user;
+    if (!user) return reply.code(401).send({ error: "authentication required" });
+
+    const parsed = readParamsSchema.safeParse(req.params);
+    if (!parsed.success) return reply.code(400).send({ error: "invalid notification id" });
+
+    await query("DELETE FROM notification_reads WHERE user_id = $1 AND notification_id = $2", [
+      user.id,
+      parsed.data.id,
+    ]);
+    return reply.code(204).send();
+  });
+
+  /**
    * Bulk mark-read for the current user (mark-all-read in the panel): `POST
    * /notifications/read` with `{ ids: string[] }`. One row per id that actually
    * exists (the `= ANY` filter drops unknown ids silently, same effect as the

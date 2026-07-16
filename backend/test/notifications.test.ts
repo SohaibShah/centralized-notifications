@@ -232,6 +232,37 @@ describe("GET /notifications", () => {
     });
   });
 
+  function markUnread(id: string, cookie: string | null = sessionCookie) {
+    return app.inject({
+      method: "DELETE",
+      url: `/notifications/${encodeURIComponent(id)}/read`,
+      headers: cookie ? { cookie } : {},
+    });
+  }
+
+  describe("DELETE /notifications/:id/read", () => {
+    it("401s without a session cookie", async () => {
+      expect((await markUnread(`${ID_PREFIX}3`, null)).statusCode).toBe(401);
+    });
+
+    it("clears the read flag (204) and the list reflects it, idempotently", async () => {
+      // Read it first, confirm, then un-read.
+      expect((await markRead(`${ID_PREFIX}3`)).statusCode).toBe(204);
+      expect(
+        (await list("?limit=100")).body.items.find((n) => n.id === `${ID_PREFIX}3`)?.read,
+      ).toBe(true);
+
+      const del = await markUnread(`${ID_PREFIX}3`);
+      expect(del.statusCode).toBe(204);
+      expect(
+        (await list("?limit=100")).body.items.find((n) => n.id === `${ID_PREFIX}3`)?.read,
+      ).toBe(false);
+
+      // Idempotent: un-reading an already-unread notification is still 204.
+      expect((await markUnread(`${ID_PREFIX}3`)).statusCode).toBe(204);
+    });
+  });
+
   describe("POST /notifications/read (bulk)", () => {
     it("401 without a session", async () => {
       const res = await app.inject({

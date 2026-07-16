@@ -179,6 +179,41 @@ Path parameter:
 
 One upsert into `notification_reads` (`(user_id, notification_id)`, keyed by the authenticated user). No events published.
 
+## DELETE /notifications/:id/read
+
+**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
+
+Undoes a read **for the current user** — the inverse of [`POST /notifications/:id/read`](#post-notificationsidread). Removes the caller's row from `notification_reads` so the notification returns to "Needs action" (unread) in their feed. Read state is per-user, so this only ever affects the caller's own row — undoing one user's read never changes another user's state.
+
+Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+
+### Request
+
+Path parameter:
+
+| Param | Type                 | Required | Notes                                                                                              |
+| ----- | -------------------- | -------- | -------------------------------------------------------------------------------------------------- |
+| `id`  | string (1–200 chars) | yes      | The notification's contract [`id`](#schema). An id outside that shape (empty or too long) → `400`. |
+
+**No request body.** The client sends no body and no content-type.
+
+**Idempotent.** The handler is a plain `DELETE … WHERE user_id = $1 AND notification_id = $2`, so removing a row that isn't there is a no-op. Unlike the `POST` counterpart there is **no existence check** on the notification — deleting a read for an id that was never read (or that doesn't exist at all) still returns `204`, never `404`.
+
+### Response `204`
+
+`204 No Content` — no body. A subsequent [`GET /notifications`](#get-notifications) then returns `read: false` for this notification **for this user** (the list's `LEFT JOIN` against `notification_reads` no longer finds a row).
+
+### Errors
+
+| Status | Body                                     | Reason                                  |
+| ------ | ---------------------------------------- | --------------------------------------- |
+| `400`  | `{ "error": "invalid notification id" }` | `id` is empty or longer than 200 chars. |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                |
+
+### Side effects
+
+At most one delete from `notification_reads` (`(user_id, notification_id)`, keyed by the authenticated user) — zero rows if the user had not read it. No events published.
+
 ## POST /notifications/read
 
 **Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
