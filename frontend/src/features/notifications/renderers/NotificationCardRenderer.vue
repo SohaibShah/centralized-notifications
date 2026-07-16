@@ -15,10 +15,14 @@ const props = defineProps<{ notification: FeedNotification }>();
 const emit = defineEmits<{
   open: [notification: FeedNotification];
   action: [action: NotificationAction, notification: FeedNotification];
+  unread: [notification: FeedNotification];
 }>();
 
 const item = computed(() => props.notification);
 const hasActions = computed(() => (item.value.actions?.length ?? 0) > 0);
+// A long body gets an expand affordance even with no actions (single-line truncate hides it).
+const isLongBody = computed(() => (item.value.description?.length ?? 0) > 140);
+const canExpand = computed(() => hasActions.value || isLongBody.value);
 const expanded = ref(false);
 
 // Only genuinely-live rows (createdAt ≈ now) get the fade+rise entrance.
@@ -29,6 +33,9 @@ function open() {
 }
 function toggleExpand() {
   expanded.value = !expanded.value;
+}
+function markUnread() {
+  emit("unread", item.value);
 }
 </script>
 
@@ -67,7 +74,12 @@ function toggleExpand() {
           </time>
         </div>
 
-        <p v-if="item.description" class="mt-0.5 truncate text-[13px] leading-relaxed text-muted">
+        <p
+          v-if="item.description"
+          data-test="card-body"
+          class="mt-0.5 text-[13px] leading-relaxed text-muted"
+          :class="expanded ? 'whitespace-pre-line break-words' : 'truncate'"
+        >
           {{ item.description }}
         </p>
 
@@ -77,14 +89,31 @@ function toggleExpand() {
             <span aria-hidden="true">·</span>
             <span>{{ item.category }}</span>
           </template>
+          <button
+            v-if="item.read"
+            type="button"
+            data-test="mark-unread"
+            class="ml-auto font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:text-text"
+            @click.stop="markUnread"
+          >
+            Mark as unread
+          </button>
         </div>
       </div>
 
       <button
-        v-if="hasActions"
+        v-if="canExpand"
         type="button"
         class="mt-0.5 grid size-6 shrink-0 place-items-center self-start rounded-md text-faint transition-colors duration-100 hover:bg-sunken hover:text-text"
-        :aria-label="expanded ? 'Hide actions' : 'Show actions'"
+        :aria-label="
+          expanded
+            ? hasActions
+              ? 'Hide actions'
+              : 'Hide details'
+            : hasActions
+              ? 'Show actions'
+              : 'Show details'
+        "
         :aria-expanded="expanded"
         @click.stop="toggleExpand"
       >

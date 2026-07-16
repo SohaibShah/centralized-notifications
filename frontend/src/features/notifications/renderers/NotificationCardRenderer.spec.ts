@@ -55,4 +55,30 @@ describe("NotificationCardRenderer", () => {
     expect(wrapper.emitted("action")).toHaveLength(1);
     expect(wrapper.emitted("open")).toBeFalsy(); // action-marks-read is InboxTab's job, not the card's
   });
+
+  const LONG = "x".repeat(200);
+
+  it("shows an expand chevron for a long body even without actions, and reveals the full body", async () => {
+    const wrapper = mount(NotificationCardRenderer, {
+      props: { notification: feedItem({ id: "a", description: LONG }) },
+    });
+    const chevron = wrapper.get('[aria-label="Show details"]');
+    const body = wrapper.get('[data-test="card-body"]');
+    expect(body.classes()).toContain("truncate"); // collapsed
+    await chevron.trigger("click");
+    expect(body.classes()).not.toContain("truncate"); // expanded reveals full text
+  });
+
+  it("offers Mark as unread only on a read card and emits unread", async () => {
+    const unread = mount(NotificationCardRenderer, {
+      props: { notification: feedItem({ id: "a" }) },
+    });
+    expect(unread.find('[data-test="mark-unread"]').exists()).toBe(false); // unread item: no control
+
+    const wrapper = mount(NotificationCardRenderer, {
+      props: { notification: feedItem({ id: "b", read: true }) },
+    });
+    await wrapper.get('[data-test="mark-unread"]').trigger("click");
+    expect(wrapper.emitted("unread")).toHaveLength(1);
+  });
 });
