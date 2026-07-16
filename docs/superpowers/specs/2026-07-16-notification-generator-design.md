@@ -46,7 +46,10 @@ delivery — not a parallel fake path.
      then `ingest()`.
    - `{ mode: "preset", preset }` — `preset` is one of a fixed registry of named templates
      (built from `sim/simulator.ts`); the server materializes it (fresh id) and `ingest()`s.
-   - `{ mode: "burst", count: 1..100, seed? }` — `simulate({ count, seed })` → `ingest()` each.
+   - `{ mode: "burst", count, seed? }` — `simulate({ count, seed })` → `ingest()` each. No fixed
+     low cap (stress testing is a goal); `count` is a positive int bounded only by a high,
+     env-configurable runaway ceiling (`SIMULATE_MAX_BURST`, default e.g. 10000) so a single
+     request can't loop unbounded and hang. Large bursts are ingested in chunks.
      Returns `{ published: number, suppressed: number }` (suppressed = generated but policy-
      suppressed, so the UI can show that policy took effect). **Drip is client-side** (the page
      calls this endpoint on an interval), so the backend stays stateless.
@@ -62,7 +65,8 @@ delivery — not a parallel fake path.
 4. **Presets:** ~5 one-click cards materialized from the simulator/templates — e.g. _Critical
    DSR_, _High access request (with actions)_, _Normal data finding_, _Low assessment_,
    _Long body_. One click → publish one.
-5. **Burst:** `count` (1–100) + optional `seed` → publishes N varied notifications.
+5. **Burst:** `count` (any positive int, up to the high runaway ceiling) + optional `seed` →
+   publishes N varied notifications. Built for stress testing — no low cap; big N ingested in chunks.
 6. **Drip:** an FE control — interval (seconds) + total count (or "until Stop") — that repeatedly
    invokes the selected Custom or Burst call; a Stop button; timers cleaned up on unmount/route
    change.
@@ -111,7 +115,10 @@ field type this form needs:
 
 - Server always assigns notification ids (ignores any client-supplied id) so repeated generation
   never dedupes against itself.
-- Burst `count` is capped (1–100) server-side to prevent accidental flooding; the UI mirrors the cap.
+- Burst `count` has no low cap (stress testing is intended). To keep a single request from
+  hanging, it's bounded by a high env-configurable ceiling (`SIMULATE_MAX_BURST`) and ingested in
+  chunks (e.g. 500 per batch) rather than one unbounded loop; for sustained load, use drip to fire
+  repeated bursts over time.
 - Drip: the page owns a `setInterval`; it stops on total reached, on Stop, and on unmount
   (`onBeforeUnmount`) / navigation away. It calls the same `simulate()` endpoint each tick.
 - A generated notification for an admin-disabled module returns in the `suppressed` tally and does
@@ -130,8 +137,8 @@ field type this form needs:
 - **Backend (Vitest):** custom mode ingests one (server-assigned `sim-` id, `published: 1`);
   preset mode ingests the named template; burst `count: N` ingests N; a disabled-module custom
   publish returns `suppressed: 1` and is absent from `GET /notifications`; `requireAdmin` 401/403;
-  zod rejects a bad body and an out-of-range count (400); the route is not registered when
-  `NODE_ENV=production`.
+  zod rejects a bad body and a non-positive / over-ceiling count (400); a large burst ingests all
+  N (chunked); the route is not registered when `NODE_ENV=production`.
 - **Frontend (Vitest):** `SelectField` renders options + emits selection; `FormRenderer` renders a
   `select` field; `GeneratorPanel` switches modes; custom submit calls `simulate` with the mapped
   payload; burst calls with count/seed; drip start publishes on tick and Stop/unmount clears the
@@ -158,4 +165,7 @@ field type this form needs:
   correctness risk on the FE.
 - **Non-prod guard robustness:** the route must be genuinely absent in prod (registration-time
   check), not merely hidden in the UI.
-- **Burst cap** (100) is a guardrail against flooding the shared dev feed; adjustable if too low.
+- **Burst volume:** no low cap (stress testing), only a high env ceiling + chunked ingest as a
+  runaway guard. Very large bursts still take real time (sequential `ingest()` per notification);
+  if that proves too slow for stress goals, a follow-up could bulk-insert or parallelize — noted,
+  not built for v1.
