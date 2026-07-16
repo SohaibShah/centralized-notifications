@@ -6,7 +6,7 @@ import type {
   NotificationPage,
   NotificationPriority,
 } from "@notifications/shared";
-import { api } from "@/api/client";
+import { api, ApiError } from "@/api/client";
 import { connectSse, type SseClient, type SseStatus } from "@/api/sse";
 import { priorityRank } from "@/design/tokens";
 
@@ -165,6 +165,11 @@ export const useFeedStore = defineStore("feed", () => {
     items.value = items.value.map((n) => (n.id === id ? { ...n, read } : n));
   }
 
+  /** Drop a notification the server no longer has (e.g. deleted out from under an open feed). */
+  function remove(id: string): void {
+    items.value = items.value.filter((n) => n.id !== id);
+  }
+
   /**
    * Mark one notification read for this user (FR-6). Optimistic: flip the flag locally
    * first (instant feedback, moves the row to "Earlier"), then persist; revert on
@@ -176,8 +181,15 @@ export const useFeedStore = defineStore("feed", () => {
     setRead(id, true);
     try {
       await api.post(`/notifications/${encodeURIComponent(id)}/read`);
-    } catch {
-      setRead(id, false); // revert — the server didn't record it
+    } catch (err) {
+      if (err instanceof ApiError && err.status === 404) {
+        // The notification no longer exists server-side (e.g. deleted via admin maintenance
+        // while this feed stayed open). Drop the stale row instead of reverting — otherwise it
+        // lingers, un-markable, because every future read POST 404s the same way.
+        remove(id);
+        return;
+      }
+      setRead(id, false); // genuine failure — revert
       console.warn(`[feed] failed to mark ${id} read; reverted`);
     }
   }

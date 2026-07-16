@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
 import type { FeedNotification, Notification } from "@notifications/shared";
 import { feedItem } from "@/test-support/feedItem";
+import { ApiError } from "@/api/client";
 
 // Mock the two I/O seams (HTTP + SSE) so the store's logic is tested in isolation.
 // vi.hoisted lets the mock factories reference these before the imports are evaluated.
@@ -12,7 +13,10 @@ const { getMock, postMock, delMock, sseState } = vi.hoisted(() => ({
   sseState: { onBatch: null as null | ((batch: Notification[]) => void) },
 }));
 
-vi.mock("@/api/client", () => ({ api: { get: getMock, post: postMock, del: delMock } }));
+vi.mock("@/api/client", async (orig) => {
+  const actual = (await orig()) as Record<string, unknown>;
+  return { ...actual, api: { get: getMock, post: postMock, del: delMock } };
+});
 vi.mock("@/api/sse", () => ({
   connectSse: (opts: { onBatch: (batch: Notification[]) => void }) => {
     sseState.onBatch = opts.onBatch;
@@ -141,6 +145,20 @@ describe("feed store", () => {
     expect(feed.unreadCount).toBe(0);
     expect(feed.groups.map((g) => g.key)).toEqual(["earlier"]);
     expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
+  });
+
+  it("markRead() drops a stale notification (404 = deleted server-side) instead of reverting", async () => {
+    const feed = useFeedStore();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
+    await feed.load();
+    // The notification was deleted server-side (e.g. admin maintenance) while the feed stayed open.
+    postMock.mockRejectedValueOnce(new ApiError(404, "notification not found"));
+
+    await feed.markRead("a");
+
+    // Not reverted-and-stuck: the stale row is gone from the feed entirely.
+    expect(feed.items.find((n) => n.id === "a")).toBeUndefined();
+    expect(feed.groups).toHaveLength(0);
   });
 
   it("markRead() reverts the flag when the POST fails", async () => {
