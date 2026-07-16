@@ -64,7 +64,7 @@ test.describe("notifications dashboard", () => {
     const card = page.getByRole("button", { name: title, exact: true });
     await expect(card).toBeVisible({ timeout: 10_000 });
 
-    // Clicking the card marks it read (FR-6): the frontend POSTs to the read endpoint → 204.
+    // Clicking the card marks it read (FR-6) — the frontend POSTs to the read endpoint → 204.
     const [readResponse] = await Promise.all([
       page.waitForResponse(
         (r) => /\/notifications\/.+\/read$/.test(r.url()) && r.request().method() === "POST",
@@ -73,9 +73,19 @@ test.describe("notifications dashboard", () => {
     ]);
     expect(readResponse.status()).toBe(204);
 
-    // Redesign read behavior: the item leaves "Needs action" and relocates into the
-    // collapsed "Earlier" group, so its Needs-action card unmounts and a "Show N earlier"
-    // toggle appears; expanding it reveals the item as a compact read row.
+    // Open-and-seen / sticky read: the card STAYS in "Needs action" so you can read it, now
+    // showing the "Mark as unread" control — it does NOT relocate to "Earlier" on the click.
+    await expect(page.getByRole("button", { name: "Mark as unread" })).toBeVisible();
+    await expect(card).toBeVisible();
+
+    // Close and reopen the panel → NotificationPopover remounts and flushSessionReads() settles
+    // this-session reads into "Earlier".
+    await page.getByRole("button", { name: "Close notifications" }).click();
+    await expect(page.getByRole("dialog", { name: "Notifications" })).toBeHidden();
+    await page.getByRole("button", { name: /Notifications/ }).click();
+    await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
+
+    // Now it's in the collapsed "Earlier" group; expanding reveals it as a read row.
     await expect(card).toHaveCount(0);
     const showEarlier = page.getByRole("button", { name: /Show \d+ earlier/ });
     await expect(showEarlier).toBeVisible();
