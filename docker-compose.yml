@@ -2,20 +2,20 @@ services:
   postgres:
     image: postgres:17
     restart: unless-stopped
-    # Local-dev only: a disposable container with throwaway defaults. Override via the root
-    # .env (POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB) or your shell — real/deployed
-    # credentials never live in this tracked file.
+    # No credentials in this file — they are REQUIRED from the root .env (compose reads it
+    # automatically). Copy .env.example → .env first. `:?` makes `docker compose up` fail fast
+    # with a clear message if a var is missing, rather than silently using a default.
     environment:
-      POSTGRES_USER: ${POSTGRES_USER:-postgres}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:?set POSTGRES_USER in .env (see .env.example)}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env (see .env.example)}
+      POSTGRES_DB: ${POSTGRES_DB:?set POSTGRES_DB in .env (see .env.example)}
     ports:
       # Bind to loopback so the dev DB isn't reachable from other hosts on the network.
       - "127.0.0.1:5432:5432"
     volumes:
       - ./docker-data/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 5s
       timeout: 5s
       retries: 10
