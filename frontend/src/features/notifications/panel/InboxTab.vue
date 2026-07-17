@@ -50,7 +50,7 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
          Hidden entirely when an admin disables the AI-summary feature (global kill-switch). -->
     <div
       v-if="settings.flags.aiSummaryEnabled"
-      class="ai-gradient-border group relative mx-3 mt-3 overflow-hidden rounded-lg"
+      class="ai-gradient-border group relative mx-3 mt-3 shrink-0 overflow-hidden rounded-lg"
     >
       <span
         :key="bloomCount"
@@ -93,7 +93,7 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
       </p>
     </div>
 
-    <div class="flex items-center gap-1.5 px-3 pb-2 pt-3">
+    <div class="flex shrink-0 items-center gap-1.5 px-3 pb-2 pt-3">
       <Chip :active="!feed.isFiltered" @click="feed.clearFilters()">All</Chip>
       <Chip :active="feed.unreadOnly" @click="feed.toggleUnreadOnly()">Unread</Chip>
       <Chip :active="feed.priorities.has('critical')" @click="feed.togglePriority('critical')"
