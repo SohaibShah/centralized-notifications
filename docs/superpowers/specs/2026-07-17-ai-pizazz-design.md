@@ -92,12 +92,15 @@ The star. Replace the flat `border border-accent/20 bg-accent/5` wrapper with:
 - Active/inactive states keep their current treatment (the active `bg-accent/10` is fine, or swap to a
   subtle AI-tinted active); this is a light identity touch, not the full bloom.
 
-### 3 — AI chat (`frontend/src/features/notifications/panel/AssistantTab.vue`) — light touch
+### 3 — AI chat (`frontend/src/features/notifications/panel/AssistantTab.vue`) — light touch (locked)
 
-- AI-message Sparkles → AI teal; optionally a subtle gradient-tinted left accent on AI bubbles.
-- The composer is a disabled stub ("Soon") this pass — no bloom/focus animation yet; when it's wired to
-  a real LLM (separate task), it can gain the gradient focus border + gradient send button. Kept minimal
-  here to avoid scope creep.
+- AI-message Sparkles → AI teal.
+- **A subtle gradient accent inside the AI (assistant) bubbles** — a restrained gradient-tinted
+  border/edge on the `from === "ai"` bubbles (keep the `me` bubbles as-is on the solid pine accent).
+- **A subtle gradient chat-send button.** The composer is still an inert stub this pass, so add a
+  **disabled/decorative** gradient send button (paper-plane/arrow) in the composer's right slot in place
+  of the current "Soon" pill; "coming soon" stays conveyed via the input's placeholder + aria-label. No
+  focus-border animation yet — that arrives when the composer is wired to a real LLM (separate task).
 
 ## Data flow
 
