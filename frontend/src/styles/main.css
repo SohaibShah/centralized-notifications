@@ -30,6 +30,12 @@
   --color-warning: oklch(0.72 0.14 68);
   --color-success: oklch(0.55 0.1 150);
 
+  /* AI-scoped identity — "vivid but cohesive" cool gradient (approved). OKLCH conversions of
+     #2f8060 / #17a596 / #3a72c8; verify in-browser and nudge if they drift from the hex. */
+  --color-ai-1: oklch(0.55 0.1 160);
+  --color-ai-2: oklch(0.65 0.11 185);
+  --color-ai-3: oklch(0.56 0.15 264);
+
   --radius-sm: 6px;
   --radius-md: 9px;
   --radius-lg: 12px;
@@ -131,4 +137,93 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* ── AI-features identity: gradient text/border/glow (see the ai-pizazz design spec) ──
+   The gradient drift, glow spin, and click bloom are all decorative and are frozen by the
+   global prefers-reduced-motion guard above (the glow keeps its rest opacity, so it stays
+   visible but static). */
+@keyframes ai-gradient-shift {
+  to {
+    background-position: 200% 0;
+  }
+}
+@keyframes ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ai-bloom {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: var(--ai-glow-rest, 0.13);
+  }
+}
+
+.ai-gradient-text {
+  background: linear-gradient(100deg, var(--color-ai-1), var(--color-ai-2), var(--color-ai-3));
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: ai-gradient-shift 7s linear infinite;
+}
+
+/* 1px animated gradient hairline over an ivory surface (padding-box/border-box trick). */
+.ai-gradient-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+    linear-gradient(100deg, var(--color-ai-1), var(--color-ai-2), var(--color-ai-3)) border-box;
+  background-size:
+    100% 100%,
+    200% 100%;
+  animation: ai-gradient-shift 7s linear infinite;
+}
+
+.ai-gradient-bg {
+  background: linear-gradient(100deg, var(--color-ai-1), var(--color-ai-2), var(--color-ai-3));
+  background-size: 200% 100%;
+  animation: ai-gradient-shift 7s linear infinite;
+}
+
+/* Soft AI glow — summary-card only. Rest opacity is the static state (reduced-motion safe). */
+.ai-glow {
+  position: absolute;
+  inset: -35%;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    var(--color-ai-1),
+    var(--color-ai-2),
+    var(--color-ai-3),
+    var(--color-ai-1)
+  );
+  filter: blur(19px);
+  opacity: var(--ai-glow-rest, 0.13);
+  animation: ai-spin 9s linear infinite;
+  transition: opacity 0.35s ease;
+}
+.group:hover .ai-glow {
+  opacity: 0.3;
+}
+.ai-glow.is-blooming {
+  animation:
+    ai-spin 9s linear infinite,
+    ai-bloom 1.3s ease-out;
+}
+
+/* Faint full gradient border for AI chat bubbles (static — subtle, no drift). */
+.ai-bubble-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-sunken), var(--color-sunken)) padding-box,
+    linear-gradient(
+        100deg,
+        color-mix(in oklab, var(--color-ai-1) 55%, transparent),
+        color-mix(in oklab, var(--color-ai-3) 55%, transparent)
+      )
+      border-box;
 }
