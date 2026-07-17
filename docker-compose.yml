@@ -2,16 +2,20 @@ services:
   postgres:
     image: postgres:17
     restart: unless-stopped
+    # Local-dev only: a disposable container with throwaway defaults. Override via the root
+    # .env (POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_DB) or your shell — real/deployed
+    # credentials never live in this tracked file.
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: postgres
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
     ports:
-      - "5432:5432"
+      # Bind to loopback so the dev DB isn't reachable from other hosts on the network.
+      - "127.0.0.1:5432:5432"
     volumes:
       - ./docker-data/postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -20,7 +24,7 @@ services:
     image: redis:7
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - ./docker-data/redis:/data
     healthcheck:
