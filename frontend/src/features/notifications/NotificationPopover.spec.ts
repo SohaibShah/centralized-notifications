@@ -14,6 +14,13 @@ describe("NotificationPopover", () => {
     expect(spy).toHaveBeenCalled();
   });
 
+  it("styles the Ask AI tab with the AI gradient identity", () => {
+    const wrapper = mount(NotificationPopover);
+    const askAi = wrapper.find('[data-test="ask-ai-label"]');
+    expect(askAi.exists()).toBe(true);
+    expect(askAi.classes()).toContain("ai-gradient-text");
+  });
+
   it("renders the Inbox tab selected by default", () => {
     const wrapper = mount(NotificationPopover);
     const tabs = wrapper.findAll('[role="tab"]');

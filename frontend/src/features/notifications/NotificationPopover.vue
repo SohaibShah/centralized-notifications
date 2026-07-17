@@ -64,7 +64,8 @@ onMounted(() => {
         :class="tab === 'assistant' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text'"
         @click="tab = 'assistant'"
       >
-        Ask AI <Icon :icon="Sparkles" :size="13" />
+        <span data-test="ask-ai-label" class="ai-gradient-text">Ask AI</span>
+        <Icon :icon="Sparkles" :size="13" class="text-ai-2" />
       </button>
 
       <div class="ml-auto flex items-center gap-1">
