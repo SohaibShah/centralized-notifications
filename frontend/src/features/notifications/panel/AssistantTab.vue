@@ -60,7 +60,7 @@ const thread: { from: "ai" | "me"; text: string }[] = [
           disabled
           data-test="ai-send"
           aria-label="Send (coming soon)"
-          class="ai-gradient-bg grid size-7 shrink-0 place-items-center rounded-md text-white opacity-60 disabled:cursor-not-allowed"
+          class="ai-gradient-bg grid size-7 shrink-0 place-items-center rounded-md text-accent-ink opacity-60 disabled:cursor-not-allowed"
         >
           <Icon :icon="SendHorizontal" :size="14" />
         </button>

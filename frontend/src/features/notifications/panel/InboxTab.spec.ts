@@ -90,7 +90,7 @@ describe("InboxTab", () => {
     expect(wrapper.find('[data-test="ai-glow"]').exists()).toBe(true);
     const label = wrapper.find('[data-test="ai-summary-label"]');
     expect(label.exists()).toBe(true);
-    expect(label.classes()).toContain("ai-gradient-text");
+    expect(label.classes()).toContain("text-ai"); // solid AA-legible AI teal (not gradient text)
   });
 
   it("blooms the glow on click (and keeps the existing expand toggle)", async () => {

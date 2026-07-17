@@ -35,6 +35,9 @@
   --color-ai-1: oklch(0.55 0.1 160);
   --color-ai-2: oklch(0.65 0.11 185);
   --color-ai-3: oklch(0.56 0.15 264);
+  /* A darker, WCAG-AA-legible teal (~5.4:1 on ivory) for small AI text labels — the gradient's
+     light teal midpoint fails AA on 11–12px text (reviews confirmed ~3:1). */
+  --color-ai: oklch(0.5 0.11 185);
 
   --radius-sm: 6px;
   --radius-md: 9px;
@@ -162,15 +165,6 @@
   }
 }
 
-.ai-gradient-text {
-  background: linear-gradient(100deg, var(--color-ai-1), var(--color-ai-2), var(--color-ai-3));
-  background-size: 200% 100%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-  animation: ai-gradient-shift 7s linear infinite;
-}
-
 /* 1px animated gradient hairline over an ivory surface (padding-box/border-box trick). */
 .ai-gradient-border {
   border: 1px solid transparent;
@@ -183,14 +177,15 @@
   animation: ai-gradient-shift 7s linear infinite;
 }
 
+/* Static gradient fill (the decorative send button). No drift — matches the bubble border; the
+   drift returns when the composer is wired to a real LLM. */
 .ai-gradient-bg {
   background: linear-gradient(100deg, var(--color-ai-1), var(--color-ai-2), var(--color-ai-3));
-  background-size: 200% 100%;
-  animation: ai-gradient-shift 7s linear infinite;
 }
 
 /* Soft AI glow — summary-card only. Rest opacity is the static state (reduced-motion safe). */
 .ai-glow {
+  --ai-glow-rest: 0.13; /* single source: the resting opacity, also the ai-bloom settle target */
   position: absolute;
   inset: -35%;
   border-radius: 9999px;
@@ -202,7 +197,7 @@
     var(--color-ai-1)
   );
   filter: blur(19px);
-  opacity: var(--ai-glow-rest, 0.13);
+  opacity: var(--ai-glow-rest);
   animation: ai-spin 9s linear infinite;
   transition: opacity 0.35s ease;
 }

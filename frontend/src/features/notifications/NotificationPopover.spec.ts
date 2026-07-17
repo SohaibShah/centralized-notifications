@@ -18,7 +18,7 @@ describe("NotificationPopover", () => {
     const wrapper = mount(NotificationPopover);
     const askAi = wrapper.find('[data-test="ask-ai-label"]');
     expect(askAi.exists()).toBe(true);
-    expect(askAi.classes()).toContain("ai-gradient-text");
+    expect(askAi.classes()).toContain("text-ai"); // solid AA-legible AI teal (not gradient text)
   });
 
   it("renders the Inbox tab selected by default", () => {

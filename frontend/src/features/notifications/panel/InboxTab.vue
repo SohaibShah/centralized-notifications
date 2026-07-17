@@ -15,12 +15,14 @@ const feed = useFeedStore();
 const settings = useSettingsStore();
 const aiOpen = ref(false);
 
-// One-shot "bloom" on the AI summary glow when the card is clicked; cleared when the CSS
-// animation ends (fires ~instantly under reduced motion, leaving the glow at its rest opacity).
-const blooming = ref(false);
+// One-shot "bloom" on the AI summary glow on each click. Bumping the counter re-keys the glow
+// element so the CSS `ai-bloom` animation restarts every time (even mid-flight); it stays 0 on
+// first render so the card doesn't bloom unprompted. Under reduced motion the animation is a
+// no-op and the glow just holds its rest opacity.
+const bloomCount = ref(0);
 function toggleSummary(): void {
   aiOpen.value = !aiOpen.value;
-  blooming.value = true;
+  bloomCount.value++;
 }
 
 // Empty vs filtered-empty are different states with different remedies.
@@ -51,11 +53,11 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
       class="ai-gradient-border group relative mx-3 mt-3 overflow-hidden rounded-lg"
     >
       <span
+        :key="bloomCount"
         data-test="ai-glow"
         aria-hidden="true"
         class="ai-glow pointer-events-none"
-        :class="{ 'is-blooming': blooming }"
-        @animationend="blooming = false"
+        :class="{ 'is-blooming': bloomCount > 0 }"
       />
       <button
         type="button"
@@ -67,7 +69,7 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
         <Icon :icon="Sparkles" :size="13" class="text-ai-2" />
         <span
           data-test="ai-summary-label"
-          class="ai-gradient-text font-mono text-[11px] font-semibold uppercase tracking-wide"
+          class="font-mono text-[11px] font-semibold uppercase tracking-wide text-ai"
           >AI summary</span
         >
         <span
