@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Sparkles } from "@lucide/vue";
+import { SendHorizontal, Sparkles } from "@lucide/vue";
 import Icon from "@/components/ui/Icon.vue";
 
 // AI assistant — VISUAL STUB this pass (design spec). The thread is canned and the composer
@@ -32,14 +32,14 @@ const thread: { from: "ai" | "me"; text: string }[] = [
           :class="
             m.from === 'me'
               ? 'rounded-br-sm bg-accent text-accent-ink'
-              : 'rounded-bl-sm border border-line bg-sunken text-text'
+              : 'ai-bubble-border rounded-bl-sm text-text'
           "
         >
           <Icon
             v-if="m.from === 'ai'"
             :icon="Sparkles"
             :size="13"
-            class="mb-0.5 inline text-accent"
+            class="mb-0.5 inline text-ai-2"
           />
           {{ m.text }}
         </p>
@@ -55,10 +55,15 @@ const thread: { from: "ai" | "me"; text: string }[] = [
           aria-label="Ask the assistant (coming soon)"
           class="flex-1 bg-transparent text-[13px] text-muted placeholder:text-faint disabled:cursor-not-allowed"
         />
-        <span
-          class="rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] uppercase tracking-wide text-faint"
-          >Soon</span
+        <button
+          type="button"
+          disabled
+          data-test="ai-send"
+          aria-label="Send (coming soon)"
+          class="ai-gradient-bg grid size-7 shrink-0 place-items-center rounded-md text-white opacity-60 disabled:cursor-not-allowed"
         >
+          <Icon :icon="SendHorizontal" :size="14" />
+        </button>
       </div>
     </div>
   </div>
