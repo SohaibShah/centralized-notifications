@@ -85,6 +85,23 @@ describe("InboxTab", () => {
     expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
   });
 
+  it("renders the AI summary with a decorative glow and gradient label", () => {
+    const wrapper = mount(InboxTab);
+    expect(wrapper.find('[data-test="ai-glow"]').exists()).toBe(true);
+    const label = wrapper.find('[data-test="ai-summary-label"]');
+    expect(label.exists()).toBe(true);
+    expect(label.classes()).toContain("ai-gradient-text");
+  });
+
+  it("blooms the glow on click (and keeps the existing expand toggle)", async () => {
+    const wrapper = mount(InboxTab);
+    const btn = wrapper.find('button[aria-controls="ai-summary-detail"]');
+    expect(wrapper.find("#ai-summary-detail").exists()).toBe(false); // collapsed
+    await btn.trigger("click");
+    expect(wrapper.find("#ai-summary-detail").exists()).toBe(true); // still expands
+    expect(wrapper.get('[data-test="ai-glow"]').classes()).toContain("is-blooming"); // bloom fired
+  });
+
   it("toggles the AI-summary detail visibility when the disclosure button is clicked", async () => {
     const wrapper = mount(InboxTab);
     const disclosureButton = wrapper.find('button[aria-controls="ai-summary-detail"]');

@@ -15,6 +15,14 @@ const feed = useFeedStore();
 const settings = useSettingsStore();
 const aiOpen = ref(false);
 
+// One-shot "bloom" on the AI summary glow when the card is clicked; cleared when the CSS
+// animation ends (fires ~instantly under reduced motion, leaving the glow at its rest opacity).
+const blooming = ref(false);
+function toggleSummary(): void {
+  aiOpen.value = !aiOpen.value;
+  blooming.value = true;
+}
+
 // Empty vs filtered-empty are different states with different remedies.
 const isEmpty = computed(() => feed.status === "ready" && feed.items.length === 0);
 const isFilteredEmpty = computed(
@@ -40,17 +48,28 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
          Hidden entirely when an admin disables the AI-summary feature (global kill-switch). -->
     <div
       v-if="settings.flags.aiSummaryEnabled"
-      class="mx-3 mt-3 rounded-lg border border-accent/20 bg-accent/5"
+      class="ai-gradient-border group relative mx-3 mt-3 overflow-hidden rounded-lg"
     >
+      <span
+        data-test="ai-glow"
+        aria-hidden="true"
+        class="ai-glow pointer-events-none"
+        :class="{ 'is-blooming': blooming }"
+        @animationend="blooming = false"
+      />
       <button
         type="button"
-        class="flex w-full items-center gap-1.5 px-3 py-2.5 text-left transition-colors duration-100 hover:bg-accent/10"
+        class="relative z-10 flex w-full items-center gap-1.5 rounded-lg px-3 py-2.5 text-left"
         :aria-expanded="aiOpen"
         aria-controls="ai-summary-detail"
-        @click="aiOpen = !aiOpen"
+        @click="toggleSummary"
       >
-        <Icon :icon="Sparkles" :size="13" class="text-accent" />
-        <span class="font-mono text-[11px] uppercase tracking-wide text-accent">AI summary</span>
+        <Icon :icon="Sparkles" :size="13" class="text-ai-2" />
+        <span
+          data-test="ai-summary-label"
+          class="ai-gradient-text font-mono text-[11px] font-semibold uppercase tracking-wide"
+          >AI summary</span
+        >
         <span
           class="ml-1 rounded-full bg-sunken px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wide text-faint"
           >Sample</span
@@ -65,7 +84,7 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
       <p
         v-if="aiOpen"
         id="ai-summary-detail"
-        class="px-3 pb-2.5 text-[12px] leading-relaxed text-muted"
+        class="relative z-10 px-3 pb-2.5 text-[12px] leading-relaxed text-muted"
       >
         2 need action today — an overdue DSAR and a new tracker finding. 4 lower-priority updates
         since yesterday.
