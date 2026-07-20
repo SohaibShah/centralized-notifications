@@ -76,8 +76,8 @@ export function deleteReadNotifications(): Promise<DeleteResult> {
 export function deleteNotificationsOlderThan(days: number): Promise<DeleteResult> {
   return api.post<DeleteResult>("/admin/maintenance/notifications/delete-older-than", { days });
 }
-export function resetModules(): Promise<DeleteResult> {
-  return api.post<DeleteResult>("/admin/maintenance/modules/reset");
+export function resetModules(): Promise<{ updated: number }> {
+  return api.post<{ updated: number }>("/admin/maintenance/modules/reset");
 }
 export function resetSettings(): Promise<{ ok: true }> {
   return api.post<{ ok: true }>("/admin/maintenance/settings/reset");

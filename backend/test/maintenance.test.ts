@@ -6,6 +6,7 @@ import { closePool, query } from "../src/db/pool";
 import { ingest } from "../src/pipeline/ingest";
 import { invalidatePolicyCache } from "../src/pipeline/policy";
 import { buildServer } from "../src/server";
+import { registerModule } from "./support";
 
 const PW = "maint-test-pass";
 
@@ -25,6 +26,7 @@ describe("POST /admin/maintenance", () => {
 
   beforeAll(async () => {
     await migrate();
+    await registerModule("maint");
     await query("DELETE FROM users WHERE username IN ('m_admin', 'm_plain')");
     await query(
       "INSERT INTO roles (key, label) VALUES ('admin', 'Administrator') ON CONFLICT (key) DO NOTHING",
@@ -145,18 +147,21 @@ describe("POST /admin/maintenance", () => {
     expect((await query("SELECT 1 FROM notifications WHERE id = $1", [id])).rowCount).toBe(0);
   });
 
-  it("modules/reset clears discovered modules; settings/reset restores defaults", async () => {
+  it("modules/reset re-enables all modules; settings/reset restores defaults", async () => {
     const cookie = await login("m_admin");
-    await query(
-      "INSERT INTO modules (key, label, enabled) VALUES ('maint-mod','Maint',false) ON CONFLICT (key) DO NOTHING",
-    );
+    // modules/reset re-enables every seeded module (does NOT delete the catalog).
+    await query("UPDATE modules SET enabled = false WHERE key = 'dsr'");
+    const before = await query<{ c: string }>("SELECT count(*) AS c FROM modules");
     const rm = await app.inject({
       method: "POST",
       url: "/admin/maintenance/modules/reset",
       headers: { cookie },
     });
     expect(rm.statusCode).toBe(200);
-    expect((await query("SELECT 1 FROM modules")).rowCount).toBe(0);
+    const after = await query<{ c: string }>("SELECT count(*) AS c FROM modules");
+    expect(Number(after.rows[0]!.c)).toBe(Number(before.rows[0]!.c)); // rows kept
+    const dsr = await query<{ enabled: boolean }>("SELECT enabled FROM modules WHERE key = 'dsr'");
+    expect(dsr.rows[0]!.enabled).toBe(true); // re-enabled
 
     await query(
       "UPDATE global_settings SET ai_summary_enabled = false, retention_days = 99 WHERE id = true",

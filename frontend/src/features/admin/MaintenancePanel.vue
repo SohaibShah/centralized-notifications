@@ -43,15 +43,17 @@ onMounted(async () => {
 
 async function run(
   label: string,
-  fn: () => Promise<{ deleted?: number } | { ok: true }>,
+  fn: () => Promise<{ deleted?: number } | { updated?: number } | { ok: true }>,
 ): Promise<void> {
   busy.value = true;
   error.value = null;
   message.value = null;
   try {
     const res = await fn();
-    const deleted = "deleted" in res ? res.deleted : undefined;
-    message.value = deleted === undefined ? label : `Deleted ${deleted}`;
+    if ("deleted" in res && res.deleted !== undefined) message.value = `Deleted ${res.deleted}`;
+    else if ("updated" in res && res.updated !== undefined)
+      message.value = `Re-enabled ${res.updated}`;
+    else message.value = label;
     confirming.value = null;
     deleteAllText.value = "";
   } catch (err) {

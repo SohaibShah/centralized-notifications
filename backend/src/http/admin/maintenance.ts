@@ -52,9 +52,11 @@ export async function maintenanceRoutes(app: FastifyInstance): Promise<void> {
     "/admin/maintenance/modules/reset",
     { preHandler: requireAdmin },
     async (_req, reply) => {
-      const res = await query("DELETE FROM modules");
+      // Modules are a fixed catalog (migration 007) — "reset" re-enables all of them rather
+      // than deleting the rows.
+      const res = await query("UPDATE modules SET enabled = true WHERE enabled = false");
       invalidatePolicyCache();
-      return reply.code(200).send({ deleted: res.rowCount ?? 0 });
+      return reply.code(200).send({ updated: res.rowCount ?? 0 });
     },
   );
 
