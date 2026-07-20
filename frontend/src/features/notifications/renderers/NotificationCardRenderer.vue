@@ -24,7 +24,7 @@ const emit = defineEmits<{
 const item = computed(() => props.notification);
 const hasActions = computed(() => (item.value.actions?.length ?? 0) > 0);
 // A long body gets an expand affordance even with no actions (single-line truncate hides it).
-const isLongBody = computed(() => (item.value.description?.length ?? 0) > 140);
+const isLongBody = computed(() => (item.value.description?.length ?? 0) > 140 || (item.value.title?.length ?? 0) > 60);
 const canExpand = computed(() => hasActions.value || isLongBody.value);
 const expanded = ref(false);
 
@@ -45,72 +45,40 @@ function toggleRead() {
 </script>
 
 <template>
-  <article
-    class="group border-b border-line px-4 py-2.5 transition-colors duration-100 hover:bg-sunken"
-    :class="[
-      { 'animate-enter': isFresh },
-      item.read ? '' : 'shadow-[inset_2px_0_0_var(--color-accent)]',
-    ]"
-  >
+  <article class="group border-b border-line px-4 py-2.5 transition-colors duration-100 hover:bg-sunken" :class="[
+    { 'animate-enter': isFresh },
+    item.read ? '' : 'shadow-[inset_2px_0_0_var(--color-accent)]',
+  ]">
     <div class="flex cursor-pointer gap-3" @click="activate">
-      <button
-        type="button"
-        data-test="read-toggle"
-        class="mt-0.5 shrink-0 rounded-full transition-colors duration-100"
-        :aria-label="item.read ? 'Mark as unread' : 'Mark as read'"
-        @click.stop="toggleRead"
-      >
-        <Icon
-          :icon="item.read ? CircleCheck : Circle"
-          :size="16"
-          :class="
-            item.read
-              ? 'text-faint hover:text-muted'
-              : 'fill-accent/20 text-accent hover:fill-accent/40'
-          "
-        />
+      <button type="button" data-test="read-toggle" class="mt-0.5 shrink-0 rounded-full transition-colors duration-100"
+        :aria-label="item.read ? 'Mark as unread' : 'Mark as read'" @click.stop="toggleRead">
+        <Icon :icon="item.read ? CircleCheck : Circle" :size="16" :class="item.read
+          ? 'text-faint hover:text-muted'
+          : 'fill-accent/20 text-accent hover:fill-accent/40'
+          " />
       </button>
 
       <div class="min-w-0 flex-1">
         <div class="flex items-baseline justify-between gap-3">
           <h3 class="min-w-0 flex-1">
-            <button
-              type="button"
-              class="block w-full text-left font-sans text-[14px]"
-              :class="[
-                item.read ? 'font-normal text-muted' : 'font-semibold text-text',
-                expanded ? 'break-words' : 'truncate',
-              ]"
-              :title="item.title"
-              :aria-expanded="canExpand ? expanded : undefined"
-              @click.stop="activate"
-            >
+            <button type="button" class="block w-full text-left font-sans text-[14px]" :class="[
+              item.read ? 'font-normal text-muted' : 'font-semibold text-text',
+              expanded ? 'break-words' : 'truncate',
+            ]" :title="item.title" :aria-expanded="canExpand ? expanded : undefined" @click.stop="activate">
               {{ item.title }}
             </button>
           </h3>
-          <Icon
-            v-if="canExpand"
-            :icon="ChevronDown"
-            :size="14"
-            data-test="expand-caret"
+          <Icon v-if="canExpand" :icon="ChevronDown" :size="14" data-test="expand-caret"
             class="shrink-0 self-center text-faint transition-transform duration-150"
-            :class="{ 'rotate-180': expanded }"
-          />
-          <time
-            class="shrink-0 font-mono text-[12px] tabular-nums text-faint"
-            :datetime="item.createdAt"
-            :title="exactTime(item.createdAt)"
-          >
+            :class="{ 'rotate-180': expanded }" />
+          <time class="shrink-0 font-mono text-[12px] tabular-nums text-faint" :datetime="item.createdAt"
+            :title="exactTime(item.createdAt)">
             {{ relativeTime(item.createdAt) }}
           </time>
         </div>
 
-        <p
-          v-if="item.description"
-          data-test="card-body"
-          class="mt-0.5 text-[13px] leading-relaxed text-muted"
-          :class="expanded ? 'whitespace-pre-line break-words' : 'truncate'"
-        >
+        <p v-if="item.description" data-test="card-body" class="mt-0.5 text-[13px] leading-relaxed text-muted"
+          :class="expanded ? 'whitespace-pre-line break-words' : 'truncate'">
           {{ item.description }}
         </p>
 
@@ -124,11 +92,8 @@ function toggleRead() {
               <span class="truncate">{{ item.category }}</span>
             </template>
           </div>
-          <span
-            data-test="priority-label"
-            class="shrink-0 font-mono text-[11px] uppercase tracking-wide"
-            :class="priorityTextClass[item.priority]"
-          >
+          <span data-test="priority-label" class="shrink-0 font-mono text-[11px] uppercase tracking-wide"
+            :class="priorityTextClass[item.priority]">
             {{ priorityLabel[item.priority] }}
           </span>
         </div>
@@ -136,14 +101,9 @@ function toggleRead() {
     </div>
 
     <div v-if="expanded && hasActions" class="mt-2.5 flex flex-wrap gap-2 pl-5">
-      <button
-        v-for="action in item.actions"
-        :key="action.label + action.url"
-        type="button"
-        data-test="action"
+      <button v-for="action in item.actions" :key="action.label + action.url" type="button" data-test="action"
         class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken"
-        @click.stop="emit('action', action, item)"
-      >
+        @click.stop="emit('action', action, item)">
         <Icon v-if="actionIcon(action.icon)" :icon="actionIcon(action.icon)!" :size="13" />
         {{ action.label }}
       </button>
