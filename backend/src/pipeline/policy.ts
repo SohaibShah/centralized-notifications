@@ -8,6 +8,7 @@ export interface FeatureFlags {
 }
 
 interface PolicyState {
+  knownModules: Set<string>;
   disabledModules: Set<string>;
   flags: FeatureFlags;
   retentionDays: number;
@@ -16,7 +17,7 @@ interface PolicyState {
 let cache: PolicyState | null = null;
 
 async function load(): Promise<PolicyState> {
-  const disabled = await query<{ key: string }>("SELECT key FROM modules WHERE enabled = false");
+  const mods = await query<{ key: string; enabled: boolean }>("SELECT key, enabled FROM modules");
   const settings = await query<{
     ai_summary_enabled: boolean;
     chatbot_enabled: boolean;
@@ -29,7 +30,8 @@ async function load(): Promise<PolicyState> {
   );
   const s = settings.rows[0];
   return {
-    disabledModules: new Set(disabled.rows.map((r) => r.key)),
+    knownModules: new Set(mods.rows.map((r) => r.key)),
+    disabledModules: new Set(mods.rows.filter((r) => !r.enabled).map((r) => r.key)),
     flags: {
       aiSummaryEnabled: s?.ai_summary_enabled ?? true,
       chatbotEnabled: s?.chatbot_enabled ?? true,
@@ -49,6 +51,15 @@ async function get(): Promise<PolicyState> {
 export async function isModuleEnabled(key: string): Promise<boolean> {
   const state = await get();
   return !state.disabledModules.has(key);
+}
+
+/**
+ * Known + enabled state for a module key, from the policy cache. Modules are a fixed, seeded
+ * catalog (migration 007) — an unknown key is rejected at intake, not auto-created.
+ */
+export async function resolveModule(key: string): Promise<{ known: boolean; enabled: boolean }> {
+  const state = await get();
+  return { known: state.knownModules.has(key), enabled: !state.disabledModules.has(key) };
 }
 
 export async function getFeatureFlags(): Promise<FeatureFlags> {

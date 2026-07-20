@@ -2,7 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { migrate } from "../src/db/migrate";
 import { closePool, query } from "../src/db/pool";
 import { ingest } from "../src/pipeline/ingest";
-import { getFeatureFlags, invalidatePolicyCache, isModuleEnabled } from "../src/pipeline/policy";
+import {
+  getFeatureFlags,
+  invalidatePolicyCache,
+  isModuleEnabled,
+  resolveModule,
+} from "../src/pipeline/policy";
 
 describe("policy cache", () => {
   beforeAll(async () => migrate());
@@ -31,6 +36,22 @@ describe("policy cache", () => {
     await query("UPDATE global_settings SET ai_summary_enabled = false WHERE id = true");
     invalidatePolicyCache();
     expect((await getFeatureFlags()).aiSummaryEnabled).toBe(false);
+  });
+
+  it("resolveModule reports a seeded module as known", async () => {
+    invalidatePolicyCache();
+    expect(await resolveModule("dsr")).toEqual({ known: true, enabled: true });
+  });
+
+  it("resolveModule reports an unknown module as not known", async () => {
+    invalidatePolicyCache();
+    expect(await resolveModule("pol-nope")).toEqual({ known: false, enabled: true });
+  });
+
+  it("resolveModule reflects a disabled seeded module after invalidation", async () => {
+    await query("INSERT INTO modules (key, label, enabled) VALUES ('pol-off2','Off',false)");
+    invalidatePolicyCache();
+    expect(await resolveModule("pol-off2")).toEqual({ known: true, enabled: false });
   });
 
   it("suppresses (persists but does not deliver) a disabled module's notification", async () => {
