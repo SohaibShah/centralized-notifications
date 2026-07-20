@@ -180,3 +180,26 @@ describe("audienceSchema", () => {
     expect(audienceSchema.safeParse({ scope: "everyone" }).success).toBe(false);
   });
 });
+
+describe("action kind", () => {
+  it("defaults kind to 'link' when omitted", () => {
+    const parsed = actionSchema.parse({ label: "Open", method: "GET", url: "https://app/x" });
+    expect(parsed.kind).toBe("link");
+  });
+
+  it("accepts an explicit dispatch kind", () => {
+    const parsed = actionSchema.parse({
+      label: "Approve",
+      method: "POST",
+      url: "https://app/a",
+      kind: "dispatch",
+    });
+    expect(parsed.kind).toBe("dispatch");
+  });
+
+  it("rejects an unknown kind", () => {
+    expect(() =>
+      actionSchema.parse({ label: "X", method: "GET", url: "https://app/x", kind: "explode" }),
+    ).toThrow();
+  });
+});

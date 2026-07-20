@@ -24,6 +24,7 @@ import { z } from "zod";
 export const NOTIFICATION_PRIORITIES = ["low", "normal", "high", "critical"] as const;
 export const AUDIENCE_SCOPES = ["global", "team", "role", "user"] as const;
 export const ACTION_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
+export const ACTION_KINDS = ["link", "dispatch"] as const;
 
 /**
  * Who a notification is for. `id` identifies the team/role/user for non-global
@@ -48,6 +49,10 @@ export const audienceSchema = z
  */
 export const actionSchema = z.object({
   label: z.string().min(1).max(100),
+  // `kind` is the intent discriminator the UI branches on (NOT the HTTP method): "link" opens the
+  // url in a new tab; "dispatch" runs a server-side action call (stubbed for now). Defaults to
+  // "link" for back-compat. A future "navigate" value would route in-app.
+  kind: z.enum(ACTION_KINDS).default("link"),
   method: z.enum(ACTION_METHODS),
   url: z
     .string()
@@ -88,6 +93,7 @@ export type Notification = z.infer<typeof notificationSchema>;
 export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[number];
 export type AudienceScope = (typeof AUDIENCE_SCOPES)[number];
 export type ActionMethod = (typeof ACTION_METHODS)[number];
+export type ActionKind = (typeof ACTION_KINDS)[number];
 
 /**
  * A notification as the feed *read* API returns it: the full publish contract plus
