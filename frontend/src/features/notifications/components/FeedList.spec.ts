@@ -58,13 +58,14 @@ describe("FeedList", () => {
     expect(wrapper.find('[data-test="mark-all"]').exists()).toBe(false);
   });
 
-  it("collapses the earlier group behind a toggle that reveals the read rows", async () => {
+  it("shows the earlier group expanded by default and the toggle collapses it", async () => {
     const wrapper = mount(FeedList, { props: { groups, hasMore: false, loadingMore: false } });
     const toggle = wrapper.get('[data-test="show-earlier"]');
-    expect(toggle.text()).toContain("2"); // count of read items
-    expect(wrapper.find('[data-test="earlier-list"]').exists()).toBe(false);
+    expect(wrapper.find('[data-test="earlier-list"]').exists()).toBe(true); // expanded by default
+    expect(toggle.text()).toContain("Hide earlier");
     await toggle.trigger("click");
-    expect(wrapper.find('[data-test="earlier-list"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="earlier-list"]').exists()).toBe(false); // collapsed
+    expect(toggle.text()).toContain("2"); // now offers to show the 2 read items
   });
 
   it("omits the earlier toggle when there is no earlier group", () => {
@@ -76,8 +77,7 @@ describe("FeedList", () => {
 
   it("renders earlier items with the full card and re-emits unread", async () => {
     const wrapper = mount(FeedList, { props: { groups, hasMore: false, loadingMore: false } });
-    await wrapper.get('[data-test="show-earlier"]').trigger("click");
-    const list = wrapper.get('[data-test="earlier-list"]');
+    const list = wrapper.get('[data-test="earlier-list"]'); // expanded by default
     // The read cards expose the read/unread toggle (proves the full card, not the stripped row).
     await list.get('[data-test="read-toggle"]').trigger("click");
     expect(wrapper.emitted("unread")).toBeTruthy();

@@ -18,7 +18,8 @@ const emit = defineEmits<{
 
 const needsAction = computed(() => props.groups.find((g) => g.key === "needs-action"));
 const earlier = computed(() => props.groups.find((g) => g.key === "earlier"));
-const showEarlier = ref(false);
+// Earlier (read) rows show expanded by default; the toggle collapses them ("Hide earlier").
+const showEarlier = ref(true);
 
 // Only genuinely-unread rows count — sticky-read items sitting in Needs action don't inflate it.
 const unreadInNeedsAction = computed(
