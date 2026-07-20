@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ChevronDown } from "@lucide/vue";
+import { ChevronDown, Circle, CircleCheck } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Icon from "@/components/ui/Icon.vue";
 import { actionIcon } from "@/design/icons";
-import { priorityDotClass, priorityLabel } from "@/design/tokens";
+import { priorityLabel, priorityTextClass } from "@/design/tokens";
 import { exactTime, relativeTime } from "@/lib/time";
 
 // Config-driven feed row. Compact by default; clicking anywhere on the card (body or title)
@@ -36,8 +36,11 @@ function activate() {
   if (canExpand.value) expanded.value = !expanded.value;
   emit("open", item.value); // parent → markRead (no-op if already read)
 }
-function markUnread() {
-  emit("unread", item.value);
+function toggleRead() {
+  // Explicit read-state toggle: marks read WITHOUT expanding (open-and-seen still lives on the
+  // card body). Reuses the open/unread emits the parent maps to feed.markRead / feed.markUnread.
+  if (item.value.read) emit("unread", item.value);
+  else emit("open", item.value);
 }
 </script>
 
@@ -50,12 +53,19 @@ function markUnread() {
     ]"
   >
     <div class="flex cursor-pointer gap-3" @click="activate">
-      <span
-        role="img"
-        :aria-label="`${priorityLabel[item.priority]} priority`"
-        class="mt-1.5 size-2 shrink-0 rounded-full"
-        :class="priorityDotClass[item.priority]"
-      />
+      <button
+        type="button"
+        data-test="read-toggle"
+        class="mt-0.5 shrink-0 rounded-full transition-colors duration-100"
+        :aria-label="item.read ? 'Mark as unread' : 'Mark as read'"
+        @click.stop="toggleRead"
+      >
+        <Icon
+          :icon="item.read ? CircleCheck : Circle"
+          :size="16"
+          :class="item.read ? 'text-faint hover:text-muted' : 'fill-accent/20 text-accent'"
+        />
+      </button>
 
       <div class="min-w-0 flex-1">
         <div class="flex items-baseline justify-between gap-3">
@@ -98,8 +108,7 @@ function markUnread() {
         </p>
 
         <!-- Single-line meta row: the module/category text truncates in a flex-1 group so the
-             right-hand affordance (hint or Mark-as-unread) keeps a stable position on every card
-             and revealing the hover hint never wraps the row (no card-height jump). -->
+             right-hand priority label keeps a stable position on every card. -->
         <div class="mt-1 flex items-center gap-x-2 text-[12px] text-faint">
           <div class="flex min-w-0 flex-1 items-center gap-x-2">
             <span class="shrink-0 font-mono uppercase tracking-wide">{{ item.module }}</span>
@@ -109,21 +118,12 @@ function markUnread() {
             </template>
           </div>
           <span
-            v-if="!item.read && !expanded"
-            aria-hidden="true"
-            class="hidden shrink-0 font-mono text-[11px] uppercase tracking-wide text-accent group-hover:inline"
+            data-test="priority-label"
+            class="shrink-0 font-mono text-[11px] uppercase tracking-wide"
+            :class="priorityTextClass[item.priority]"
           >
-            click to open
+            {{ priorityLabel[item.priority] }}
           </span>
-          <button
-            v-if="item.read"
-            type="button"
-            data-test="mark-unread"
-            class="shrink-0 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:text-text"
-            @click.stop="markUnread"
-          >
-            Mark as unread
-          </button>
         </div>
       </div>
     </div>

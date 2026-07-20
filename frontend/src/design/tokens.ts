@@ -15,6 +15,14 @@ export const priorityDotClass: Record<NotificationPriority, string> = {
   low: "ring-1 ring-inset ring-faint",
 };
 
+/** Priority → semantic text color for the card's priority label. */
+export const priorityTextClass: Record<NotificationPriority, string> = {
+  critical: "text-danger",
+  high: "text-warning",
+  normal: "text-muted",
+  low: "text-faint",
+};
+
 export const priorityLabel: Record<NotificationPriority, string> = {
   critical: "Critical",
   high: "High",

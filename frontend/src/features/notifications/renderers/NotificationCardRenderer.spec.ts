@@ -7,7 +7,15 @@ import { feedItem } from "@/test-support/feedItem";
 
 function withActions(over: Partial<FeedNotification> & { id: string }): FeedNotification {
   return feedItem({
-    actions: [{ label: "Open", url: "https://example.com", method: "GET", icon: "external-link" }],
+    actions: [
+      {
+        label: "Open",
+        kind: "link",
+        url: "https://example.com",
+        method: "GET",
+        icon: "external-link",
+      },
+    ],
     ...over,
   });
 }
@@ -19,7 +27,7 @@ describe("NotificationCardRenderer", () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: feedItem({ id: "a" }) },
     });
-    expect(wrapper.find("button").text()).toContain("Title");
+    expect(wrapper.get("h3 button").text()).toContain("Title");
     // Not expandable → no aria-expanded disclosure on the title.
     expect(wrapper.get("h3 button").attributes("aria-expanded")).toBeUndefined();
     await wrapper.get("h3 button").trigger("click");
@@ -80,17 +88,36 @@ describe("NotificationCardRenderer", () => {
     expect(body.classes()).not.toContain("truncate"); // expanded reveals full text
   });
 
-  it("offers Mark as unread only on a read card and emits unread", async () => {
-    const unread = mount(NotificationCardRenderer, {
-      props: { notification: feedItem({ id: "a" }) },
+  it("shows a 'Mark as read' toggle on an unread card that emits open without expanding", async () => {
+    const wrapper = mount(NotificationCardRenderer, {
+      props: { notification: withActions({ id: "a" }) }, // expandable, unread
     });
-    expect(unread.find('[data-test="mark-unread"]').exists()).toBe(false); // unread item: no control
+    const toggle = wrapper.get('[data-test="read-toggle"]');
+    expect(toggle.attributes("aria-label")).toBe("Mark as read");
+    await toggle.trigger("click");
+    expect(wrapper.emitted("open")).toHaveLength(1);
+    expect(wrapper.emitted("unread")).toBeUndefined();
+    expect(wrapper.find('[data-test="action"]').exists()).toBe(false); // did NOT expand
+    expect(wrapper.get("h3 button").attributes("aria-expanded")).toBe("false");
+  });
 
+  it("shows a 'Mark as unread' toggle on a read card that emits unread", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: feedItem({ id: "b", read: true }) },
     });
-    await wrapper.get('[data-test="mark-unread"]').trigger("click");
+    const toggle = wrapper.get('[data-test="read-toggle"]');
+    expect(toggle.attributes("aria-label")).toBe("Mark as unread");
+    await toggle.trigger("click");
     expect(wrapper.emitted("unread")).toHaveLength(1);
+  });
+
+  it("renders the priority label in its semantic color", () => {
+    const wrapper = mount(NotificationCardRenderer, {
+      props: { notification: feedItem({ id: "a", priority: "critical" }) },
+    });
+    const label = wrapper.get('[data-test="priority-label"]');
+    expect(label.text()).toBe("Critical");
+    expect(label.classes()).toContain("text-danger");
   });
 
   it("shows a decorative expand caret on an expandable card, rotating when open", async () => {
