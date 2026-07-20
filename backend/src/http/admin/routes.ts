@@ -2,13 +2,12 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { requireAdmin, requireUser } from "../../auth/guards";
 import { query } from "../../db/pool";
-import { deriveLabel } from "../../pipeline/modules";
 import { getFeatureFlags, getRetentionDays, invalidatePolicyCache } from "../../pipeline/policy";
 
 const moduleParamsSchema = z.object({ key: z.string().min(1).max(100) });
-const modulePatchSchema = z
-  .object({ enabled: z.boolean().optional(), label: z.string().max(100).optional() })
-  .refine((b) => b.enabled !== undefined || b.label !== undefined, "no fields to update");
+// Modules are a fixed, seeded catalog; `label` is no longer editable — only the enabled
+// kill-switch is admin-mutable.
+const modulePatchSchema = z.object({ enabled: z.boolean() });
 const settingsPatchSchema = z
   .object({
     aiSummaryEnabled: z.boolean().optional(),
@@ -75,17 +74,10 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     const exists = await query("SELECT 1 FROM modules WHERE key = $1", [params.data.key]);
     if (exists.rowCount === 0) return reply.code(404).send({ error: "module not found" });
 
-    if (body.data.enabled !== undefined) {
-      await query("UPDATE modules SET enabled = $2 WHERE key = $1", [
-        params.data.key,
-        body.data.enabled,
-      ]);
-    }
-    if (body.data.label !== undefined) {
-      const trimmed = body.data.label.trim();
-      const label = trimmed === "" ? deriveLabel(params.data.key) : trimmed;
-      await query("UPDATE modules SET label = $2 WHERE key = $1", [params.data.key, label]);
-    }
+    await query("UPDATE modules SET enabled = $2 WHERE key = $1", [
+      params.data.key,
+      body.data.enabled,
+    ]);
     invalidatePolicyCache();
     return reply.code(204).send();
   });

@@ -168,28 +168,18 @@ describe("admin API", () => {
     });
   });
 
-  it("renames a module label and re-derives on empty", async () => {
-    await app.inject({
+  it("ignores a label-only body (label is no longer editable) with 400", async () => {
+    const res = await app.inject({
       method: "PATCH",
       url: "/admin/modules/admin-dsar",
       headers: { cookie: adminCookie },
-      payload: { label: "DSAR (Requests)" },
+      payload: { label: "Renamed" },
     });
-    let mods = (
+    expect(res.statusCode).toBe(400); // body has no updatable field
+    const mods = (
       await app.inject({ method: "GET", url: "/admin/modules", headers: { cookie: adminCookie } })
     ).json() as { key: string; label: string }[];
-    expect(mods.find((x) => x.key === "admin-dsar")?.label).toBe("DSAR (Requests)");
-
-    await app.inject({
-      method: "PATCH",
-      url: "/admin/modules/admin-dsar",
-      headers: { cookie: adminCookie },
-      payload: { label: "" },
-    });
-    mods = (
-      await app.inject({ method: "GET", url: "/admin/modules", headers: { cookie: adminCookie } })
-    ).json() as { key: string; label: string }[];
-    expect(mods.find((x) => x.key === "admin-dsar")?.label).toBe("Admin Dsar");
+    expect(mods.find((x) => x.key === "admin-dsar")?.label).toBe("Admin Dsar"); // unchanged
   });
 
   it("404s a PATCH to an unknown module and 400s a bad body", async () => {
