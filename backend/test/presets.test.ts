@@ -38,4 +38,11 @@ describe("presets", () => {
     expect(sampleActions(2)).toHaveLength(2);
     expect(sampleActions(3)).toHaveLength(3);
   });
+
+  it("tags sample actions with an explicit kind (dispatch for POST-style actions)", () => {
+    const byLabel = Object.fromEntries(SAMPLE_ACTIONS.map((a) => [a.label, a.kind]));
+    expect(byLabel["Review"]).toBe("link");
+    expect(byLabel["Approve"]).toBe("dispatch");
+    expect(byLabel["Dismiss"]).toBe("dispatch");
+  });
 });

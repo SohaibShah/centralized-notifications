@@ -51,13 +51,21 @@ const MODULE_TEMPLATES: Record<string, Template[]> = {
         return [
           {
             label: "Approve",
+            kind: "dispatch",
             method: "POST",
             url: `https://app/api/access/${id}/approve`,
             icon: "check",
           },
-          { label: "Deny", method: "POST", url: `https://app/api/access/${id}/deny`, icon: "x" },
+          {
+            label: "Deny",
+            kind: "dispatch",
+            method: "POST",
+            url: `https://app/api/access/${id}/deny`,
+            icon: "x",
+          },
           {
             label: "Review",
+            kind: "link",
             method: "GET",
             url: `https://app/access/${id}`,
             icon: "external-link",
@@ -77,6 +85,7 @@ const MODULE_TEMPLATES: Record<string, Template[]> = {
       actions: (rng) => [
         {
           label: "Open DSR",
+          kind: "link",
           method: "GET",
           url: `https://app/dsr/${shortId(rng)}`,
           icon: "folder-open",
@@ -112,6 +121,7 @@ const MODULE_TEMPLATES: Record<string, Template[]> = {
       actions: () => [
         {
           label: "View assessments",
+          kind: "link",
           method: "GET",
           url: "https://app/assessments?state=draft",
           icon: "clipboard-list",

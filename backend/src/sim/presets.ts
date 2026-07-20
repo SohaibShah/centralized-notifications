@@ -20,9 +20,27 @@ export type PresetId = (typeof PRESET_IDS)[number];
 
 /** Canned actions the generator can attach (custom mode's `sampleActions`, and presets). */
 export const SAMPLE_ACTIONS: NotificationAction[] = [
-  { label: "Review", method: "GET", url: "https://app.example.com/review", icon: "external-link" },
-  { label: "Approve", method: "POST", url: "https://app.example.com/approve", icon: "check" },
-  { label: "Dismiss", method: "POST", url: "https://app.example.com/dismiss", icon: "x" },
+  {
+    label: "Review",
+    kind: "link",
+    method: "GET",
+    url: "https://app.example.com/review",
+    icon: "external-link",
+  },
+  {
+    label: "Approve",
+    kind: "dispatch",
+    method: "POST",
+    url: "https://app.example.com/approve",
+    icon: "check",
+  },
+  {
+    label: "Dismiss",
+    kind: "dispatch",
+    method: "POST",
+    url: "https://app.example.com/dismiss",
+    icon: "x",
+  },
 ];
 
 /** First `n` canned actions (n clamped to the available list). */
@@ -54,6 +72,7 @@ export const PRESETS: Record<
       actions: [
         {
           label: "Open DSR",
+          kind: "link",
           method: "GET",
           url: "https://app.example.com/dsr/1",
           icon: "folder-open",
@@ -101,6 +120,7 @@ export const PRESETS: Record<
       actions: [
         {
           label: "View assessments",
+          kind: "link",
           method: "GET",
           url: "https://app.example.com/assessments",
           icon: "clipboard-list",
