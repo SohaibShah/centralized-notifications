@@ -70,6 +70,12 @@ is reported as `invalid` in the results and does **not** fail the batch or chang
 status — a batch of 500 with one bad item still returns `200`. Contract-invalid input is
 logged and skipped, never thrown.
 
+An item whose `module` is not in the **fixed, seeded module catalog** (`dsr`,
+`access-governance`, `data-mapping`, `assessments`) is likewise reported `invalid` — it is
+logged server-side (`[intake] rejected notification from unknown module "<key>"`) and is
+**not** persisted or delivered. Modules are no longer auto-discovered on first publish; a
+notification from an unknown module is treated the same as a malformed payload.
+
 Only genuine infrastructure failures (e.g. the database is down) propagate as a `5xx`;
 because persistence is idempotent on `id`, the producer can safely retry the whole request.
 
@@ -85,12 +91,12 @@ stored row is **not** overwritten. This matters because upstream delivery is at-
 A summary plus a per-item `results` array **in request order**. `id` is present for
 `accepted` and `duplicate` items, and **absent** for `invalid` ones.
 
-| Field       | Type                                                                     | Notes                                   |
-| ----------- | ------------------------------------------------------------------------ | --------------------------------------- |
-| `accepted`  | number                                                                   | Count of newly persisted notifications. |
-| `duplicate` | number                                                                   | Count deduped against an existing `id`. |
-| `invalid`   | number                                                                   | Count that failed contract validation.  |
-| `results`   | Array<{ status: `"accepted" \| "duplicate" \| "invalid"`, id?: string }> | Per-item outcome, in request order.     |
+| Field       | Type                                                                     | Notes                                                                                   |
+| ----------- | ------------------------------------------------------------------------ | --------------------------------------------------------------------------------------- |
+| `accepted`  | number                                                                   | Count of newly persisted notifications.                                                 |
+| `duplicate` | number                                                                   | Count deduped against an existing `id`.                                                 |
+| `invalid`   | number                                                                   | Count that failed contract validation **or** named a module outside the seeded catalog. |
+| `results`   | Array<{ status: `"accepted" \| "duplicate" \| "invalid"`, id?: string }> | Per-item outcome, in request order.                                                     |
 
 ### Examples
 
@@ -191,9 +197,9 @@ Request without a valid `x-internal-token` header:
 | 401    | `{ "error": "invalid or missing internal token" }`              | `x-internal-token` header absent or did not match `INTERNAL_INTAKE_TOKEN`.  |
 | 429    | (rate-limit body from `@fastify/rate-limit`)                    | Per-IP rate limit exceeded (see [Rate limiting](#rate-limiting)).           |
 
-Note: a **contract-invalid notification is not a `4xx`** — it comes back inside a `200`
-response as an `invalid` result. The `400`s above are about the request envelope (shape and
-batch size), not about individual notification validity.
+Note: a **contract-invalid notification — or one from an unknown module — is not a `4xx`** —
+it comes back inside a `200` response as an `invalid` result. The `400`s above are about the
+request envelope (shape and batch size), not about individual notification validity.
 
 ### Rate limiting
 
@@ -204,5 +210,5 @@ the limit is relaxed (10000/min) so the test suite's rapid injects aren't thrott
 ### Side effects
 
 Accepted notifications are **persisted to the `notifications` table** (Postgres). Duplicates
-and invalid items write nothing. **No delivery / fan-out happens yet** — no Redis Stream
-event is published at this stage; that lands in a later task.
+and invalid items (including unknown-module rejections) write nothing. **No delivery / fan-out
+happens yet** — no Redis Stream event is published at this stage; that lands in a later task.

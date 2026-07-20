@@ -20,8 +20,9 @@ Source of truth: [`backend/src/http/admin/routes.ts`](../../backend/src/http/adm
 **Auth:** required, admin only ([`requireAdmin`](../../backend/src/auth/guards.ts) — `401` if
 not logged in, `403` if logged in but not an admin).
 
-Lists every known module (auto-discovered on first publish, per the
-[notification contract](./notifications.md)) with its enabled state and aggregate
+Lists every module in the **fixed, seeded catalog** (`dsr`, `access-governance`,
+`data-mapping`, `assessments` — see [migration 007](../../backend/migrations/007_seed_modules.sql)
+and the [notification contract](./notifications.md)) with its enabled state and aggregate
 notification counts, ordered by last-seen **descending**.
 
 ### Request
@@ -32,18 +33,18 @@ No parameters.
 
 An array of module summaries:
 
-| Field                 | Type              | Notes                                                                                           |
-| --------------------- | ----------------- | ----------------------------------------------------------------------------------------------- |
-| `key`                 | string            | The module's identifier, as sent in the notification's `module` field.                          |
-| `label`               | string            | Display label. Auto-derived title-case of `key` unless overridden via the `PATCH` below.        |
-| `enabled`             | boolean           | Whether the module is currently allowed to deliver notifications.                               |
-| `lastSeenAt`          | string (ISO 8601) | Timestamp of the module's most recent publish.                                                  |
-| `total`               | number            | Count of **all** notifications ever recorded for this module (suppressed or not).               |
-| `suppressed`          | number            | Of `total`, how many were recorded but not delivered (published while the module was disabled). |
-| `byPriority.critical` | number            | Count of this module's notifications at `critical` priority.                                    |
-| `byPriority.high`     | number            | Count at `high` priority.                                                                       |
-| `byPriority.normal`   | number            | Count at `normal` priority.                                                                     |
-| `byPriority.low`      | number            | Count at `low` priority.                                                                        |
+| Field                 | Type              | Notes                                                                                               |
+| --------------------- | ----------------- | --------------------------------------------------------------------------------------------------- |
+| `key`                 | string            | The module's identifier, as sent in the notification's `module` field.                              |
+| `label`               | string            | Display label, from the seed catalog (e.g. `"Data Mapping"`). **Not editable** — see `PATCH` below. |
+| `enabled`             | boolean           | Whether the module is currently allowed to deliver notifications.                                   |
+| `lastSeenAt`          | string (ISO 8601) | Timestamp of the module's most recent publish.                                                      |
+| `total`               | number            | Count of **all** notifications ever recorded for this module (suppressed or not).                   |
+| `suppressed`          | number            | Of `total`, how many were recorded but not delivered (published while the module was disabled).     |
+| `byPriority.critical` | number            | Count of this module's notifications at `critical` priority.                                        |
+| `byPriority.high`     | number            | Count at `high` priority.                                                                           |
+| `byPriority.normal`   | number            | Count at `normal` priority.                                                                         |
+| `byPriority.low`      | number            | Count at `low` priority.                                                                            |
 
 ```json
 [
@@ -74,7 +75,8 @@ None — read-only.
 
 **Auth:** required, admin only ([`requireAdmin`](../../backend/src/auth/guards.ts) — `401`/`403` as above).
 
-Enables/disables a module and/or overrides its display label.
+Enables/disables a module. This is the only mutable field — labels come from the seed catalog
+and are **not** editable.
 
 ### Request
 
@@ -84,14 +86,14 @@ Path parameter:
 | ----- | -------------------- | -------- | ------------------------ |
 | `key` | string (1–100 chars) | yes      | The module's identifier. |
 
-Body — at least one of the two fields is required:
+Body — only `enabled` is accepted, and it is **required**:
 
-| Field     | Type                 | Required | Notes                                                                                                                                                                                 |
-| --------- | -------------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `enabled` | boolean              | no*      | Enable/disable the module.                                                                                                                                                            |
-| `label`   | string (≤ 100 chars) | no*      | Override the display label. An empty or whitespace-only value **re-derives** the auto title-case label from `key` (e.g. `"data-mapping"` → `"Data Mapping"`) rather than clearing it. |
+| Field     | Type    | Required | Notes                      |
+| --------- | ------- | -------- | -------------------------- |
+| `enabled` | boolean | yes      | Enable/disable the module. |
 
-\* At least one of `enabled`/`label` must be present — a body with neither is rejected as `400`.
+A body without `enabled` (including an empty body, or one carrying only a now-unsupported
+`label`) is rejected as `400`.
 
 ```json
 { "enabled": false }
@@ -103,17 +105,17 @@ Body — at least one of the two fields is required:
 
 ### Errors
 
-| Status | Body                                     | Reason                                                                                    |
-| ------ | ---------------------------------------- | ----------------------------------------------------------------------------------------- |
-| `400`  | `{ "error": "invalid module key" }`      | `key` path parameter is empty or over 100 chars.                                          |
-| `400`  | `{ "error": "invalid request body" }`    | Body fails validation — neither `enabled` nor `label` present, or `label` over 100 chars. |
-| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                  |
-| `403`  | `{ "error": "admin role required" }`     | Logged in, but not an admin.                                                              |
-| `404`  | `{ "error": "module not found" }`        | No module with that `key` exists (it has never published a notification).                 |
+| Status | Body                                     | Reason                                                         |
+| ------ | ---------------------------------------- | -------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid module key" }`      | `key` path parameter is empty or over 100 chars.               |
+| `400`  | `{ "error": "invalid request body" }`    | Body fails validation — `enabled` is missing or not a boolean. |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                       |
+| `403`  | `{ "error": "admin role required" }`     | Logged in, but not an admin.                                   |
+| `404`  | `{ "error": "module not found" }`        | No module with that `key` exists in the seeded catalog.        |
 
 ### Side effects
 
-Updates the `modules` row (`enabled` and/or `label`). **Invalidates the in-memory policy
+Updates the `modules` row's `enabled` column. **Invalidates the in-memory policy
 cache** ([`invalidatePolicyCache`](../../backend/src/pipeline/policy.ts)) — a disable/enable
 takes effect starting with the module's **next ingest**, not retroactively on already-persisted
 notifications.
@@ -358,7 +360,9 @@ feed. No `x-internal-token` is used or exposed.
 ## Maintenance (dev/QA)
 
 The `/admin/maintenance/*` routes are dev/QA database-reset helpers, all
-`POST` and all **destructive**. Like [`POST /admin/simulate`](#post-adminsimulate), they
+`POST` and mostly **destructive** (the exception is
+[`modules/reset`](#post-adminmaintenancemodulesreset), which now only re-enables the seeded
+catalog rather than deleting it). Like [`POST /admin/simulate`](#post-adminsimulate), they
 are registered **only when `NODE_ENV !== "production"`** (same
 [`isSimulatorEnabled`](../../backend/src/server.ts) guard — registered together with the
 simulator). In production every route on this page below is genuinely **absent**: a request
@@ -474,9 +478,9 @@ invalidation.
 
 ### POST /admin/maintenance/modules/reset
 
-Deletes **all rows** in the `modules` table. Modules re-discover themselves on their next
-publish (per the [notification contract](./notifications.md)), so this also clears any
-admin enable/disable and label overrides.
+**Re-enables all modules** in the seeded catalog (`UPDATE modules SET enabled = true WHERE
+enabled = false`). It no longer deletes the catalog — the fixed rows and their seed labels
+stay in place; only any admin disable is cleared.
 
 #### Request
 
@@ -485,18 +489,18 @@ No parameters.
 #### Response `200`
 
 ```json
-{ "deleted": 6 }
+{ "updated": 2 }
 ```
 
-| Field     | Type   | Notes                            |
-| --------- | ------ | -------------------------------- |
-| `deleted` | number | Count of `modules` rows deleted. |
+| Field     | Type   | Notes                                                                   |
+| --------- | ------ | ----------------------------------------------------------------------- |
+| `updated` | number | Count of `modules` rows flipped back to `enabled` (i.e. were disabled). |
 
 #### Side effects
 
-Deletes all `modules` rows and **invalidates the in-memory policy cache**
-([`invalidatePolicyCache`](../../backend/src/pipeline/policy.ts)). Modules re-appear (enabled,
-auto-derived label) on their next ingest.
+Sets every disabled module back to `enabled` and **invalidates the in-memory policy cache**
+([`invalidatePolicyCache`](../../backend/src/pipeline/policy.ts)) — the re-enabled modules
+deliver again starting on their next ingest.
 
 ### POST /admin/maintenance/settings/reset
 
