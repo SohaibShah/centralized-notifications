@@ -31,15 +31,15 @@ const isFilteredEmpty = computed(
   () => feed.status === "ready" && feed.items.length > 0 && feed.groups.length === 0,
 );
 
-// A module action is a module-owned callback. GET is safe to open directly; other methods
-// need the authenticated action-dispatch proxy (Week 4), so they're surfaced but not fired.
+// A module action's `kind` (not its HTTP method) decides UI behavior. "link" opens the url in a
+// new tab; "dispatch" will run through a server-side action proxy (a later cycle) — stubbed now.
 // Firing any action also marks the notification read.
 function onAction(action: NotificationAction, notification: FeedNotification) {
   feed.markRead(notification.id);
-  if (action.method === "GET") {
+  if (action.kind === "link") {
     window.open(action.url, "_blank", "noopener,noreferrer");
   } else {
-    console.info(`[actions] "${action.label}" (${action.method}) will dispatch in Week 4`);
+    console.info(`[actions] "${action.label}" (dispatch) — coming soon`);
   }
 }
 </script>

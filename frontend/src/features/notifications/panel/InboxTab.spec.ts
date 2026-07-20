@@ -57,14 +57,20 @@ describe("InboxTab", () => {
     expect(wrapper.text()).toContain("No notifications match your filters");
   });
 
-  it("opens a new tab for a GET action surfaced on a card", async () => {
+  it("opens a new tab for a link action", async () => {
     const feed = useFeedStore();
     feed.items = [
       feedItem({
         id: "a",
         read: false,
         actions: [
-          { label: "Open", url: "https://example.com", method: "GET", icon: "external-link" },
+          {
+            label: "Open",
+            kind: "link",
+            url: "https://example.com",
+            method: "GET",
+            icon: "external-link",
+          },
         ],
       }),
     ];
@@ -82,6 +88,29 @@ describe("InboxTab", () => {
     await actionButton!.trigger("click");
 
     expect(openSpy).toHaveBeenCalledWith("https://example.com", "_blank", "noopener,noreferrer");
+    expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
+  });
+
+  it("does not open a tab for a dispatch action but still marks read", async () => {
+    const feed = useFeedStore();
+    feed.items = [
+      feedItem({
+        id: "a",
+        read: false,
+        // GET method but dispatch kind: proves the UI branches on kind, not the HTTP method
+        // (the old method-based code would have opened a GET in a new tab).
+        actions: [
+          { label: "Approve", kind: "dispatch", method: "GET", url: "https://example.com/a" },
+        ],
+      }),
+    ];
+    feed.status = "ready";
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const wrapper = mount(InboxTab);
+    await wrapper.get("h3 button").trigger("click");
+    const btn = wrapper.findAll("button").find((b) => b.text().trim() === "Approve");
+    await btn!.trigger("click");
+    expect(openSpy).not.toHaveBeenCalled();
     expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
   });
 
