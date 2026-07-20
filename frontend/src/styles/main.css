@@ -28,6 +28,9 @@
   --color-danger: oklch(0.52 0.17 28);
   --color-danger-ink: oklch(0.98 0.01 28);
   --color-warning: oklch(0.72 0.14 68);
+  /* A darker amber (~5:1 on the ivory card bg) for `high`-priority TEXT — the light `warning`
+     token above is tuned for dots/fills and fails WCAG AA as small text (~2.4:1). */
+  --color-warning-strong: oklch(0.53 0.13 68);
   --color-success: oklch(0.55 0.1 150);
 
   /* AI-scoped identity — "vivid but cohesive" cool gradient (approved). OKLCH conversions of

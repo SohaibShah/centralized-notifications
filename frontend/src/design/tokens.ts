@@ -18,7 +18,8 @@ export const priorityDotClass: Record<NotificationPriority, string> = {
 /** Priority → semantic text color for the card's priority label. */
 export const priorityTextClass: Record<NotificationPriority, string> = {
   critical: "text-danger",
-  high: "text-warning",
+  // A darker amber than the `warning` dot/fill token — that one fails WCAG AA as small text.
+  high: "text-warning-strong",
   normal: "text-muted",
   low: "text-faint",
 };
