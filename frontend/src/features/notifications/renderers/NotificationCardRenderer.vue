@@ -76,8 +76,11 @@ function toggleRead() {
           <h3 class="min-w-0 flex-1">
             <button
               type="button"
-              class="block w-full truncate text-left font-sans text-[14px]"
-              :class="item.read ? 'font-normal text-muted' : 'font-semibold text-text'"
+              class="block w-full text-left font-sans text-[14px]"
+              :class="[
+                item.read ? 'font-normal text-muted' : 'font-semibold text-text',
+                expanded ? 'break-words' : 'truncate',
+              ]"
               :title="item.title"
               :aria-expanded="canExpand ? expanded : undefined"
               @click.stop="activate"

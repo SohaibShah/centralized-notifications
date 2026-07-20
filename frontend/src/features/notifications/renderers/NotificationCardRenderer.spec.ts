@@ -88,6 +88,17 @@ describe("NotificationCardRenderer", () => {
     expect(body.classes()).not.toContain("truncate"); // expanded reveals full text
   });
 
+  it("expands the title (drops truncate) when the card is opened", async () => {
+    const wrapper = mount(NotificationCardRenderer, {
+      props: { notification: withActions({ id: "a", title: "x".repeat(120) }) },
+    });
+    const title = wrapper.get("h3 button");
+    expect(title.classes()).toContain("truncate"); // collapsed → ellipsis
+    await title.trigger("click");
+    expect(title.classes()).not.toContain("truncate"); // expanded → full title
+    expect(title.classes()).toContain("break-words");
+  });
+
   it("shows a 'Mark as read' toggle on an unread card that emits open without expanding", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: withActions({ id: "a" }) }, // expandable, unread
