@@ -57,16 +57,13 @@ describe("ModulesPanel", () => {
     getMock.mockResolvedValueOnce([]);
     const wrapper = mount(ModulesPanel);
     await flushPromises();
-    expect(wrapper.text()).toContain("No modules yet");
+    expect(wrapper.text()).toContain("No modules configured");
   });
 
-  it("renames a label inline on Enter", async () => {
+  it("renders the module label as static text (no rename control)", async () => {
     const wrapper = mount(ModulesPanel);
     await flushPromises();
-    await wrapper.get('[data-test="rename-dsar"]').trigger("click");
-    const input = wrapper.get('[data-test="rename-input-dsar"]');
-    await input.setValue("DSAR (Requests)");
-    await input.trigger("keydown.enter");
-    expect(patchMock).toHaveBeenCalledWith("/admin/modules/dsar", { label: "DSAR (Requests)" });
+    expect(wrapper.text()).toContain("Dsar");
+    expect(wrapper.find('[data-test="rename-dsar"]').exists()).toBe(false);
   });
 });

@@ -1,14 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { Boxes, Pencil } from "@lucide/vue";
+import { Boxes } from "@lucide/vue";
 import type { NotificationPriority } from "@notifications/shared";
 import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import Button from "@/components/ui/Button.vue";
 import Chip from "@/components/ui/Chip.vue";
-import Icon from "@/components/ui/Icon.vue";
 import Spinner from "@/components/ui/Spinner.vue";
 import StatePanel from "@/components/ui/StatePanel.vue";
-import { priorityDotClass, priorityLabel } from "@/design/tokens";
+import { priorityLabel } from "@/design/tokens";
 import { relativeTime } from "@/lib/time";
 import { fetchModules, patchModule, type AdminModule } from "./adminApi";
 
@@ -18,8 +17,6 @@ const modules = ref<AdminModule[]>([]);
 const status = ref<"loading" | "ready" | "error">("loading");
 const priorityFilter = ref<NotificationPriority | null>(null);
 const sort = ref<Sort>("critical");
-const editingKey = ref<string | null>(null);
-const draftLabel = ref("");
 
 async function load(): Promise<void> {
   status.value = "loading";
@@ -59,34 +56,13 @@ async function toggle(m: AdminModule): Promise<void> {
     m.enabled = !next; // revert
   }
 }
-
-function startRename(m: AdminModule): void {
-  editingKey.value = m.key;
-  draftLabel.value = m.label;
-}
-function cancelRename(): void {
-  editingKey.value = null;
-}
-async function commitRename(m: AdminModule): Promise<void> {
-  if (editingKey.value !== m.key) return;
-  const prev = m.label;
-  const value = draftLabel.value.trim();
-  editingKey.value = null;
-  m.label = value === "" ? m.key : value; // optimistic (server re-derives on empty)
-  try {
-    await patchModule(m.key, { label: value });
-    if (value === "") await load(); // pull the server-derived label
-  } catch {
-    m.label = prev;
-  }
-}
 </script>
 
 <template>
   <section>
     <h2 class="font-display text-[16px] font-medium text-text">Modules</h2>
     <p class="mt-0.5 text-[12px] text-muted">
-      Sources that have published notifications. Disable one to stop it reaching anyone — existing
+      The modules that can send notifications. Disable one to stop it reaching anyone — existing
       items stay; new ones are recorded but suppressed.
     </p>
 
@@ -104,8 +80,8 @@ async function commitRename(m: AdminModule): Promise<void> {
     <StatePanel
       v-else-if="modules.length === 0"
       :icon="Boxes"
-      title="No modules yet"
-      description="They'll appear here once a source publishes a notification."
+      title="No modules configured"
+      description="Modules are seeded in the database; none were returned."
     />
 
     <template v-else>
@@ -150,36 +126,7 @@ async function commitRename(m: AdminModule): Promise<void> {
         class="flex items-center gap-3 border-b border-line py-2.5"
       >
         <div class="min-w-0 flex-1">
-          <div class="flex items-center gap-2">
-            <span
-              class="size-1.5 shrink-0 rounded-full"
-              :class="priorityDotClass[m.enabled ? 'high' : 'low']"
-              aria-hidden="true"
-            />
-            <template v-if="editingKey === m.key">
-              <input
-                v-model="draftLabel"
-                :data-test="`rename-input-${m.key}`"
-                class="rounded-md border border-accent bg-surface px-2 py-0.5 text-[13px] font-semibold text-text"
-                aria-label="Module label"
-                @keydown.enter="commitRename(m)"
-                @keydown.esc="cancelRename"
-                @blur="commitRename(m)"
-              />
-            </template>
-            <template v-else>
-              <span class="truncate text-[13px] font-semibold text-text">{{ m.label }}</span>
-              <button
-                type="button"
-                :data-test="`rename-${m.key}`"
-                class="text-faint transition-colors duration-100 hover:text-text"
-                aria-label="Rename module"
-                @click="startRename(m)"
-              >
-                <Icon :icon="Pencil" :size="12" />
-              </button>
-            </template>
-          </div>
+          <span class="truncate text-[13px] font-semibold text-text">{{ m.label }}</span>
           <div class="mt-0.5 font-mono text-[10px] text-faint">
             {{ m.key }} · {{ relativeTime(m.lastSeenAt) }}
           </div>

@@ -15,10 +15,7 @@ export function fetchModules(): Promise<AdminModule[]> {
   return api.get<AdminModule[]>("/admin/modules");
 }
 
-export function patchModule(
-  key: string,
-  body: { enabled?: boolean; label?: string },
-): Promise<void> {
+export function patchModule(key: string, body: { enabled: boolean }): Promise<void> {
   return api.patch<void>(`/admin/modules/${encodeURIComponent(key)}`, body);
 }
 
