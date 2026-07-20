@@ -1,6 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import type { FeedNotification, NotificationPage } from "@notifications/shared";
+import { actionSchema } from "@notifications/shared";
 import { requireUser } from "../../auth/guards";
 import { query } from "../../db/pool";
 
@@ -90,7 +91,10 @@ function toFeedNotification(row: FeedRow): FeedNotification {
       row.audience_scope === "global"
         ? { scope: "global" }
         : { scope: row.audience_scope, id: row.audience_id ?? undefined },
-    ...(row.actions != null ? { actions: row.actions } : {}),
+    // Re-parse each stored action through the schema so its defaults apply — notably `kind`,
+    // which rows persisted before the kind field existed don't carry. Without this, a legacy
+    // action reaches the client as `kind: undefined` and the UI treats it as a non-link.
+    ...(row.actions != null ? { actions: row.actions.map((a) => actionSchema.parse(a)) } : {}),
     ...(row.metadata != null ? { metadata: row.metadata } : {}),
     ...(row.source_ts != null ? { timestamp: row.source_ts.toISOString() } : {}),
     createdAt: row.created_iso,

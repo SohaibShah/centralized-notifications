@@ -22,7 +22,11 @@ export async function ingest(raw: unknown): Promise<IngestResult> {
   // calling module, so reject + log it — never persist, never deliver.
   const { known, enabled } = await resolveModule(result.data.module);
   if (!known) {
-    console.warn(`[intake] rejected notification from unknown module "${result.data.module}"`);
+    // JSON.stringify neutralizes newlines/quotes in the (only length-bounded) module value so a
+    // hostile publisher can't forge log lines — matches validate.ts's value-free logging discipline.
+    console.warn(
+      `[intake] rejected notification from unknown module ${JSON.stringify(result.data.module)}`,
+    );
     return { status: "invalid" };
   }
   const status = await persist(result.data, !enabled);

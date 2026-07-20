@@ -60,8 +60,14 @@ Icons:    lucide (@lucide/vue) — never emoji.
 
 - **Flat + hairline.** No drop shadows on cards/rows — separate with 1px `line` borders and background
   shifts. Shadows are allowed only as _functional_ elevation on overlays (dropdowns, popovers, modals).
-- **Priority = a small dot + weight**, never a wall of colored left-bars: critical→danger, high→warning,
-  normal→faint (filled), low→hollow ring. See `priorityDotClass` in `design/tokens.ts`.
+- **Priority is shown semantically, never as a wall of colored left-bars.** Two forms:
+  - a **small dot + weight** — `priorityDotClass` (critical→danger, high→warning, normal→faint filled,
+    low→hollow ring). Used on secondary surfaces: the `FilterMenu`, the generator preview, the critical toast.
+  - a **colored uppercase text label** — `priorityTextClass` + `priorityLabel` (critical→danger,
+    high→`warning-strong`, normal→muted, low→faint). Used on the **notification feed card**, where the
+    left slot is the read/unread toggle and an explicit word reads more clearly than a color-only dot
+    (and doesn't carry meaning by color alone). Note `warning-strong` (a darker amber) — the plain
+    `warning` token fails WCAG AA as small text.
 - **Role-aware sidebar.** `Admin` nav is gated to the `admin` role; every user gets a settings cog.
   Drives off the session user's `roles`.
 - **Filters = quick chip presets + a searchable `FilterMenu` dropdown** (module/priority/custom tags),

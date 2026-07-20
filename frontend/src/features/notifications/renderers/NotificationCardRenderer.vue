@@ -63,7 +63,11 @@ function toggleRead() {
         <Icon
           :icon="item.read ? CircleCheck : Circle"
           :size="16"
-          :class="item.read ? 'text-faint hover:text-muted' : 'fill-accent/20 text-accent'"
+          :class="
+            item.read
+              ? 'text-faint hover:text-muted'
+              : 'fill-accent/20 text-accent hover:fill-accent/40'
+          "
         />
       </button>
 

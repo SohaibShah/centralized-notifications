@@ -36,10 +36,12 @@ const isFilteredEmpty = computed(
 // Firing any action also marks the notification read.
 function onAction(action: NotificationAction, notification: FeedNotification) {
   feed.markRead(notification.id);
-  if (action.kind === "link") {
-    window.open(action.url, "_blank", "noopener,noreferrer");
-  } else {
+  if (action.kind === "dispatch") {
     console.info(`[actions] "${action.label}" (dispatch) — coming soon`);
+  } else {
+    // "link" — or a legacy action persisted before `kind` existed (treated as link). Never
+    // leave a link doing nothing.
+    window.open(action.url, "_blank", "noopener,noreferrer");
   }
 }
 </script>

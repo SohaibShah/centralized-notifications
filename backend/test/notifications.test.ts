@@ -106,6 +106,23 @@ describe("GET /notifications", () => {
     expect(new Date(createdAt).toISOString()).toBe(tsAt(1));
   });
 
+  it("defaults a stored action's kind to 'link' on read (legacy rows without a kind field)", async () => {
+    const id = `${ID_PREFIX}legacy-action`;
+    await query(
+      `INSERT INTO notifications
+         (id, module, title, description, priority, snoozable, audience_scope, actions, created_at)
+       VALUES ($1, 'test', 'legacy', 'body', 'normal', true, 'global', $2::jsonb, $3)`,
+      [id, JSON.stringify([{ label: "Review", method: "GET", url: "https://app/x" }]), tsAt(10)],
+    );
+    try {
+      const { body } = await list("?limit=100");
+      const item = body.items.find((n) => n.id === id);
+      expect(item?.actions?.[0]?.kind).toBe("link"); // default applied on read
+    } finally {
+      await query("DELETE FROM notifications WHERE id = $1", [id]);
+    }
+  });
+
   it("paginates via the opaque cursor in order with no overlap", async () => {
     // Our rows are the newest in the table (future-dated), so a limit=2 walk from the
     // top reaches all five within the first few pages regardless of other suites' data.

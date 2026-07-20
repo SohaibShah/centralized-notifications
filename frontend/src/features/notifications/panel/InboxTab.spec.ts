@@ -114,6 +114,26 @@ describe("InboxTab", () => {
     expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
   });
 
+  it("treats a legacy action with no kind as a link (still opens a tab)", async () => {
+    const feed = useFeedStore();
+    feed.items = [
+      feedItem({
+        id: "a",
+        read: false,
+        // Simulate a row persisted before `kind` existed. The backend now defaults it on read,
+        // but the UI guard must not silently drop a link if one ever arrives without kind.
+        actions: [{ label: "Open", method: "GET", url: "https://example.com" } as never],
+      }),
+    ];
+    feed.status = "ready";
+    const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
+    const wrapper = mount(InboxTab);
+    await wrapper.get("h3 button").trigger("click");
+    const btn = wrapper.findAll("button").find((b) => b.text().trim() === "Open");
+    await btn!.trigger("click");
+    expect(openSpy).toHaveBeenCalledWith("https://example.com", "_blank", "noopener,noreferrer");
+  });
+
   it("renders the AI summary with a decorative glow and gradient label", () => {
     const wrapper = mount(InboxTab);
     expect(wrapper.find('[data-test="ai-glow"]').exists()).toBe(true);
