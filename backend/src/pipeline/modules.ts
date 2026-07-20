@@ -1,23 +1,10 @@
 import { query } from "../db/pool";
 
-/** Title-case a module key for the default human label: `vendor_risk` → `Vendor Risk`. */
-export function deriveLabel(key: string): string {
-  return key
-    .split(/[_\-\s]+/)
-    .filter(Boolean)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
 /**
- * Record that `key` published. First sight inserts the module (enabled, auto-labelled);
- * afterwards only `last_seen_at` is bumped — an admin's enabled/label edits are preserved.
- * Idempotent (safe to call on every accepted notification).
+ * Bump a known module's `last_seen_at` (feeds the admin "recently active" sort). Update-only:
+ * modules are a fixed, seeded catalog (migration 007), never auto-created — an unknown key is
+ * a no-op here (0 rows updated) and is rejected upstream at intake.
  */
-export async function upsertModuleSeen(key: string): Promise<void> {
-  await query(
-    `INSERT INTO modules (key, label) VALUES ($1, $2)
-     ON CONFLICT (key) DO UPDATE SET last_seen_at = now()`,
-    [key, deriveLabel(key)],
-  );
+export async function touchModule(key: string): Promise<void> {
+  await query("UPDATE modules SET last_seen_at = now() WHERE key = $1", [key]);
 }

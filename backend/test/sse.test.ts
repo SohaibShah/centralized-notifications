@@ -10,6 +10,7 @@ import { DeliveryHub, deliveryHub } from "../src/delivery/hub";
 import { CoalescingBuffer } from "../src/http/sse/coalescing-buffer";
 import { ingest } from "../src/pipeline/ingest";
 import { buildServer } from "../src/server";
+import { registerModule } from "./support";
 
 function makeNotification(id: string): Notification {
   return {
@@ -118,6 +119,7 @@ describe("GET /sse", () => {
 
   beforeAll(async () => {
     await migrate();
+    await registerModule("test-module");
     await query("DELETE FROM users WHERE username = 't_sse'");
     await query("DELETE FROM notifications WHERE id LIKE $1", [`${ID_PREFIX}%`]);
     await query(

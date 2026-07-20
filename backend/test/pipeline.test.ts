@@ -6,6 +6,7 @@ import { closePool, query } from "../src/db/pool";
 import { ingest } from "../src/pipeline/ingest";
 import * as persistModule from "../src/pipeline/persist";
 import { buildServer } from "../src/server";
+import { registerModule } from "./support";
 
 const intakeTokenValue = process.env.INTERNAL_INTAKE_TOKEN as string;
 const PREFIX = "test-pipe-";
@@ -48,6 +49,7 @@ function publish(payload: unknown, token: string | null = intakeTokenValue) {
 
 beforeAll(async () => {
   await migrate();
+  await registerModule("test-module");
   await query("DELETE FROM notifications WHERE id LIKE $1", [`${PREFIX}%`]);
   app = await buildServer();
   await app.ready();
@@ -66,6 +68,16 @@ describe("ingest pipeline", () => {
     expect(result.status).toBe("invalid");
     expect(result.id).toBeUndefined();
     expect(warn).toHaveBeenCalled();
+    warn.mockRestore();
+  });
+
+  it("rejects a notification from an unknown module without persisting", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const before = await countRows("unknown-1");
+    const result = await ingest(makeNotification("unknown-1", { module: "no-such-module" }));
+    expect(result.status).toBe("invalid");
+    expect(warn).toHaveBeenCalled();
+    expect(await countRows("unknown-1")).toBe(before); // nothing persisted
     warn.mockRestore();
   });
 

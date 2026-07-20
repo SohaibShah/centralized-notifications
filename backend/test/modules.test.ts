@@ -1,34 +1,25 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { migrate } from "../src/db/migrate";
 import { closePool, query } from "../src/db/pool";
-import { upsertModuleSeen } from "../src/pipeline/modules";
+import { touchModule } from "../src/pipeline/modules";
 
-describe("module auto-discovery", () => {
+describe("touchModule", () => {
   beforeAll(async () => migrate());
   afterAll(async () => closePool());
-  beforeEach(async () => {
-    await query("DELETE FROM modules WHERE key LIKE 'disc-%'");
-  });
 
-  it("inserts a never-seen module exactly once, enabled, with a derived label", async () => {
-    await upsertModuleSeen("disc-vendor_risk");
-    await upsertModuleSeen("disc-vendor_risk");
-    const { rows } = await query<{ label: string; enabled: boolean }>(
-      "SELECT label, enabled FROM modules WHERE key = 'disc-vendor_risk'",
+  it("bumps last_seen_at for a seeded module without inserting", async () => {
+    await query("UPDATE modules SET last_seen_at = '2000-01-01T00:00:00Z' WHERE key = 'dsr'");
+    await touchModule("dsr");
+    const { rows } = await query<{ last_seen_at: Date }>(
+      "SELECT last_seen_at FROM modules WHERE key = 'dsr'",
     );
     expect(rows).toHaveLength(1);
-    expect(rows[0]?.enabled).toBe(true);
-    expect(rows[0]?.label).toBe("Disc Vendor Risk"); // title-cased from the full key `disc-vendor_risk`
+    expect(new Date(rows[0]!.last_seen_at).getUTCFullYear()).toBeGreaterThan(2000);
   });
 
-  it("never re-enables or relabels an existing module on later publishes", async () => {
-    await upsertModuleSeen("disc-x");
-    await query("UPDATE modules SET enabled = false, label = 'Custom' WHERE key = 'disc-x'");
-    await upsertModuleSeen("disc-x");
-    const { rows } = await query<{ label: string; enabled: boolean }>(
-      "SELECT label, enabled FROM modules WHERE key = 'disc-x'",
-    );
-    expect(rows[0]?.enabled).toBe(false);
-    expect(rows[0]?.label).toBe("Custom");
+  it("is a no-op for an unknown key (inserts nothing)", async () => {
+    await touchModule("touch-nonexistent");
+    const { rowCount } = await query("SELECT 1 FROM modules WHERE key = 'touch-nonexistent'");
+    expect(rowCount).toBe(0);
   });
 });

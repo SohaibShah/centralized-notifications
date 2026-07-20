@@ -6,6 +6,7 @@ import { migrate } from "../src/db/migrate";
 import { closePool, query } from "../src/db/pool";
 import { invalidatePolicyCache } from "../src/pipeline/policy";
 import { buildServer, isSimulatorEnabled } from "../src/server";
+import { registerModule } from "./support";
 
 const PW = "sim-test-pass";
 
@@ -39,6 +40,7 @@ describe("POST /admin/simulate", () => {
 
   beforeAll(async () => {
     await migrate();
+    await registerModule("sim-custom");
     await query("DELETE FROM notifications WHERE id LIKE 'sim-%' OR module = 'sim-disabled'");
     await query("DELETE FROM modules WHERE key = 'sim-disabled'");
     await query("DELETE FROM users WHERE username IN ('sim_admin', 'sim_plain')");
