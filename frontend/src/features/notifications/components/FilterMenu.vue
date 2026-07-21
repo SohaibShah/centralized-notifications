@@ -15,7 +15,24 @@ const feed = useFeedStore();
 const open = ref(false);
 const search = ref("");
 const root = ref<HTMLElement | null>(null);
+const triggerBtn = ref<HTMLButtonElement | null>(null);
+const menu = ref<HTMLElement | null>(null);
+const menuStyle = ref<Record<string, string>>({});
 const searchInput = ref<HTMLInputElement | null>(null);
+
+// The dropdown is teleported to <body> so the popover's `overflow-hidden` can't clip it when
+// the panel is short. Because it leaves the normal flow, we position it `fixed`, anchored to the
+// trigger button, and recompute on open + on resize.
+function positionMenu() {
+  const el = triggerBtn.value;
+  if (!el) return;
+  const r = el.getBoundingClientRect();
+  menuStyle.value = {
+    position: "fixed",
+    top: `${r.bottom + 6}px`,
+    right: `${window.innerWidth - r.right}px`,
+  };
+}
 
 const priorityOptions = computed<NotificationPriority[]>(() =>
   [...NOTIFICATION_PRIORITIES].sort((a, b) => priorityRank[a] - priorityRank[b]),
@@ -43,26 +60,36 @@ function close() {
 }
 
 function onDocumentPointer(event: MouseEvent) {
-  if (root.value && !root.value.contains(event.target as Node)) close();
+  const t = event.target as Node;
+  // The panel is teleported out of `root`, so a click inside either counts as "inside".
+  if (root.value?.contains(t) || menu.value?.contains(t)) return;
+  close();
 }
 
 watch(open, async (isOpen) => {
   if (isOpen) {
+    positionMenu();
     document.addEventListener("mousedown", onDocumentPointer);
+    window.addEventListener("resize", positionMenu);
     await nextTick();
     searchInput.value?.focus();
   } else {
     document.removeEventListener("mousedown", onDocumentPointer);
+    window.removeEventListener("resize", positionMenu);
     search.value = "";
   }
 });
 
-onBeforeUnmount(() => document.removeEventListener("mousedown", onDocumentPointer));
+onBeforeUnmount(() => {
+  document.removeEventListener("mousedown", onDocumentPointer);
+  window.removeEventListener("resize", positionMenu);
+});
 </script>
 
 <template>
   <div ref="root" class="relative">
     <button
+      ref="triggerBtn"
       type="button"
       class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken"
       :aria-expanded="open"
@@ -80,76 +107,82 @@ onBeforeUnmount(() => document.removeEventListener("mousedown", onDocumentPointe
       </span>
     </button>
 
-    <div
-      v-if="open"
-      class="absolute right-0 z-30 mt-1.5 w-64 rounded-lg border border-line-strong bg-surface shadow-lg shadow-black/5"
-      role="group"
-      aria-label="Filter notifications"
-      @keydown.esc="close"
-    >
-      <div class="border-b border-line p-2">
-        <input
-          ref="searchInput"
-          v-model="search"
-          type="text"
-          placeholder="Search filters…"
-          class="w-full rounded-md bg-sunken px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint"
-          aria-label="Search filters"
-        />
-      </div>
+    <Teleport to="body">
+      <div
+        v-if="open"
+        ref="menu"
+        :style="menuStyle"
+        class="z-50 w-64 rounded-lg border border-line-strong bg-surface shadow-lg shadow-black/5"
+        role="group"
+        aria-label="Filter notifications"
+        @keydown.esc="close"
+      >
+        <div class="border-b border-line p-2">
+          <input
+            ref="searchInput"
+            v-model="search"
+            type="text"
+            placeholder="Search filters…"
+            class="w-full rounded-md bg-sunken px-2.5 py-1.5 text-[13px] text-text placeholder:text-faint"
+            aria-label="Search filters"
+          />
+        </div>
 
-      <div class="max-h-72 overflow-y-auto p-1.5">
-        <template v-if="visiblePriorities.length">
-          <p class="px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-faint">Priority</p>
-          <label
-            v-for="p in visiblePriorities"
-            :key="p"
-            class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-text hover:bg-sunken"
-          >
-            <input
-              type="checkbox"
-              class="accent-accent"
-              :checked="feed.priorities.has(p)"
-              @change="feed.togglePriority(p)"
-            />
-            <span class="size-2 rounded-full" :class="priorityDotClass[p]" aria-hidden="true" />
-            {{ priorityLabel[p] }}
-          </label>
-        </template>
+        <div class="max-h-72 overflow-y-auto p-1.5">
+          <template v-if="visiblePriorities.length">
+            <p class="px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-faint">
+              Priority
+            </p>
+            <label
+              v-for="p in visiblePriorities"
+              :key="p"
+              class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-text hover:bg-sunken"
+            >
+              <input
+                type="checkbox"
+                class="accent-accent"
+                :checked="feed.priorities.has(p)"
+                @change="feed.togglePriority(p)"
+              />
+              <span class="size-2 rounded-full" :class="priorityDotClass[p]" aria-hidden="true" />
+              {{ priorityLabel[p] }}
+            </label>
+          </template>
 
-        <template v-if="visibleModules.length">
-          <p class="mt-1 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-faint">
-            Module
+          <template v-if="visibleModules.length">
+            <p class="mt-1 px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-faint">
+              Module
+            </p>
+            <label
+              v-for="m in visibleModules"
+              :key="m"
+              class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-text hover:bg-sunken"
+            >
+              <input
+                type="checkbox"
+                class="accent-accent"
+                :checked="feed.modules.has(m)"
+                @change="feed.toggleModule(m)"
+              />
+              <span class="truncate font-mono text-[12px]">{{ m }}</span>
+            </label>
+          </template>
+
+          <p v-if="noMatches" class="px-2 py-4 text-center text-[12px] text-faint">
+            No filters match “{{ search }}”.
           </p>
-          <label
-            v-for="m in visibleModules"
-            :key="m"
-            class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-text hover:bg-sunken"
+        </div>
+
+        <div v-if="feed.activeFilterCount > 0" class="border-t border-line p-1.5">
+          <button
+            type="button"
+            class="w-full rounded-md px-2 py-1.5 text-left text-[12px] font-medium text-muted transition-colors duration-100 hover:bg-sunken hover:text-text"
+            @click="feed.clearFilters()"
           >
-            <input
-              type="checkbox"
-              class="accent-accent"
-              :checked="feed.modules.has(m)"
-              @change="feed.toggleModule(m)"
-            />
-            <span class="truncate font-mono text-[12px]">{{ m }}</span>
-          </label>
-        </template>
-
-        <p v-if="noMatches" class="px-2 py-4 text-center text-[12px] text-faint">
-          No filters match “{{ search }}”.
-        </p>
+            Clear all filters
+          </button>
+        </div>
       </div>
-
-      <div v-if="feed.activeFilterCount > 0" class="border-t border-line p-1.5">
-        <button
-          type="button"
-          class="w-full rounded-md px-2 py-1.5 text-left text-[12px] font-medium text-muted transition-colors duration-100 hover:bg-sunken hover:text-text"
-          @click="feed.clearFilters()"
-        >
-          Clear all filters
-        </button>
-      </div>
-    </div>
+    </Teleport>
   </div>
 </template>
