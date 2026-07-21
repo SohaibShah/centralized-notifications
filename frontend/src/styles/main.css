@@ -111,6 +111,25 @@
   animation: enter-rise 200ms var(--ease-out) both;
 }
 
+/* Priority emphasis on the feed card (see the priority-color design study). Critical/high get a
+   colored left strip + a faint matching wash so urgency reads at a glance; normal/low deliberately
+   stay quiet (no "wall of bars"). The wash mixes over `transparent` so it tints whatever panel the
+   card sits on, and hover deepens the same wash instead of falling back to the neutral `sunken`. */
+.prio-critical {
+  background: color-mix(in oklab, var(--color-danger) 8%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-danger);
+}
+.prio-critical:hover {
+  background: color-mix(in oklab, var(--color-danger) 14%, transparent);
+}
+.prio-high {
+  background: color-mix(in oklab, var(--color-warning) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-warning-strong);
+}
+.prio-high:hover {
+  background: color-mix(in oklab, var(--color-warning) 16%, transparent);
+}
+
 /* Critical-toast auto-dismiss countdown: a neutral hairline receding left→right over the
    toast's ~6s timer (duration set inline from AUTO_DISMISS_MS; remount restarts it on
    resume). Static — no recede — under reduced motion. */

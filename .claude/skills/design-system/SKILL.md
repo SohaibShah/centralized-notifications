@@ -68,6 +68,11 @@ Icons:    lucide (@lucide/vue) — never emoji.
     left slot is the read/unread toggle and an explicit word reads more clearly than a color-only dot
     (and doesn't carry meaning by color alone). Note `warning-strong` (a darker amber) — the plain
     `warning` token fails WCAG AA as small text.
+  - **card edge emphasis, scaled to urgency** — on the feed card, **critical & high** additionally get
+    a colored left strip + a faint matching background wash (`.prio-critical` / `.prio-high` in
+    `main.css`), always (priority is intrinsic, shown read or unread). **normal & low stay quiet** — this
+    is how we get more priority color _without_ the forbidden wall-of-bars. The pine "unread" edge stays
+    for unread normal/low rows; read state is always carried by the toggle icon + title weight.
 - **Role-aware sidebar.** `Admin` nav is gated to the `admin` role; every user gets a settings cog.
   Drives off the session user's `roles`.
 - **Filters = quick chip presets + a searchable `FilterMenu` dropdown** (module/priority/custom tags),

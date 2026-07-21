@@ -162,6 +162,29 @@ describe("NotificationCardRenderer", () => {
     );
   });
 
+  it("applies a priority emphasis class to critical and high cards, not to normal/low", () => {
+    const critical = mount(NotificationCardRenderer, {
+      props: { notification: feedItem({ id: "a", priority: "critical" }) },
+    });
+    expect(critical.get("article").classes()).toContain("prio-critical");
+    const high = mount(NotificationCardRenderer, {
+      props: { notification: feedItem({ id: "b", priority: "high" }) },
+    });
+    expect(high.get("article").classes()).toContain("prio-high");
+    const normal = mount(NotificationCardRenderer, {
+      props: { notification: feedItem({ id: "c", priority: "normal" }) },
+    });
+    expect(normal.get("article").classes()).not.toContain("prio-critical");
+    expect(normal.get("article").classes()).not.toContain("prio-high");
+  });
+
+  it("keeps the priority emphasis on a critical card even once it is read", () => {
+    const wrapper = mount(NotificationCardRenderer, {
+      props: { notification: feedItem({ id: "a", priority: "critical", read: true }) },
+    });
+    expect(wrapper.get("article").classes()).toContain("prio-critical");
+  });
+
   it("clicking the card body expands an expandable card and emits open", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: feedItem({ id: "a", description: LONG }) },
