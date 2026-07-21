@@ -132,7 +132,6 @@ describe("feed store", () => {
     // Needs action by priority (n1 loaded before c1 stays n1, c1).
     expect(groups[0]?.items.map((n) => n.id)).toEqual(["n1", "c1"]);
     expect(groups[1]?.items.map((n) => n.id)).toEqual(["r1"]);
-    expect(feed.unreadCount).toBe(2);
   });
 
   it("setSort clears the loaded window and refetches page 1 with the new sort", async () => {
@@ -153,12 +152,10 @@ describe("feed store", () => {
     const feed = useFeedStore();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
-    expect(feed.unreadCount).toBe(1);
 
     await feed.markRead("a");
 
     expect(feed.items.find((n) => n.id === "a")?.read).toBe(true);
-    expect(feed.unreadCount).toBe(0);
     // Open-and-seen: read, but sticky — it stays in Needs action until flushed.
     expect(feed.groups.map((g) => g.key)).toEqual(["needs-action"]);
     expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
@@ -223,7 +220,6 @@ describe("feed store", () => {
     await feed.markRead("a");
 
     expect(feed.items.find((n) => n.id === "a")?.read).toBe(false); // reverted
-    expect(feed.unreadCount).toBe(1);
   });
 
   it("markRead() failure also clears stickiness (no stale sticky entry left behind)", async () => {
@@ -281,12 +277,10 @@ describe("feed store", () => {
     const feed = useFeedStore();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true })]));
     await feed.load();
-    expect(feed.unreadCount).toBe(0);
 
     await feed.markUnread("a");
 
     expect(feed.items.find((n) => n.id === "a")?.read).toBe(false);
-    expect(feed.unreadCount).toBe(1);
     expect(feed.groups.map((g) => g.key)).toEqual(["needs-action"]);
     expect(delMock).toHaveBeenCalledWith("/notifications/a/read");
   });
@@ -300,7 +294,6 @@ describe("feed store", () => {
     await feed.markUnread("a");
 
     expect(feed.items.find((n) => n.id === "a")?.read).toBe(true); // reverted
-    expect(feed.unreadCount).toBe(0);
   });
 
   it("markUnread() is a no-op for an already-unread or unknown notification", async () => {
@@ -357,7 +350,6 @@ describe("feed store", () => {
     await feed.markAllReadInScope();
 
     expect(feed.items.every((n) => n.read === false)).toBe(true);
-    expect(feed.unreadCount).toBe(2);
   });
 
   it("onLiveCritical fires with only newly-arrived critical items", async () => {

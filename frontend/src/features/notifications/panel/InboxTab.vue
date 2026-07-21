@@ -97,11 +97,33 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
 
     <div class="flex shrink-0 items-center gap-1.5 px-3 pb-2 pt-3">
       <Chip :active="!feed.isFiltered" @click="feed.clearFilters()">All</Chip>
-      <Chip :active="feed.unreadOnly" @click="feed.toggleUnreadOnly()">Unread</Chip>
-      <Chip :active="feed.priorities.has('critical')" @click="feed.togglePriority('critical')"
-        >Critical</Chip
-      >
-      <Chip :active="feed.priorities.has('high')" @click="feed.togglePriority('high')">High</Chip>
+      <Chip :active="feed.unreadOnly" @click="feed.toggleUnreadOnly()">
+        Unread
+        <span
+          v-if="feed.counts.unread > 0"
+          data-test="chip-count-unread"
+          class="ml-1 font-mono text-[11px] tabular-nums"
+          >{{ feed.counts.unread }}</span
+        >
+      </Chip>
+      <Chip :active="feed.priorities.has('critical')" @click="feed.togglePriority('critical')">
+        Critical
+        <span
+          v-if="feed.counts.unreadByPriority.critical > 0"
+          data-test="chip-count-critical"
+          class="ml-1 font-mono text-[11px] tabular-nums"
+          >{{ feed.counts.unreadByPriority.critical }}</span
+        >
+      </Chip>
+      <Chip :active="feed.priorities.has('high')" @click="feed.togglePriority('high')">
+        High
+        <span
+          v-if="feed.counts.unreadByPriority.high > 0"
+          data-test="chip-count-high"
+          class="ml-1 font-mono text-[11px] tabular-nums"
+          >{{ feed.counts.unreadByPriority.high }}</span
+        >
+      </Chip>
     </div>
 
     <!-- Body: loading / error / empty / filtered-empty / populated -->
@@ -144,6 +166,7 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
       <FeedList
         v-else
         :groups="feed.groups"
+        :unread="feed.counts.unread"
         :has-more="feed.hasMore"
         :loading-more="feed.loadingMore"
         @load-more="feed.loadMore()"

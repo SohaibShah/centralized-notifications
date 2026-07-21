@@ -25,6 +25,7 @@ async function toggleSearch() {
 
 onMounted(() => {
   feed.flushSessionReads(); // reopening the panel settles this-session reads into "Earlier"
+  feed.fetchCounts(); // reconcile counts with the server on open (catches cross-session drift)
   inboxTabButton.value?.focus();
 });
 </script>

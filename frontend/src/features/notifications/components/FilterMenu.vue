@@ -123,6 +123,7 @@ onBeforeUnmount(() => {
         v-if="open"
         ref="menu"
         :style="menuStyle"
+        data-notification-overlay
         class="z-50 w-64 rounded-lg border border-line-strong bg-surface shadow-lg shadow-black/5"
         role="group"
         aria-label="Filter notifications"
@@ -176,6 +177,11 @@ onBeforeUnmount(() => {
               />
               <span class="size-2 rounded-full" :class="priorityDotClass[p]" aria-hidden="true" />
               {{ priorityLabel[p] }}
+              <span
+                v-if="feed.counts.unreadByPriority[p] > 0"
+                class="ml-auto font-mono text-[11px] tabular-nums text-faint"
+                >{{ feed.counts.unreadByPriority[p] }}</span
+              >
             </label>
           </template>
 

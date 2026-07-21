@@ -158,6 +158,17 @@ describe("InboxTab", () => {
     expect(wrapper.find('[data-test="feed-sort"]').exists()).toBe(false);
   });
 
+  it("shows unread counts on the chips from feed.counts", () => {
+    const feed = useFeedStore();
+    feed.status = "ready";
+    feed.counts = { unread: 5, unreadByPriority: { critical: 2, high: 3, normal: 0, low: 0 } };
+    const wrapper = mount(InboxTab);
+    const critical = wrapper.get('[data-test="chip-count-critical"]');
+    const high = wrapper.get('[data-test="chip-count-high"]');
+    expect(critical.text()).toBe("2");
+    expect(high.text()).toBe("3");
+  });
+
   it("toggles the AI-summary detail visibility when the disclosure button is clicked", async () => {
     const wrapper = mount(InboxTab);
     const disclosureButton = wrapper.find('button[aria-controls="ai-summary-detail"]');

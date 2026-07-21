@@ -11,7 +11,7 @@ const panel = useNotificationPanelStore();
 const root = ref<HTMLElement | null>(null);
 const bellButton = ref<HTMLButtonElement | null>(null);
 
-const badge = computed(() => (feed.unreadCount > 9 ? "9+" : String(feed.unreadCount)));
+const badge = computed(() => (feed.counts.unread > 9 ? "9+" : String(feed.counts.unread)));
 
 function close(restoreFocus = true) {
   panel.close();
@@ -22,7 +22,13 @@ function toggle() {
 }
 
 function onDocumentPointer(event: MouseEvent) {
-  if (root.value && !root.value.contains(event.target as Node)) close(false);
+  const target = event.target as HTMLElement | null;
+  if (!root.value || root.value.contains(target)) return;
+  // The filter dropdown is teleported out of the panel (to escape its overflow clip), so a click
+  // inside it isn't within `root`. Treat any teleported panel overlay as "inside" — otherwise
+  // choosing a sort/filter option would close the whole panel before the change registers.
+  if (target?.closest("[data-notification-overlay]")) return;
+  close(false);
 }
 function onKeydown(event: KeyboardEvent) {
   if (event.key === "Escape") close(true);
@@ -54,7 +60,7 @@ onBeforeUnmount(() => {
       type="button"
       class="relative grid size-9 place-items-center rounded-md text-muted transition-colors duration-100 hover:bg-sunken hover:text-text"
       :aria-label="
-        feed.unreadCount > 0 ? `Notifications, ${feed.unreadCount} unread` : 'Notifications'
+        feed.counts.unread > 0 ? `Notifications, ${feed.counts.unread} unread` : 'Notifications'
       "
       aria-haspopup="dialog"
       :aria-expanded="panel.isOpen"
@@ -62,7 +68,7 @@ onBeforeUnmount(() => {
     >
       <Icon :icon="Bell" :size="18" />
       <span
-        v-if="feed.unreadCount > 0"
+        v-if="feed.counts.unread > 0"
         class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[11px] font-semibold tabular-nums text-white"
         aria-hidden="true"
       >

@@ -3,14 +3,13 @@ import { createPinia, setActivePinia } from "pinia";
 import { mount } from "@vue/test-utils";
 import NotificationBell from "./NotificationBell.vue";
 import { useFeedStore } from "@/stores/feed";
-import { feedItem } from "@/test-support/feedItem";
 
 describe("NotificationBell", () => {
   beforeEach(() => setActivePinia(createPinia()));
 
-  it("shows the unread count as a badge and in the aria-label", () => {
+  it("shows the unread count as a badge and in the aria-label (from the server counts snapshot)", () => {
     const feed = useFeedStore();
-    feed.items = [feedItem({ id: "a" }), feedItem({ id: "b", read: true }), feedItem({ id: "c" })];
+    feed.counts = { unread: 2, unreadByPriority: { critical: 1, high: 1, normal: 0, low: 0 } };
     const wrapper = mount(NotificationBell);
     const trigger = wrapper.get('button[aria-haspopup="dialog"]');
     expect(trigger.attributes("aria-label")).toContain("2 unread");
@@ -65,6 +64,26 @@ describe("NotificationBell", () => {
     outside.remove();
   });
 
+  it("stays open when a pointer press lands inside a teleported panel overlay (e.g. the filter menu)", async () => {
+    // The filter dropdown is teleported to <body>, outside the bell's root. The bell's
+    // outside-click handler must treat a click inside such an overlay as "inside" — otherwise
+    // clicking a sort radio / filter checkbox closes the whole panel before the change fires.
+    const overlay = document.createElement("div");
+    overlay.setAttribute("data-notification-overlay", "");
+    document.body.appendChild(overlay);
+    const wrapper = mount(NotificationBell, { attachTo: document.body });
+    const trigger = wrapper.get('button[aria-haspopup="dialog"]');
+    await trigger.trigger("click");
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
+
+    overlay.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('[role="dialog"]').exists()).toBe(true); // stayed open
+    wrapper.unmount();
+    overlay.remove();
+  });
+
   it("reflects a live unread arrival while the popover is closed", async () => {
     const feed = useFeedStore();
     const wrapper = mount(NotificationBell);
@@ -72,8 +91,8 @@ describe("NotificationBell", () => {
     expect(trigger.attributes("aria-expanded")).toBe("false");
     expect(trigger.text()).not.toContain("1");
 
-    // Simulate an SSE-delivered item landing in the store (popover never opened).
-    feed.items = [feedItem({ id: "live-1" })];
+    // A live arrival bumps the counts snapshot (onLiveBatch → adjustCount); the badge tracks it.
+    feed.counts = { unread: 1, unreadByPriority: { critical: 0, high: 0, normal: 1, low: 0 } };
     await wrapper.vm.$nextTick();
 
     expect(trigger.text()).toContain("1");

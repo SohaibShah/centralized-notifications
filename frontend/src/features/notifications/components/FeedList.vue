@@ -7,7 +7,13 @@ import Spinner from "@/components/ui/Spinner.vue";
 import type { FeedGroup } from "@/stores/feed";
 import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue";
 
-const props = defineProps<{ groups: FeedGroup[]; hasMore: boolean; loadingMore: boolean }>();
+const props = defineProps<{
+  groups: FeedGroup[];
+  /** Server-sourced total unread over the whole dataset (may exceed the loaded needs-action group). */
+  unread: number;
+  hasMore: boolean;
+  loadingMore: boolean;
+}>();
 const emit = defineEmits<{
   loadMore: [];
   open: [notification: FeedNotification];
@@ -20,11 +26,6 @@ const needsAction = computed(() => props.groups.find((g) => g.key === "needs-act
 const earlier = computed(() => props.groups.find((g) => g.key === "earlier"));
 // Earlier (read) rows show expanded by default; the toggle collapses them ("Hide earlier").
 const showEarlier = ref(true);
-
-// Only genuinely-unread rows count — sticky-read items sitting in Needs action don't inflate it.
-const unreadInNeedsAction = computed(
-  () => needsAction.value?.items.filter((n) => !n.read).length ?? 0,
-);
 
 // Plain scroll container + IntersectionObserver sentinel drive keyset pagination.
 const scroller = ref<HTMLElement | null>(null);
@@ -54,14 +55,14 @@ onBeforeUnmount(() => observer?.disconnect());
       >
         <h2 class="font-display text-[13px] font-medium text-text">{{ needsAction.label }}</h2>
         <span
-          v-if="unreadInNeedsAction > 0"
+          v-if="props.unread > 0"
           data-test="needs-action-count"
           class="rounded-full bg-accent/10 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-accent"
         >
-          {{ unreadInNeedsAction }} unread
+          {{ props.unread }} unread
         </span>
         <button
-          v-if="unreadInNeedsAction > 0"
+          v-if="props.unread > 0"
           type="button"
           data-test="mark-all"
           class="ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:bg-sunken"

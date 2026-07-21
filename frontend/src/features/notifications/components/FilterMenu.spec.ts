@@ -19,6 +19,8 @@ describe("FilterMenu", () => {
     expect(panel.exists()).toBe(true);
     // Teleported: fixed-positioned, not absolute-in-panel.
     expect(panel.attributes("style") ?? "").toContain("position: fixed");
+    // Marked so the bell's outside-click handler treats a click inside it as "inside".
+    expect(panel.attributes("data-notification-overlay")).toBeDefined();
   });
 
   it("renders Sort-by radios that reflect feed.sort and call setSort on change", async () => {

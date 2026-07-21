@@ -362,8 +362,6 @@ export const useFeedStore = defineStore("feed", () => {
 
   const visibleItems = computed(() => items.value.filter(matchesFilters));
 
-  const unreadCount = computed(() => items.value.reduce((n, x) => n + (x.read ? 0 : 1), 0));
-
   /**
    * Split the visible feed into "Needs action" (unread) and "Earlier" (read). Both groups
    * preserve load order, which is the server-owned sort (see `sort` / setSort) — the client
@@ -435,7 +433,6 @@ export const useFeedStore = defineStore("feed", () => {
     appliedPills,
     // derived
     visibleItems,
-    unreadCount,
     groups,
     // actions
     load,

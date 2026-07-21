@@ -5,13 +5,18 @@ import NotificationPopover from "./NotificationPopover.vue";
 import { useFeedStore } from "@/stores/feed";
 
 describe("NotificationPopover", () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    // The panel refreshes counts on open; stub it so mounting doesn't hit the network.
+    vi.spyOn(useFeedStore(), "fetchCounts").mockResolvedValue();
+  });
 
-  it("flushes this-session reads when the panel opens", () => {
+  it("flushes this-session reads and refreshes counts when the panel opens", () => {
     const feed = useFeedStore();
-    const spy = vi.spyOn(feed, "flushSessionReads");
+    const flush = vi.spyOn(feed, "flushSessionReads");
     mount(NotificationPopover);
-    expect(spy).toHaveBeenCalled();
+    expect(flush).toHaveBeenCalled();
+    expect(feed.fetchCounts).toHaveBeenCalled();
   });
 
   it("styles the Ask AI tab with the AI gradient identity", () => {
