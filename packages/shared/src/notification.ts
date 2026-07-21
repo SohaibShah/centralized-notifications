@@ -25,6 +25,7 @@ export const NOTIFICATION_PRIORITIES = ["low", "normal", "high", "critical"] as 
 export const AUDIENCE_SCOPES = ["global", "team", "role", "user"] as const;
 export const ACTION_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 export const ACTION_KINDS = ["link", "dispatch"] as const;
+export const FEED_SORTS = ["newest", "oldest", "priority-high", "priority-low"] as const;
 
 /**
  * Who a notification is for. `id` identifies the team/role/user for non-global
@@ -94,6 +95,7 @@ export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[number];
 export type AudienceScope = (typeof AUDIENCE_SCOPES)[number];
 export type ActionMethod = (typeof ACTION_METHODS)[number];
 export type ActionKind = (typeof ACTION_KINDS)[number];
+export type FeedSort = (typeof FEED_SORTS)[number];
 
 /**
  * A notification as the feed *read* API returns it: the full publish contract plus

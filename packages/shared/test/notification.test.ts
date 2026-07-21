@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { actionSchema, audienceSchema, notificationSchema } from "../src/notification";
+import { actionSchema, audienceSchema, FEED_SORTS, notificationSchema } from "../src/notification";
 
 // A minimal valid notification reused across cases.
 const validGlobal = {
@@ -178,6 +178,12 @@ describe("audienceSchema", () => {
 
   it("rejects an unknown scope", () => {
     expect(audienceSchema.safeParse({ scope: "everyone" }).success).toBe(false);
+  });
+});
+
+describe("feed sorts", () => {
+  it("exposes the four sort values with newest first", () => {
+    expect(FEED_SORTS).toEqual(["newest", "oldest", "priority-high", "priority-low"]);
   });
 });
 
