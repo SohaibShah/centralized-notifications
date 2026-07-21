@@ -275,6 +275,31 @@ describe("GET /notifications", () => {
       );
       expect(res.statusCode).toBe(400);
     });
+
+    it("keyset-paginates priority-low with no overlap or skip", async () => {
+      await seedSortSet();
+      // priority-low is the sort NOT covered by a forward/backward scan of the priority-high
+      // index (rank DESC + time DESC), so it's the pagination path most worth exercising.
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let i = 0; i < 500; i++) {
+        const qs = `?limit=2&sort=priority-low${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+        const { body } = await list(qs);
+        seen.push(...body.items.filter((n) => n.id.startsWith(SP)).map((n) => n.id));
+        cursor = body.nextCursor;
+        if (!cursor) break;
+      }
+      expect(seen).toEqual([`${SP}low`, `${SP}high`, `${SP}crit-new`, `${SP}crit-old`]);
+      expect(new Set(seen).size).toBe(seen.length); // no dupes
+    });
+
+    it("rejects a priority-sort cursor missing rank (400, not an empty page)", async () => {
+      const bad = Buffer.from(
+        JSON.stringify({ s: "priority-high", ts: "2099-01-01T00:00:00.000Z", id: "x" }),
+      ).toString("base64url");
+      const res = await list(`?limit=1&sort=priority-high&cursor=${encodeURIComponent(bad)}`);
+      expect(res.statusCode).toBe(400);
+    });
   });
 
   function markRead(id: string, cookie: string | null = sessionCookie) {

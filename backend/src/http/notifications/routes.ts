@@ -36,12 +36,19 @@ interface Cursor {
   rank?: number; // priority_rank, only carried for the priority sorts
 }
 
-const cursorSchema = z.object({
-  s: z.enum(FEED_SORTS),
-  ts: z.string().datetime({ offset: true }),
-  id: z.string().min(1),
-  rank: z.number().int().min(0).max(3).optional(),
-});
+const cursorSchema = z
+  .object({
+    s: z.enum(FEED_SORTS),
+    ts: z.string().datetime({ offset: true }),
+    id: z.string().min(1),
+    rank: z.number().int().min(0).max(3).optional(),
+  })
+  // `rank` is required for — and only meaningful on — the priority sorts. Enforcing the
+  // biconditional here means a priority cursor missing `rank` is rejected as invalid (400)
+  // rather than binding NULL into the keyset predicate and silently returning an empty page.
+  .refine((c) => (c.s === "priority-high" || c.s === "priority-low") === (c.rank !== undefined), {
+    message: "rank is required for and only valid on the priority sorts",
+  });
 
 function encodeCursor(c: Cursor): string {
   return Buffer.from(JSON.stringify(c)).toString("base64url");
