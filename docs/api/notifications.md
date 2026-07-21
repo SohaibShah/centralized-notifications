@@ -64,7 +64,7 @@ Each entry in `actions`:
 
 **Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in). The cookie is same-origin, so a browser `fetch`/`EventSource` sends it automatically through the dev proxy.
 
-The feed **read** path: returns the caller's notifications newest-first as one keyset-paginated page. Read-only — no side effects. Notifications from a module an admin has disabled (`suppressed = true` — see the [Admin API](./admin.md)) are excluded from the returned list; they are still recorded, just never surfaced here.
+The feed **read** path: returns the caller's notifications as one keyset-paginated page, ordered by the [`sort`](#request) param (newest-first by default). Read-only — no side effects. Notifications from a module an admin has disabled (`suppressed = true` — see the [Admin API](./admin.md)) are excluded from the returned list; they are still recorded, just never surfaced here.
 
 Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
 
@@ -74,12 +74,22 @@ Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/
 
 Query parameters:
 
-| Param    | Type            | Required | Notes                                                                                                                                          |
-| -------- | --------------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `limit`  | integer         | no       | Page size. Default `25`, min `1`, max `100`. Coerced from the query string; out-of-range or non-numeric → `400`.                               |
-| `cursor` | string (opaque) | no       | The `nextCursor` from a previous page. **Opaque** — only ever pass back a value the server handed out; a malformed/undecodable cursor → `400`. |
+| Param    | Type            | Required | Notes                                                                                                                                                                                                                                       |
+| -------- | --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit`  | integer         | no       | Page size. Default `25`, min `1`, max `100`. Coerced from the query string; out-of-range or non-numeric → `400`.                                                                                                                            |
+| `cursor` | string (opaque) | no       | The `nextCursor` from a previous page. **Opaque** — only ever pass back a value the server handed out; a malformed/undecodable cursor → `400`. **Sort-scoped** (see below): a cursor is only valid under the same `sort` it was issued for. |
+| `sort`   | enum            | no       | Feed ordering. One of `newest`, `oldest`, `priority-high`, `priority-low`. Default `newest` (the prior behavior). Any other value → `400`. See the ordering table below.                                                                    |
 
-**Ordering & pagination.** Newest-first, keyset on `(created_at DESC, id DESC)` — there is **no `OFFSET`** (NFR-2), so a deep page costs the same as the first. `cursor` is an opaque base64url token encoding the last returned row's `(created_at, id)`; clients must treat it as opaque. There is deliberately **no total count** — keyset paging never scans to one.
+**Ordering & pagination.** Keyset-paginated — there is **no `OFFSET`** (NFR-2), so a deep page costs the same as the first, and deliberately **no total count** (keyset paging never scans to one). The `sort` param selects the ordering:
+
+| `sort`          | Ordering                                                                                                             |
+| --------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `newest`        | `created_at` descending — newest first. **Default**; the prior behavior. Keyset on `(created_at DESC, id DESC)`.     |
+| `oldest`        | `created_at` ascending — oldest first. Keyset on `(created_at ASC, id ASC)`.                                         |
+| `priority-high` | Priority high→low: `critical`, then `high`, then `normal`, then `low`. Within a single priority level, newest first. |
+| `priority-low`  | Priority low→high: `low`, then `normal`, then `high`, then `critical`. Within a single priority level, newest first. |
+
+**Sort-scoped cursor.** `cursor` is an opaque base64url token encoding the last returned row's ordering key **and the `sort` it was issued under**; clients must treat it as opaque. Because the keyset predicate is sort-specific, a cursor is only valid when replayed under the same `sort` — passing a cursor issued under one sort with a different `sort` value returns `400 { "error": "invalid cursor" }`, the same response as a malformed/undecodable cursor. In normal use this never happens: when the user changes sort, the client refetches page 1 (no cursor) rather than reusing the previous page's cursor.
 
 ### Response `200`
 
@@ -125,20 +135,20 @@ A [`NotificationPage`](../../packages/shared/src/notification.ts): a page of `it
 
 Each item is the full [notification contract](#schema) above **plus** two server-derived, per-viewer fields. These are **not** part of the publish contract — producers never send them, and they don't exist until a notification has been persisted and viewed:
 
-| Field       | Type              | Notes                                                                                                                                                                                            |
-| ----------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `createdAt` | string (ISO 8601) | Server **receive** time (`notifications.created_at`), distinct from the module's own optional [`timestamp`](#schema). This is the feed's ordering key.                                           |
-| `read`      | boolean           | Whether **the requesting user** has read this notification (`LEFT JOIN` against `notification_reads`). Per-user: the same notification can be `read: true` for one user and `false` for another. |
+| Field       | Type              | Notes                                                                                                                                                                                                                                                        |
+| ----------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `createdAt` | string (ISO 8601) | Server **receive** time (`notifications.created_at`), distinct from the module's own optional [`timestamp`](#schema). The feed's ordering key under `newest`/`oldest`, and the tie-breaker within a level under the priority sorts (see [`sort`](#request)). |
+| `read`      | boolean           | Whether **the requesting user** has read this notification (`LEFT JOIN` against `notification_reads`). Per-user: the same notification can be `read: true` for one user and `false` for another.                                                             |
 
 Read state lives in its own table — `notification_reads(user_id, notification_id, read_at, PRIMARY KEY(user_id, notification_id))`, both foreign keys `ON DELETE CASCADE` (see [`backend/migrations/003_notification_reads.sql`](../../backend/migrations/003_notification_reads.sql)). A row exists **iff** that user has read that notification; absence of a row means unread. The write endpoint that marks a notification read is [`POST /notifications/:id/read`](#post-notificationsidread), documented below.
 
 ### Errors
 
-| Status | Body                                      | Reason                                                  |
-| ------ | ----------------------------------------- | ------------------------------------------------------- |
-| `400`  | `{ "error": "invalid query parameters" }` | `limit` out of range (`< 1` or `> 100`) or non-numeric. |
-| `400`  | `{ "error": "invalid cursor" }`           | `cursor` is malformed or not a token the server issued. |
-| `401`  | `{ "error": "authentication required" }`  | No valid session cookie.                                |
+| Status | Body                                      | Reason                                                                                                                             |
+| ------ | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid query parameters" }` | `limit` out of range (`< 1` or `> 100`) or non-numeric, or `sort` not one of `newest`/`oldest`/`priority-high`/`priority-low`.     |
+| `400`  | `{ "error": "invalid cursor" }`           | `cursor` is malformed, not a token the server issued, or was issued under a different `sort` than the one requested (sort-scoped). |
+| `401`  | `{ "error": "authentication required" }`  | No valid session cookie.                                                                                                           |
 
 ### Side effects
 
