@@ -102,18 +102,20 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
         >Critical</Chip
       >
       <Chip :active="feed.priorities.has('high')" @click="feed.togglePriority('high')">High</Chip>
-      <select
-        data-test="feed-sort"
-        class="ml-auto rounded-md border border-line-strong bg-surface px-2 py-1 text-[12px] text-text"
-        aria-label="Sort notifications"
-        :value="feed.sort"
-        @change="feed.setSort(($event.target as HTMLSelectElement).value as FeedSort)"
-      >
-        <option value="newest">Newest</option>
-        <option value="oldest">Oldest</option>
-        <option value="priority-high">Priority: high → low</option>
-        <option value="priority-low">Priority: low → high</option>
-      </select>
+      <label class="ml-auto flex items-center gap-1.5 text-[12px] text-muted">
+        Sort
+        <select
+          data-test="feed-sort"
+          class="rounded-md border border-line-strong bg-surface px-2 py-1 text-[12px] text-text"
+          :value="feed.sort"
+          @change="feed.setSort(($event.target as HTMLSelectElement).value as FeedSort)"
+        >
+          <option value="newest">Newest</option>
+          <option value="oldest">Oldest</option>
+          <option value="priority-high">Priority: high → low</option>
+          <option value="priority-low">Priority: low → high</option>
+        </select>
+      </label>
     </div>
 
     <!-- Body: loading / error / empty / filtered-empty / populated -->
