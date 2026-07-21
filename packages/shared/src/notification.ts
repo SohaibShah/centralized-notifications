@@ -121,3 +121,13 @@ export interface NotificationPage {
   items: FeedNotification[];
   nextCursor: string | null;
 }
+
+/**
+ * Unread notification counts for the current user, aggregated server-side over the whole
+ * dataset (not the loaded feed window). `unread` is the sum of `unreadByPriority`. Absolute
+ * for now (ignores active filters); shaped to grow optional filter params later.
+ */
+export interface NotificationCounts {
+  unread: number;
+  unreadByPriority: Record<NotificationPriority, number>;
+}

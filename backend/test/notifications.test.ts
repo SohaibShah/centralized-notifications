@@ -1,6 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { FastifyInstance } from "fastify";
-import type { NotificationPage } from "@notifications/shared";
+import type { NotificationCounts, NotificationPage } from "@notifications/shared";
 import { hashPassword } from "../src/auth/password";
 import { migrate } from "../src/db/migrate";
 import { closePool, query } from "../src/db/pool";
@@ -452,6 +452,70 @@ describe("GET /notifications", () => {
         payload: { ids: [longId] },
       });
       expect(res.statusCode).toBe(400);
+    });
+  });
+
+  describe("GET /notifications/counts", () => {
+    const CP = "test-counts-";
+    const CU = "t_counts";
+    let cookie: string;
+    let cUserId: string;
+
+    beforeAll(async () => {
+      await query("DELETE FROM notifications WHERE id LIKE $1", [`${CP}%`]);
+      await query("DELETE FROM users WHERE username = $1", [CU]);
+      const { rows } = await query<{ id: string }>(
+        "INSERT INTO users (username, display_name, password_hash) VALUES ($1, 'Counts', $2) RETURNING id",
+        [CU, await hashPassword(PW)],
+      );
+      cUserId = rows[0]!.id;
+      const login = await app.inject({
+        method: "POST",
+        url: "/auth/login",
+        payload: { username: CU, password: PW },
+      });
+      const sc = login.headers["set-cookie"];
+      cookie = ((Array.isArray(sc) ? sc[0] : sc) ?? "").split(";")[0] ?? "";
+    });
+
+    afterAll(async () => {
+      await query("DELETE FROM notifications WHERE id LIKE $1", [`${CP}%`]);
+      await query("DELETE FROM users WHERE username = $1", [CU]);
+    });
+
+    function getCounts() {
+      return app
+        .inject({ method: "GET", url: "/notifications/counts", headers: { cookie } })
+        .then((res) => ({ statusCode: res.statusCode, body: res.json() as NotificationCounts }));
+    }
+
+    it("401s without a session", async () => {
+      const res = await app.inject({ method: "GET", url: "/notifications/counts" });
+      expect(res.statusCode).toBe(401);
+    });
+
+    it("counts unread by priority (delta), excluding read and suppressed rows", async () => {
+      const before = (await getCounts()).body;
+      await query(
+        `INSERT INTO notifications (id, module, title, description, priority, snoozable, audience_scope, suppressed)
+         VALUES ($1,'test','t','','critical',true,'global',false),
+                ($2,'test','t','','critical',true,'global',false),
+                ($3,'test','t','','high',true,'global',false),
+                ($4,'test','t','','critical',true,'global',true)`,
+        [`${CP}c1`, `${CP}c2`, `${CP}h1`, `${CP}sup`],
+      );
+      const after = (await getCounts()).body;
+      expect(after.unreadByPriority.critical - before.unreadByPriority.critical).toBe(2); // suppressed excluded
+      expect(after.unreadByPriority.high - before.unreadByPriority.high).toBe(1);
+      expect(after.unread - before.unread).toBe(3);
+
+      await query("INSERT INTO notification_reads (user_id, notification_id) VALUES ($1, $2)", [
+        cUserId,
+        `${CP}c1`,
+      ]);
+      const afterRead = (await getCounts()).body;
+      expect(afterRead.unreadByPriority.critical - before.unreadByPriority.critical).toBe(1);
+      expect(afterRead.unread - before.unread).toBe(2);
     });
   });
 });

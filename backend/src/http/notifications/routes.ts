@@ -1,7 +1,13 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { FeedNotification, FeedSort, NotificationPage } from "@notifications/shared";
-import { actionSchema, FEED_SORTS } from "@notifications/shared";
+import type {
+  FeedNotification,
+  FeedSort,
+  NotificationCounts,
+  NotificationPage,
+  NotificationPriority,
+} from "@notifications/shared";
+import { actionSchema, FEED_SORTS, NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import { requireUser } from "../../auth/guards";
 import { query } from "../../db/pool";
 
@@ -284,5 +290,36 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       [user.id, ids],
     );
     return reply.code(204).send();
+  });
+
+  /**
+   * Unread counts for the current user (FR-5): `GET /notifications/counts`. Aggregates over the
+   * WHOLE dataset (not a page), so the bell badge / needs-action / chip counts are accurate rather
+   * than reflecting only the loaded window. Mirrors the feed read path's join + suppressed filter;
+   * counts only rows this user hasn't read. `unread` is the sum of the per-priority buckets.
+   * Absolute for now (no filter params) — audience resolution / server-side filtering are later.
+   */
+  app.get("/notifications/counts", { preHandler: requireUser }, async (req, reply) => {
+    const user = req.user;
+    if (!user) return reply.code(401).send({ error: "authentication required" });
+
+    const { rows } = await query<{ priority: NotificationPriority; n: number }>(
+      `SELECT n.priority, count(*)::int AS n
+         FROM notifications n
+         LEFT JOIN notification_reads r
+           ON r.notification_id = n.id AND r.user_id = $1
+        WHERE n.suppressed = false AND r.user_id IS NULL
+        GROUP BY n.priority`,
+      [user.id],
+    );
+
+    const unreadByPriority = Object.fromEntries(
+      NOTIFICATION_PRIORITIES.map((p) => [p, 0]),
+    ) as Record<NotificationPriority, number>;
+    for (const row of rows) unreadByPriority[row.priority] = row.n;
+    const unread = NOTIFICATION_PRIORITIES.reduce((sum, p) => sum + unreadByPriority[p], 0);
+
+    const body: NotificationCounts = { unread, unreadByPriority };
+    return reply.code(200).send(body);
   });
 }
