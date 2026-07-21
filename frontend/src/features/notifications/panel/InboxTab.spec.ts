@@ -151,6 +151,16 @@ describe("InboxTab", () => {
     expect(wrapper.get('[data-test="ai-glow"]').classes()).toContain("is-blooming"); // bloom fired
   });
 
+  it("renders a sort select that calls setSort on change", async () => {
+    const feed = useFeedStore();
+    feed.status = "ready";
+    const spy = vi.spyOn(feed, "setSort").mockResolvedValue();
+    const wrapper = mount(InboxTab);
+    const select = wrapper.get('[data-test="feed-sort"]');
+    await select.setValue("priority-high");
+    expect(spy).toHaveBeenCalledWith("priority-high");
+  });
+
   it("toggles the AI-summary detail visibility when the disclosure button is clicked", async () => {
     const wrapper = mount(InboxTab);
     const disclosureButton = wrapper.find('button[aria-controls="ai-summary-detail"]');
