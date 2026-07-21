@@ -72,6 +72,7 @@ describe("GET /notifications", () => {
 
   afterAll(async () => {
     await query("DELETE FROM notifications WHERE id LIKE $1", [`${ID_PREFIX}%`]);
+    await query("DELETE FROM notifications WHERE id LIKE $1", ["test-sort-%"]);
     await query("DELETE FROM users WHERE username = $1", [USERNAME]);
     await app.close();
     await closePool();
@@ -177,7 +178,7 @@ describe("GET /notifications", () => {
     // handler must return no items and signal the end with a null cursor (this is how
     // the client knows to stop paging). Isolation-safe — independent of table size.
     const pastCursor = Buffer.from(
-      JSON.stringify({ ts: "1970-01-01T00:00:00.000Z", id: "0" }),
+      JSON.stringify({ s: "newest", ts: "1970-01-01T00:00:00.000Z", id: "0" }),
     ).toString("base64url");
     const { body } = await list(`?cursor=${encodeURIComponent(pastCursor)}`);
     expect(body.items).toEqual([]);
@@ -204,6 +205,76 @@ describe("GET /notifications", () => {
     expect((await list("?limit=0")).statusCode).toBe(400);
     expect((await list("?limit=99999")).statusCode).toBe(400);
     expect((await list("?limit=abc")).statusCode).toBe(400);
+  });
+
+  describe("sort", () => {
+    const SP = "test-sort-";
+    async function seedSortSet() {
+      await query("DELETE FROM notifications WHERE id LIKE $1", [`${SP}%`]);
+      // (id, priority, created_at) — times ascending c<h<n<l by minute for deterministic ties
+      const rows: [string, string, number][] = [
+        [`${SP}crit-old`, "critical", 1],
+        [`${SP}crit-new`, "critical", 4],
+        [`${SP}high`, "high", 2],
+        [`${SP}low`, "low", 3],
+      ];
+      for (const [id, prio, m] of rows) {
+        await query(
+          `INSERT INTO notifications (id, module, title, description, priority, snoozable, audience_scope, created_at)
+             VALUES ($1,'test','t','',$2,true,'global',$3)`,
+          [id, prio, tsAt(m)],
+        );
+      }
+    }
+    function mine(body: NotificationPage): string[] {
+      return body.items.filter((n) => n.id.startsWith(SP)).map((n) => n.id);
+    }
+
+    it("sorts newest and oldest by time", async () => {
+      await seedSortSet();
+      const newest = mine((await list("?limit=100&sort=newest")).body);
+      expect(newest).toEqual([`${SP}crit-new`, `${SP}low`, `${SP}high`, `${SP}crit-old`]);
+      const oldest = mine((await list("?limit=100&sort=oldest")).body);
+      expect(oldest).toEqual([...newest].reverse());
+    });
+
+    it("sorts by priority in both directions, newest within a level", async () => {
+      await seedSortSet();
+      const high = mine((await list("?limit=100&sort=priority-high")).body);
+      expect(high).toEqual([`${SP}crit-new`, `${SP}crit-old`, `${SP}high`, `${SP}low`]);
+      const low = mine((await list("?limit=100&sort=priority-low")).body);
+      expect(low).toEqual([`${SP}low`, `${SP}high`, `${SP}crit-new`, `${SP}crit-old`]);
+    });
+
+    it("keyset-paginates priority-high with no overlap or skip", async () => {
+      await seedSortSet();
+      // Our four rows span the whole rank order (crit→low), and the shared DB holds other
+      // rows between them, so a limit=2 walk must traverse the entire feed to reach our `low`
+      // (newest within its rank). Walk to the natural end (null cursor); the cap only guards
+      // against a cursor that never terminates. Collecting all four in order, with no dupes,
+      // is the keyset integrity check.
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      for (let i = 0; i < 500; i++) {
+        const qs = `?limit=2&sort=priority-high${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+        const { body } = await list(qs);
+        seen.push(...body.items.filter((n) => n.id.startsWith(SP)).map((n) => n.id));
+        cursor = body.nextCursor;
+        if (!cursor) break;
+      }
+      expect(seen).toEqual([`${SP}crit-new`, `${SP}crit-old`, `${SP}high`, `${SP}low`]);
+      expect(new Set(seen).size).toBe(seen.length); // no dupes
+    });
+
+    it("rejects a cursor replayed under a different sort (400)", async () => {
+      await seedSortSet();
+      const first = (await list("?limit=1&sort=newest")).body;
+      expect(first.nextCursor).toBeTruthy();
+      const res = await list(
+        `?limit=1&sort=oldest&cursor=${encodeURIComponent(first.nextCursor!)}`,
+      );
+      expect(res.statusCode).toBe(400);
+    });
   });
 
   function markRead(id: string, cookie: string | null = sessionCookie) {

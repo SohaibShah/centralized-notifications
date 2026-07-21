@@ -1,7 +1,7 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import type { FeedNotification, NotificationPage } from "@notifications/shared";
-import { actionSchema } from "@notifications/shared";
+import type { FeedNotification, FeedSort, NotificationPage } from "@notifications/shared";
+import { actionSchema, FEED_SORTS } from "@notifications/shared";
 import { requireUser } from "../../auth/guards";
 import { query } from "../../db/pool";
 
@@ -13,6 +13,7 @@ const MAX_LIMIT = 100;
 const listQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
+  sort: z.enum(FEED_SORTS).default("newest"),
 });
 
 // The route param is the notification id (the contract id, text PK up to 200 chars).
@@ -29,13 +30,17 @@ const bulkReadSchema = z.object({
  * OFFSET-style deep scan (NFR-2) — the only valid cursor is one we handed out.
  */
 interface Cursor {
+  s: FeedSort; // the sort this cursor was issued for — a cursor is only valid under its own sort
   ts: string; // ISO created_at
   id: string;
+  rank?: number; // priority_rank, only carried for the priority sorts
 }
 
 const cursorSchema = z.object({
+  s: z.enum(FEED_SORTS),
   ts: z.string().datetime({ offset: true }),
   id: z.string().min(1),
+  rank: z.number().int().min(0).max(3).optional(),
 });
 
 function encodeCursor(c: Cursor): string {
@@ -74,7 +79,16 @@ interface FeedRow {
   // and silently skip same-millisecond rows at page boundaries. So we never build a
   // Date for the ordering column; we carry the exact string.
   created_iso: string;
+  priority_rank: number;
   read: boolean;
+}
+
+/** Build the next-page cursor from the last row of a page, scoped to the active sort. */
+function cursorFor(s: FeedSort, row: FeedRow): Cursor {
+  const base: Cursor = { s, ts: row.created_iso, id: row.id };
+  return s === "priority-high" || s === "priority-low"
+    ? { ...base, rank: row.priority_rank }
+    : base;
 }
 
 /** Reconstruct the split DB columns back into the shared `FeedNotification` shape. */
@@ -120,38 +134,64 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
 
     const parsed = listQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: "invalid query parameters" });
-    const { cursor: rawCursor, limit } = parsed.data;
+    const { cursor: rawCursor, limit, sort } = parsed.data;
 
     let cursor: Cursor | null = null;
     if (rawCursor !== undefined) {
       cursor = decodeCursor(rawCursor);
-      if (!cursor) return reply.code(400).send({ error: "invalid cursor" });
+      // A cursor is only valid under the sort it was issued for — the keyset predicate is
+      // sort-specific, so replaying a `newest` cursor under `oldest` would page incorrectly.
+      // The client refetches page 1 on sort change, so a mismatch here is a misuse; reject it.
+      if (!cursor || cursor.s !== sort) return reply.code(400).send({ error: "invalid cursor" });
     }
 
-    // $1 is always the user id (for the read LEFT JOIN). A cursor adds $2/$3; the
-    // limit is always the final positional parameter. Fetch one extra row to learn
-    // whether an older page exists without a second COUNT query.
+    // $1 is always the user id (for the read LEFT JOIN). A cursor adds its keyset params; the
+    // limit is always the final positional parameter. Fetch one extra row to learn whether an
+    // older page exists without a second COUNT query.
     const params: unknown[] = [user.id];
     // Notifications from an admin-disabled module are recorded but never shown.
     let where = "WHERE n.suppressed = false";
-    if (cursor) {
-      params.push(cursor.ts, cursor.id);
-      where += " AND (n.created_at, n.id) < ($2::timestamptz, $3::text)";
+    let orderBy: string;
+
+    if (sort === "newest" || sort === "oldest") {
+      const [dir, cmp] = sort === "newest" ? ["DESC", "<"] : ["ASC", ">"];
+      orderBy = `n.created_at ${dir}, n.id ${dir}`;
+      if (cursor) {
+        params.push(cursor.ts, cursor.id);
+        where += ` AND (n.created_at, n.id) ${cmp} ($${params.length - 1}::timestamptz, $${params.length}::text)`;
+      }
+    } else {
+      // priority-high: rank ASC (critical first); priority-low: rank DESC. Newest-first within a
+      // level. rank and time run opposite directions, so the keyset needs a two-part comparison:
+      // strictly past this rank, OR same rank and strictly older by (created_at, id).
+      const rankDir = sort === "priority-high" ? "ASC" : "DESC";
+      const rankCmp = sort === "priority-high" ? ">" : "<";
+      orderBy = `n.priority_rank ${rankDir}, n.created_at DESC, n.id DESC`;
+      if (cursor) {
+        params.push(cursor.rank, cursor.ts, cursor.id);
+        const r = params.length - 2;
+        const t = params.length - 1;
+        const i = params.length;
+        where +=
+          ` AND (n.priority_rank ${rankCmp} $${r}::smallint` +
+          ` OR (n.priority_rank = $${r}::smallint AND (n.created_at, n.id) < ($${t}::timestamptz, $${i}::text)))`;
+      }
     }
+
     params.push(limit + 1);
     const limitPlaceholder = `$${params.length}`;
 
     const { rows } = await query<FeedRow>(
       `SELECT n.id, n.module, n.title, n.description, n.priority, n.snoozable,
               n.category, n.audience_scope, n.audience_id, n.actions, n.metadata,
-              n.source_ts,
+              n.source_ts, n.priority_rank,
               to_char(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.USZ') AS created_iso,
               (r.user_id IS NOT NULL) AS read
          FROM notifications n
          LEFT JOIN notification_reads r
            ON r.notification_id = n.id AND r.user_id = $1
          ${where}
-        ORDER BY n.created_at DESC, n.id DESC
+        ORDER BY ${orderBy}
         LIMIT ${limitPlaceholder}`,
       params,
     );
@@ -163,7 +203,7 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       // The cursor carries the exact microsecond string from SQL, so the next page's
       // `(created_at, id) < ($ts, $id)` comparison is lossless — no boundary skips.
       items: pageRows.map(toFeedNotification),
-      nextCursor: hasMore && last ? encodeCursor({ ts: last.created_iso, id: last.id }) : null,
+      nextCursor: hasMore && last ? encodeCursor(cursorFor(sort, last)) : null,
     };
     return reply.code(200).send(body);
   });
