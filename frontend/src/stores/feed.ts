@@ -2,13 +2,13 @@ import { computed, ref, shallowRef, type Ref } from "vue";
 import { defineStore } from "pinia";
 import type {
   FeedNotification,
+  FeedSort,
   Notification,
   NotificationPage,
   NotificationPriority,
 } from "@notifications/shared";
 import { api, ApiError } from "@/api/client";
 import { connectSse, type SseClient, type SseStatus } from "@/api/sse";
-import { priorityRank } from "@/design/tokens";
 
 const PAGE_SIZE = 25;
 // Cap the retained window so a long-lived tab receiving live bursts can't grow `items`
@@ -66,6 +66,10 @@ export const useFeedStore = defineStore("feed", () => {
   const connection = ref<SseStatus>("closed");
   let sse: SseClient | null = null;
 
+  // Server-owned sort order. The keyset cursor is scoped to this value, so changing it
+  // requires a page-1 refetch (see setSort). Default matches the backend default.
+  const sort = ref<FeedSort>("newest");
+
   // --- filters (client-side over the loaded set; server-side is Week 2) ------
   const query = ref("");
   const priorities = ref<Set<NotificationPriority>>(new Set());
@@ -106,6 +110,7 @@ export const useFeedStore = defineStore("feed", () => {
     nextCursor.value = null;
     status.value = "idle";
     readThisSession.value = new Set();
+    sort.value = "newest"; // a re-login starts at the default order
   }
 
   /**
@@ -119,7 +124,9 @@ export const useFeedStore = defineStore("feed", () => {
     status.value = "loading";
     error.value = null;
     try {
-      const page = await api.get<NotificationPage>(`/notifications?limit=${PAGE_SIZE}`);
+      const page = await api.get<NotificationPage>(
+        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}`,
+      );
       addBack(page.items);
       nextCursor.value = page.nextCursor;
       status.value = "ready";
@@ -136,7 +143,7 @@ export const useFeedStore = defineStore("feed", () => {
     try {
       const cursor = encodeURIComponent(nextCursor.value);
       const page = await api.get<NotificationPage>(
-        `/notifications?limit=${PAGE_SIZE}&cursor=${cursor}`,
+        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&cursor=${cursor}`,
       );
       addBack(page.items);
       nextCursor.value = page.nextCursor;
@@ -148,6 +155,20 @@ export const useFeedStore = defineStore("feed", () => {
     } finally {
       loadingMore.value = false;
     }
+  }
+
+  /**
+   * Change the feed sort: soft-reset the loaded window (keep the SSE connection live) and
+   * refetch page 1 in the new order. The keyset cursor is sort-scoped, so the old window is
+   * discarded rather than merged. Distinct from reset(), which is login-scoped.
+   */
+  async function setSort(next: FeedSort): Promise<void> {
+    if (next === sort.value) return;
+    sort.value = next;
+    seen.clear();
+    items.value = [];
+    nextCursor.value = null;
+    await load(); // load() flushes session reads and refetches the newest page in the new order
   }
 
   // Critical-arrival subscribers (the toast listens here). Fired only with items that
@@ -295,9 +316,9 @@ export const useFeedStore = defineStore("feed", () => {
   const unreadCount = computed(() => items.value.reduce((n, x) => n + (x.read ? 0 : 1), 0));
 
   /**
-   * Split the visible feed into "Needs action" (unread) and "Earlier" (read). Unread
-   * is ordered by urgency then recency so a live critical rises to the top; read stays
-   * in load order (newest-first). Empty groups are omitted.
+   * Split the visible feed into "Needs action" (unread) and "Earlier" (read). Both groups
+   * preserve load order, which is the server-owned sort (see `sort` / setSort) — the client
+   * no longer re-ranks Needs action by priority. Empty groups are omitted.
    */
   const groups = computed<FeedGroup[]>(() => {
     const needsAction: FeedNotification[] = [];
@@ -307,10 +328,6 @@ export const useFeedStore = defineStore("feed", () => {
       const sticky = n.read && readThisSession.value.has(n.id);
       (n.read && !sticky ? earlier : needsAction).push(n);
     }
-    needsAction.sort(
-      (a, b) =>
-        priorityRank[a.priority] - priorityRank[b.priority] || cmpDesc(a.createdAt, b.createdAt),
-    );
     const out: FeedGroup[] = [];
     if (needsAction.length)
       out.push({ key: "needs-action", label: "Needs action", items: needsAction });
@@ -356,6 +373,7 @@ export const useFeedStore = defineStore("feed", () => {
     nextCursor,
     connection,
     hasMore,
+    sort,
     // filters
     query,
     priorities,
@@ -372,6 +390,7 @@ export const useFeedStore = defineStore("feed", () => {
     // actions
     load,
     loadMore,
+    setSort,
     reset,
     connect,
     disconnect,
@@ -390,9 +409,4 @@ export const useFeedStore = defineStore("feed", () => {
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
-}
-
-/** ISO-string comparison, newest first (lexical order works for ISO 8601 UTC). */
-function cmpDesc(a: string, b: string): number {
-  return a < b ? 1 : a > b ? -1 : 0;
 }

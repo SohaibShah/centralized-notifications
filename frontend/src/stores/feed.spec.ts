@@ -115,7 +115,7 @@ describe("feed store", () => {
     expect(feed.visibleItems.map((n) => n.id)).toEqual(["norm"]);
   });
 
-  it("groups into Needs action (unread, urgency-sorted) and Earlier (read)", async () => {
+  it("groups into Needs action and Earlier, preserving load order (no client re-sort)", async () => {
     const feed = useFeedStore();
     getMock.mockResolvedValueOnce(
       page([
@@ -128,9 +128,25 @@ describe("feed store", () => {
 
     const groups = feed.groups;
     expect(groups.map((g) => g.key)).toEqual(["needs-action", "earlier"]);
-    expect(groups[0]?.items.map((n) => n.id)).toEqual(["c1", "n1"]); // critical before normal
+    // Load order preserved — the server owns the sort now, so the client does NOT re-rank
+    // Needs action by priority (n1 loaded before c1 stays n1, c1).
+    expect(groups[0]?.items.map((n) => n.id)).toEqual(["n1", "c1"]);
     expect(groups[1]?.items.map((n) => n.id)).toEqual(["r1"]);
     expect(feed.unreadCount).toBe(2);
+  });
+
+  it("setSort clears the loaded window and refetches page 1 with the new sort", async () => {
+    getMock.mockResolvedValue(page([feedItem({ id: "a" })], null));
+    const feed = useFeedStore();
+    await feed.load();
+    expect(feed.sort).toBe("newest");
+    getMock.mockClear();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "z" })], null));
+    await feed.setSort("oldest");
+    expect(feed.sort).toBe("oldest");
+    expect(getMock).toHaveBeenCalledTimes(1);
+    expect(getMock.mock.calls[0]?.[0]).toContain("sort=oldest");
+    expect(feed.items.map((n) => n.id)).toEqual(["z"]); // window replaced, not appended
   });
 
   it("markRead() optimistically flips the flag and POSTs (row stays put — sticky read)", async () => {
