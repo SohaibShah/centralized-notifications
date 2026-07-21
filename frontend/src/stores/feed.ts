@@ -4,6 +4,7 @@ import type {
   FeedNotification,
   FeedSort,
   Notification,
+  NotificationCounts,
   NotificationPage,
   NotificationPriority,
 } from "@notifications/shared";
@@ -70,6 +71,35 @@ export const useFeedStore = defineStore("feed", () => {
   // requires a page-1 refetch (see setSort). Default matches the backend default.
   const sort = ref<FeedSort>("newest");
 
+  // Authoritative unread counts over the WHOLE dataset (from GET /notifications/counts), so the
+  // bell/header/chip counts don't undercount to the loaded window. Seeded by fetchCounts (on load
+  // + panel open) and kept live by exact optimistic deltas (read actions) and SSE increments.
+  function emptyByPriority(): Record<NotificationPriority, number> {
+    return { critical: 0, high: 0, normal: 0, low: 0 };
+  }
+  const counts = ref<NotificationCounts>({ unread: 0, unreadByPriority: emptyByPriority() });
+
+  /** Apply an exact delta to the unread total and one priority bucket; clamp at 0. */
+  function adjustCount(priority: NotificationPriority, delta: number): void {
+    const byPriority = { ...counts.value.unreadByPriority };
+    byPriority[priority] = Math.max(0, byPriority[priority] + delta);
+    counts.value = {
+      unread: Math.max(0, counts.value.unread + delta),
+      unreadByPriority: byPriority,
+    };
+  }
+
+  /** Refresh the authoritative counts snapshot. Best-effort — a failure keeps the last snapshot. */
+  async function fetchCounts(): Promise<void> {
+    try {
+      const next = await api.get<NotificationCounts>("/notifications/counts");
+      // Only accept a well-formed snapshot — never blank the counts on a bad/empty response.
+      if (next && typeof next.unread === "number" && next.unreadByPriority) counts.value = next;
+    } catch {
+      console.warn("[feed] failed to refresh counts; keeping the last snapshot");
+    }
+  }
+
   // --- filters (client-side over the loaded set; server-side is Week 2) ------
   const query = ref("");
   const priorities = ref<Set<NotificationPriority>>(new Set());
@@ -111,6 +141,7 @@ export const useFeedStore = defineStore("feed", () => {
     status.value = "idle";
     readThisSession.value = new Set();
     sort.value = "newest"; // a re-login starts at the default order
+    counts.value = { unread: 0, unreadByPriority: emptyByPriority() };
   }
 
   /**
@@ -130,6 +161,7 @@ export const useFeedStore = defineStore("feed", () => {
       addBack(page.items);
       nextCursor.value = page.nextCursor;
       status.value = "ready";
+      await fetchCounts(); // dataset-wide counts; refreshed on load, NOT on loadMore
     } catch {
       status.value = "error";
       error.value = "Couldn't load your notifications. Check your connection and try again.";
@@ -182,7 +214,11 @@ export const useFeedStore = defineStore("feed", () => {
   /** Handle one coalesced SSE burst: prepend new notifications, then notify critical subs. */
   function onLiveBatch(batch: Notification[]): void {
     const incoming = batch.map(toFeed);
-    const freshCriticals = incoming.filter((n) => !seen.has(n.id) && n.priority === "critical");
+    // Compute fresh (new-to-`seen`) items BEFORE addFront dedupes them. Live arrivals are unread,
+    // so each genuinely-new one bumps the counts by its priority.
+    const fresh = incoming.filter((n) => !seen.has(n.id));
+    for (const n of fresh) adjustCount(n.priority, +1);
+    const freshCriticals = fresh.filter((n) => n.priority === "critical");
     addFront(incoming); // dedupes on `seen` internally
     if (freshCriticals.length > 0) for (const cb of criticalSubs) cb(freshCriticals);
   }
@@ -221,20 +257,24 @@ export const useFeedStore = defineStore("feed", () => {
   async function markRead(id: string): Promise<void> {
     const target = items.value.find((n) => n.id === id);
     if (!target || target.read) return;
+    const prio = target.priority;
     setRead(id, true);
     stick(id); // open-and-seen: keep it in place while it's read this session
+    adjustCount(prio, -1); // optimistic: one fewer unread of this priority
     try {
       await api.post(`/notifications/${encodeURIComponent(id)}/read`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         // The notification no longer exists server-side (e.g. deleted via admin maintenance
         // while this feed stayed open). Drop the stale row instead of reverting — otherwise it
-        // lingers, un-markable, because every future read POST 404s the same way.
+        // lingers, un-markable, because every future read POST 404s the same way. It's no longer
+        // an unread-existing notification, so the count decrement stands.
         remove(id);
         return;
       }
       setRead(id, false); // genuine failure — revert
       unstick(id);
+      adjustCount(prio, +1); // revert the count delta too
       console.warn(`[feed] failed to mark ${id} read; reverted`);
     }
   }
@@ -247,14 +287,17 @@ export const useFeedStore = defineStore("feed", () => {
   async function markUnread(id: string): Promise<void> {
     const target = items.value.find((n) => n.id === id);
     if (!target || !target.read) return;
+    const prio = target.priority;
     const wasSticky = readThisSession.value.has(id);
     setRead(id, false);
     unstick(id);
+    adjustCount(prio, +1); // optimistic: one more unread of this priority
     try {
       await api.del(`/notifications/${encodeURIComponent(id)}/read`);
     } catch {
       setRead(id, true); // revert — the server didn't clear it
       if (wasSticky) stick(id); // restore its in-place (sticky) position too — a true inverse
+      adjustCount(prio, -1); // revert the count delta too
       console.warn(`[feed] failed to mark ${id} unread; reverted`);
     }
   }
@@ -265,13 +308,19 @@ export const useFeedStore = defineStore("feed", () => {
    * request, revert all on failure.
    */
   async function markAllReadInScope(): Promise<void> {
-    const ids = visibleItems.value.filter((n) => !n.read).map((n) => n.id);
-    if (ids.length === 0) return;
-    for (const id of ids) setRead(id, true);
+    const targets = visibleItems.value.filter((n) => !n.read);
+    if (targets.length === 0) return;
+    for (const n of targets) {
+      setRead(n.id, true);
+      adjustCount(n.priority, -1);
+    }
     try {
-      await api.post("/notifications/read", { ids });
+      await api.post("/notifications/read", { ids: targets.map((n) => n.id) });
     } catch {
-      for (const id of ids) setRead(id, false);
+      for (const n of targets) {
+        setRead(n.id, false);
+        adjustCount(n.priority, +1);
+      }
       console.warn("[feed] mark-all-read failed; reverted");
     }
   }
@@ -374,6 +423,7 @@ export const useFeedStore = defineStore("feed", () => {
     connection,
     hasMore,
     sort,
+    counts,
     // filters
     query,
     priorities,
@@ -391,6 +441,7 @@ export const useFeedStore = defineStore("feed", () => {
     load,
     loadMore,
     setSort,
+    fetchCounts,
     reset,
     connect,
     disconnect,

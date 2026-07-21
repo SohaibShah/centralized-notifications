@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createPinia, setActivePinia } from "pinia";
-import type { FeedNotification, Notification } from "@notifications/shared";
+import type { FeedNotification, Notification, NotificationCounts } from "@notifications/shared";
 import { feedItem } from "@/test-support/feedItem";
 import { ApiError } from "@/api/client";
 
@@ -144,8 +144,8 @@ describe("feed store", () => {
     getMock.mockResolvedValueOnce(page([feedItem({ id: "z" })], null));
     await feed.setSort("oldest");
     expect(feed.sort).toBe("oldest");
-    expect(getMock).toHaveBeenCalledTimes(1);
-    expect(getMock.mock.calls[0]?.[0]).toContain("sort=oldest");
+    // load() now also refreshes counts, so a sort change fires the page GET plus a counts GET.
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("sort=oldest"))).toBe(true);
     expect(feed.items.map((n) => n.id)).toEqual(["z"]); // window replaced, not appended
   });
 
@@ -379,5 +379,80 @@ describe("feed store", () => {
     off();
     sseState.onBatch!([liveNotif({ id: "z", priority: "critical" })]);
     expect(seen).toEqual([["x"]]); // unsubscribed → no further calls
+  });
+
+  const counts = (
+    unread: number,
+    by: Partial<Record<string, number>> = {},
+  ): NotificationCounts => ({
+    unread,
+    unreadByPriority: { critical: 0, high: 0, normal: 0, low: 0, ...by },
+  });
+
+  describe("counts", () => {
+    it("fetchCounts populates the counts snapshot", async () => {
+      getMock.mockResolvedValueOnce(counts(5, { critical: 2, high: 3 }));
+      const feed = useFeedStore();
+      await feed.fetchCounts();
+      expect(feed.counts.unread).toBe(5);
+      expect(feed.counts.unreadByPriority.critical).toBe(2);
+    });
+
+    it("markRead applies an exact optimistic delta by priority", async () => {
+      const feed = useFeedStore();
+      getMock.mockResolvedValueOnce(
+        page([feedItem({ id: "a", read: false, priority: "critical" })]),
+      );
+      await feed.load();
+      feed.counts = counts(4, { critical: 2, high: 2 });
+      await feed.markRead("a");
+      expect(feed.counts.unread).toBe(3);
+      expect(feed.counts.unreadByPriority.critical).toBe(1);
+    });
+
+    it("markRead reverts the count delta when the POST fails", async () => {
+      const feed = useFeedStore();
+      getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false, priority: "high" })]));
+      await feed.load();
+      feed.counts = counts(2, { high: 2 });
+      postMock.mockRejectedValueOnce(new Error("500"));
+      await feed.markRead("a");
+      expect(feed.counts.unread).toBe(2);
+      expect(feed.counts.unreadByPriority.high).toBe(2);
+    });
+
+    it("markUnread increments the count by priority", async () => {
+      const feed = useFeedStore();
+      getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true, priority: "high" })]));
+      await feed.load();
+      feed.counts = counts(1, { high: 1 });
+      await feed.markUnread("a");
+      expect(feed.counts.unread).toBe(2);
+      expect(feed.counts.unreadByPriority.high).toBe(2);
+    });
+
+    it("an SSE batch increments counts for genuinely-new unread items only", async () => {
+      const feed = useFeedStore();
+      getMock.mockResolvedValueOnce(page([feedItem({ id: "a", priority: "critical" })], null));
+      feed.connect();
+      await feed.load();
+      feed.counts = counts(1, { critical: 1 });
+      sseState.onBatch!([
+        liveNotif({ id: "x", priority: "critical" }),
+        liveNotif({ id: "a", priority: "critical" }), // already loaded → not counted
+      ]);
+      expect(feed.counts.unread).toBe(2);
+      expect(feed.counts.unreadByPriority.critical).toBe(2);
+    });
+
+    it("counts never go negative", async () => {
+      const feed = useFeedStore();
+      getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false, priority: "low" })]));
+      await feed.load();
+      feed.counts = counts(0);
+      await feed.markRead("a");
+      expect(feed.counts.unread).toBe(0);
+      expect(feed.counts.unreadByPriority.low).toBe(0);
+    });
   });
 });
