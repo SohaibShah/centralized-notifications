@@ -69,7 +69,7 @@ onBeforeUnmount(() => {
       <Icon :icon="Bell" :size="18" />
       <span
         v-if="feed.counts.unread > 0"
-        class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[11px] font-semibold tabular-nums text-white"
+        class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[11px] font-semibold tabular-nums text-danger-ink"
         aria-hidden="true"
       >
         {{ badge }}

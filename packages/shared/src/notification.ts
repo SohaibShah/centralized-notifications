@@ -126,8 +126,19 @@ export interface NotificationPage {
  * Unread notification counts for the current user, aggregated server-side over the whole
  * dataset (not the loaded feed window). `unread` is the sum of `unreadByPriority`. Absolute
  * for now (ignores active filters); shaped to grow optional filter params later.
+ *
+ * A schema (not just a type) so the frontend can parse the response defensively — a malformed
+ * or partial body must never poison the counts snapshot (a missing bucket would otherwise make
+ * an optimistic delta compute NaN). All four buckets are required and non-negative.
  */
-export interface NotificationCounts {
-  unread: number;
-  unreadByPriority: Record<NotificationPriority, number>;
-}
+export const notificationCountsSchema = z.object({
+  unread: z.number().int().nonnegative(),
+  unreadByPriority: z.object({
+    critical: z.number().int().nonnegative(),
+    high: z.number().int().nonnegative(),
+    normal: z.number().int().nonnegative(),
+    low: z.number().int().nonnegative(),
+  }),
+});
+
+export type NotificationCounts = z.infer<typeof notificationCountsSchema>;

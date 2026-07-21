@@ -127,7 +127,7 @@ onBeforeUnmount(() => {
         class="z-50 w-64 rounded-lg border border-line-strong bg-surface shadow-lg shadow-black/5"
         role="group"
         aria-label="Filter notifications"
-        @keydown.esc="close"
+        @keydown.esc.stop="close"
       >
         <div class="border-b border-line p-2">
           <input
@@ -141,23 +141,27 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="max-h-72 overflow-y-auto p-1.5">
-          <p class="px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-faint">Sort by</p>
-          <label
-            v-for="o in sortOptions"
-            :key="o.value"
-            class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-text hover:bg-sunken"
-          >
-            <input
-              type="radio"
-              name="feed-sort"
-              class="accent-accent"
-              :data-test="`feed-sort-${o.value}`"
-              :value="o.value"
-              :checked="feed.sort === o.value"
-              @change="feed.setSort(o.value)"
-            />
-            {{ o.label }}
-          </label>
+          <div role="radiogroup" aria-label="Sort by">
+            <p class="px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-faint">
+              Sort by
+            </p>
+            <label
+              v-for="o in sortOptions"
+              :key="o.value"
+              class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-text hover:bg-sunken"
+            >
+              <input
+                type="radio"
+                name="feed-sort"
+                class="accent-accent"
+                :data-test="`feed-sort-${o.value}`"
+                :value="o.value"
+                :checked="feed.sort === o.value"
+                @change="feed.setSort(o.value)"
+              />
+              {{ o.label }}
+            </label>
+          </div>
           <div class="my-1 border-t border-line" aria-hidden="true" />
 
           <template v-if="visiblePriorities.length">

@@ -437,6 +437,33 @@ describe("feed store", () => {
       expect(feed.counts.unreadByPriority.critical).toBe(2);
     });
 
+    it("markAllReadInScope decrements the count once per flipped id (by priority)", async () => {
+      const feed = useFeedStore();
+      getMock.mockResolvedValueOnce(
+        page([
+          feedItem({ id: "a", read: false, priority: "critical" }),
+          feedItem({ id: "b", read: false, priority: "high" }),
+          feedItem({ id: "c", read: true, priority: "high" }), // already read → not flipped
+        ]),
+      );
+      await feed.load();
+      feed.counts = counts(4, { critical: 2, high: 2 });
+      await feed.markAllReadInScope();
+      expect(feed.counts.unread).toBe(2); // -2 (a + b), c untouched
+      expect(feed.counts.unreadByPriority.critical).toBe(1);
+      expect(feed.counts.unreadByPriority.high).toBe(1);
+    });
+
+    it("fetchCounts keeps the last snapshot when the response is malformed", async () => {
+      const feed = useFeedStore();
+      feed.counts = counts(3, { critical: 3 });
+      getMock.mockResolvedValueOnce({ unread: 2, unreadByPriority: {} }); // missing buckets
+      await feed.fetchCounts();
+      // Not poisoned: the prior good snapshot is retained (a partial body would make deltas NaN).
+      expect(feed.counts.unread).toBe(3);
+      expect(feed.counts.unreadByPriority.critical).toBe(3);
+    });
+
     it("counts never go negative", async () => {
       const feed = useFeedStore();
       getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false, priority: "low" })]));

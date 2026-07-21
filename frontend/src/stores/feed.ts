@@ -8,6 +8,7 @@ import type {
   NotificationPage,
   NotificationPriority,
 } from "@notifications/shared";
+import { notificationCountsSchema } from "@notifications/shared";
 import { api, ApiError } from "@/api/client";
 import { connectSse, type SseClient, type SseStatus } from "@/api/sse";
 
@@ -92,9 +93,13 @@ export const useFeedStore = defineStore("feed", () => {
   /** Refresh the authoritative counts snapshot. Best-effort — a failure keeps the last snapshot. */
   async function fetchCounts(): Promise<void> {
     try {
-      const next = await api.get<NotificationCounts>("/notifications/counts");
-      // Only accept a well-formed snapshot — never blank the counts on a bad/empty response.
-      if (next && typeof next.unread === "number" && next.unreadByPriority) counts.value = next;
+      // Parse defensively: a malformed/partial body must never poison the snapshot (a missing
+      // bucket would make a later optimistic delta compute NaN). On a bad shape, keep the last one.
+      const parsed = notificationCountsSchema.safeParse(
+        await api.get<unknown>("/notifications/counts"),
+      );
+      if (parsed.success) counts.value = parsed.data;
+      else console.warn("[feed] counts response failed validation; keeping the last snapshot");
     } catch {
       console.warn("[feed] failed to refresh counts; keeping the last snapshot");
     }
@@ -215,8 +220,14 @@ export const useFeedStore = defineStore("feed", () => {
   function onLiveBatch(batch: Notification[]): void {
     const incoming = batch.map(toFeed);
     // Compute fresh (new-to-`seen`) items BEFORE addFront dedupes them. Live arrivals are unread,
-    // so each genuinely-new one bumps the counts by its priority.
-    const fresh = incoming.filter((n) => !seen.has(n.id));
+    // so each genuinely-new one bumps the counts by its priority. Dedupe within the batch too, so a
+    // repeated id in one frame counts once (matching addFront's own de-dupe). Note: fetchCounts on
+    // load + panel open is authoritative and reconciles any transient drift (e.g. an at-least-once
+    // re-delivery of an older item after setSort cleared `seen`).
+    const batchSeen = new Set<string>();
+    const fresh = incoming.filter(
+      (n) => !seen.has(n.id) && !batchSeen.has(n.id) && batchSeen.add(n.id),
+    );
     for (const n of fresh) adjustCount(n.priority, +1);
     const freshCriticals = fresh.filter((n) => n.priority === "critical");
     addFront(incoming); // dedupes on `seen` internally
