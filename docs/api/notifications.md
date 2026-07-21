@@ -154,6 +154,43 @@ Read state lives in its own table — `notification_reads(user_id, notification_
 
 None — read-only.
 
+## GET /notifications/counts
+
+**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
+
+Returns the current user's **unread** notification counts (FR-5), aggregated **server-side over the whole dataset** — not just the notifications on the loaded feed page. This is what the bell badge, the "Needs action" header count, and the per-priority chip counts read from, so they stay accurate rather than reflecting only the loaded keyset window. Read-only — no side effects.
+
+Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+
+The counted set uses the **same filters as the [feed read path](#get-notifications)**: it excludes rows this user has already read (per-user [`notification_reads`](#feednotification), matched by a `LEFT JOIN … WHERE r.user_id IS NULL`) and excludes `suppressed` rows (from admin-disabled modules — see the [Admin API](./admin.md)). A notification the user has read, or that belongs to a disabled module, contributes to none of the buckets.
+
+> **Week-1 limitation.** Same as [`GET /notifications`](#get-notifications): every authenticated user currently counts **every** notification — there is no audience resolution yet (that lands in Week 4). These counts are not per-audience scoped; do not read them as "notifications targeted at this user."
+
+### Request
+
+No parameters. **Absolute for now** — the endpoint ignores any active client-side filters (module, search); it always counts the user's full unread set. It is shaped to grow **optional** filter query params later without breaking the current contract (a call with no params keeps returning the absolute counts).
+
+### Response `200`
+
+A [`NotificationCounts`](../../packages/shared/src/notification.ts): the total `unread` plus a per-priority breakdown. `unread` is the **sum** of the four `unreadByPriority` buckets. All four priority keys (`critical`, `high`, `normal`, `low`) are **always present**, zero-filled — a priority with no unread rows is reported as `0`, never omitted.
+
+```json
+{
+  "unread": 12,
+  "unreadByPriority": { "critical": 3, "high": 7, "normal": 2, "low": 0 }
+}
+```
+
+### Errors
+
+| Status | Body                                     | Reason                   |
+| ------ | ---------------------------------------- | ------------------------ |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie. |
+
+### Side effects
+
+None — read-only.
+
 ## POST /notifications/:id/read
 
 **Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
