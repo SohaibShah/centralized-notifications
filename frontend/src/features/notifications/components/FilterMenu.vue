@@ -1,10 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
 import { SlidersHorizontal } from "@lucide/vue";
-import { NOTIFICATION_PRIORITIES, type NotificationPriority } from "@notifications/shared";
+import {
+  NOTIFICATION_PRIORITIES,
+  type FeedSort,
+  type NotificationPriority,
+} from "@notifications/shared";
 import Icon from "@/components/ui/Icon.vue";
 import { priorityDotClass, priorityLabel, priorityRank } from "@/design/tokens";
 import { useFeedStore } from "@/stores/feed";
+
+const sortOptions: { value: FeedSort; label: string }[] = [
+  { value: "newest", label: "Newest" },
+  { value: "oldest", label: "Oldest" },
+  { value: "priority-high", label: "Priority: high → low" },
+  { value: "priority-low", label: "Priority: low → high" },
+];
 
 // The searchable filter dropdown (design-system: "quick chip presets + a searchable
 // FilterMenu"). Facets are priority and the modules present in the loaded feed; the
@@ -129,6 +140,25 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="max-h-72 overflow-y-auto p-1.5">
+          <p class="px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-faint">Sort by</p>
+          <label
+            v-for="o in sortOptions"
+            :key="o.value"
+            class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-text hover:bg-sunken"
+          >
+            <input
+              type="radio"
+              name="feed-sort"
+              class="accent-accent"
+              :data-test="`feed-sort-${o.value}`"
+              :value="o.value"
+              :checked="feed.sort === o.value"
+              @change="feed.setSort(o.value)"
+            />
+            {{ o.label }}
+          </label>
+          <div class="my-1 border-t border-line" aria-hidden="true" />
+
           <template v-if="visiblePriorities.length">
             <p class="px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-faint">
               Priority

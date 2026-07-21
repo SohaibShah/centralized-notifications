@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { ChevronDown, Inbox, SearchX, Sparkles, WifiOff } from "@lucide/vue";
-import type { FeedNotification, FeedSort, NotificationAction } from "@notifications/shared";
+import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Button from "@/components/ui/Button.vue";
 import Chip from "@/components/ui/Chip.vue";
 import Icon from "@/components/ui/Icon.vue";
@@ -95,27 +95,13 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
       </p>
     </div>
 
-    <div class="flex shrink-0 flex-wrap items-center gap-1.5 px-3 pb-2 pt-3">
+    <div class="flex shrink-0 items-center gap-1.5 px-3 pb-2 pt-3">
       <Chip :active="!feed.isFiltered" @click="feed.clearFilters()">All</Chip>
       <Chip :active="feed.unreadOnly" @click="feed.toggleUnreadOnly()">Unread</Chip>
       <Chip :active="feed.priorities.has('critical')" @click="feed.togglePriority('critical')"
         >Critical</Chip
       >
       <Chip :active="feed.priorities.has('high')" @click="feed.togglePriority('high')">High</Chip>
-      <label class="ml-auto flex items-center gap-1.5 text-[12px] text-muted">
-        Sort
-        <select
-          data-test="feed-sort"
-          class="rounded-md border border-line-strong bg-surface px-2 py-1 text-[12px] text-text"
-          :value="feed.sort"
-          @change="feed.setSort(($event.target as HTMLSelectElement).value as FeedSort)"
-        >
-          <option value="newest">Newest</option>
-          <option value="oldest">Oldest</option>
-          <option value="priority-high">Priority: high → low</option>
-          <option value="priority-low">Priority: low → high</option>
-        </select>
-      </label>
     </div>
 
     <!-- Body: loading / error / empty / filtered-empty / populated -->

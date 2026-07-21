@@ -151,14 +151,11 @@ describe("InboxTab", () => {
     expect(wrapper.get('[data-test="ai-glow"]').classes()).toContain("is-blooming"); // bloom fired
   });
 
-  it("renders a sort select that calls setSort on change", async () => {
+  it("no longer renders a sort select in the chips row (moved to the filter menu)", () => {
     const feed = useFeedStore();
     feed.status = "ready";
-    const spy = vi.spyOn(feed, "setSort").mockResolvedValue();
     const wrapper = mount(InboxTab);
-    const select = wrapper.get('[data-test="feed-sort"]');
-    await select.setValue("priority-high");
-    expect(spy).toHaveBeenCalledWith("priority-high");
+    expect(wrapper.find('[data-test="feed-sort"]').exists()).toBe(false);
   });
 
   it("toggles the AI-summary detail visibility when the disclosure button is clicked", async () => {
