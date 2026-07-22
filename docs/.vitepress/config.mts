@@ -12,6 +12,7 @@ export default defineConfig({
       { text: 'Home', link: '/' },
       { text: 'API', link: '/api/' },
       { text: 'Frontend', link: '/frontend/' },
+      { text: 'Architecture', link: '/architecture/' },
     ],
     sidebar: {
       '/api/': [
@@ -32,6 +33,16 @@ export default defineConfig({
           text: 'Frontend',
           items: [
             { text: 'Overview', link: '/frontend/' },
+          ],
+        },
+      ],
+      '/architecture/': [
+        {
+          text: 'Architecture',
+          items: [
+            { text: 'Overview', link: '/architecture/' },
+            { text: 'BE library integration', link: '/architecture/be-library-integration' },
+            { text: 'Library conversion direction', link: '/architecture/library-conversion-direction' },
           ],
         },
       ],

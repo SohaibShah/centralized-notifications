@@ -274,8 +274,10 @@ hidden behind the admin gate.
 > value leaves this endpoint registered.
 
 The dev/QA notification generator. It fabricates notifications and pushes each one through the
-**real** [`ingest()`](../../backend/src/pipeline/ingest.ts) pipeline, so dedupe, module
-policy/suppression, and SSE delivery all behave exactly as they do for a genuine publish. This
+**real** pipeline via `service.ingest()`
+([`packages/core/src/pipeline/ingest.ts`](../../packages/core/src/pipeline/ingest.ts)), so
+dedupe, module policy/suppression, and SSE delivery all behave exactly as they do for a genuine
+publish. This
 endpoint exists so the browser can generate test traffic **without ever holding the
 service-to-service `x-internal-token`** used by [`POST /internal/publish`](./notifications.md) —
 that token is never exposed to the client.
@@ -374,8 +376,9 @@ unique per-burst ids (server-controlled).
 
 ### Side effects
 
-Runs every generated notification through the real [`ingest()`](../../backend/src/pipeline/ingest.ts)
-pipeline: each is persisted, deduped on its server-assigned id, checked against module policy,
+Runs every generated notification through the real pipeline via `service.ingest()`
+([`packages/core/src/pipeline/ingest.ts`](../../packages/core/src/pipeline/ingest.ts)):
+each is persisted, deduped on its server-assigned id, checked against module policy,
 and — for enabled modules — delivered live over SSE, exactly as a real publish. A notification
 generated for a **disabled** module is counted in `suppressed` and does **not** appear in the
 feed. No `x-internal-token` is used or exposed.
