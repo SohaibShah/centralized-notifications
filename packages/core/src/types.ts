@@ -15,6 +15,17 @@ export interface ModuleCatalogEntry {
   label: string;
 }
 
+/** Admin view of a module: host-config label ⨝ library state ⨝ notification aggregate. */
+export interface ModulePolicyView {
+  id: string;
+  label: string;
+  enabled: boolean;
+  lastSeenAt: string;
+  total: number;
+  suppressed: number;
+  byPriority: Record<"critical" | "high" | "normal" | "low", number>;
+}
+
 /** Runtime-toggleable notification-domain settings (feature flags + retention). Library-owned state. */
 export interface Settings {
   aiSummaryEnabled: boolean;
