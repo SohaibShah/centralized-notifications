@@ -1,1 +1,2 @@
-export const CORE_PACKAGE = "@notifications/core" as const;
+export { createDb, type QueryFn } from "./db";
+export type { Principal, ModuleCatalogEntry, Settings, NotificationServiceConfig } from "./types";
