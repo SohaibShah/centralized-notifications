@@ -16,8 +16,8 @@ test.describe("QoL", () => {
     page,
     request,
   }) => {
-    const token = process.env.INTERNAL_INTAKE_TOKEN ?? "";
-    expect(token, "INTERNAL_INTAKE_TOKEN must be set").not.toBe("");
+    const intakeTokenValue = process.env.INTERNAL_INTAKE_TOKEN ?? "";
+    expect(intakeTokenValue, "INTERNAL_INTAKE_TOKEN must be set").not.toBe("");
 
     const sseConnected = page
       .waitForResponse((r) => r.url().includes("/sse"), { timeout: 20_000 })
@@ -31,7 +31,7 @@ test.describe("QoL", () => {
     const stamp = Date.now();
     const title = `Re-read me ${stamp}`;
     const publish = await request.post(`${BACKEND}/internal/publish`, {
-      headers: { "x-internal-token": token, "content-type": "application/json" },
+      headers: { "x-internal-token": intakeTokenValue, "content-type": "application/json" },
       data: {
         id: `qol-${stamp}`,
         module: "dsr", // a real seeded catalog module (unknown modules are rejected at intake)

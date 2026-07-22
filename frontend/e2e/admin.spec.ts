@@ -29,8 +29,8 @@ test.describe("admin", () => {
     page,
     request,
   }) => {
-    const token = process.env.INTERNAL_INTAKE_TOKEN ?? "";
-    expect(token, "INTERNAL_INTAKE_TOKEN must be set").not.toBe("");
+    const intakeTokenValue = process.env.INTERNAL_INTAKE_TOKEN ?? "";
+    expect(intakeTokenValue, "INTERNAL_INTAKE_TOKEN must be set").not.toBe("");
 
     // Modules are a fixed, seeded catalog now (auto-discovery was removed — an unknown module is
     // rejected at intake), so this test toggles a REAL module and restores it in `finally` so the
@@ -56,7 +56,7 @@ test.describe("admin", () => {
     try {
       // Publish from the now-disabled module → it must be suppressed (never delivered).
       const hiddenTitle = `Hidden ${Date.now()}`;
-      await publish(request, token, {
+      await publish(request, intakeTokenValue, {
         id: `e2e-suppressed-${Date.now()}`,
         module: mod,
         title: hiddenTitle,

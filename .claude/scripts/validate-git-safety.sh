@@ -35,7 +35,10 @@ if echo "$DIFF" | grep -qE '\-\-\-\-\-BEGIN (RSA|EC|OPENSSH|DSA)? ?PRIVATE KEY\-
   FLAGS="${FLAGS}- Found a private key block."$'\n'
 fi
 
-if echo "$DIFF" | grep -qiE '(api.?key|secret|password|token)[[:space:]]*[:=][[:space:]]*.{0,3}[A-Za-z0-9/+_.-]{16,}'; then
+# Reading a secret FROM the environment/config (process.env.X, import.meta.env.X, getEnv().X,
+# os.environ[...]) is the CORRECT pattern, not a hardcoded credential — exclude those so they
+# don't produce false positives. A real hardcoded value (a literal string/number) still trips.
+if echo "$DIFF" | grep -iE '(api.?key|secret|password|token)[[:space:]]*[:=][[:space:]]*.{0,3}[A-Za-z0-9/+_.-]{16,}' | grep -qivE 'process\.env|import\.meta\.env|getenv\(|os\.environ'; then
   FLAGS="${FLAGS}- Found a line that looks like a hardcoded credential (key/secret/password/token assigned to a long value)."$'\n'
 fi
 
