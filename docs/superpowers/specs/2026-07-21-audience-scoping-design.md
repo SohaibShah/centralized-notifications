@@ -75,11 +75,14 @@ export async function resolveRecipients(audience: Audience): Promise<string[] | 
 Both are backed by the internal session/DB **today**; at extraction the host provides identity and
 recipient resolution, and only this module changes.
 
-## Read path — feed list + counts (`backend/src/http/notifications/routes.ts`)
+## Read path — feed list, counts, AND read-state writes (`backend/src/http/notifications/routes.ts`)
 
-Both `GET /notifications` and `GET /notifications/counts` gain the **same** audience predicate,
-matched against `resolvePrincipal(req.user)`. A shared helper keeps them identical (so what you
-count always equals what you can see):
+Every endpoint that touches a notification by identity gains the **same** audience predicate,
+matched against `resolvePrincipal(req.user)` — not just the two that return content. Applying it only
+to the content endpoints would leave an **existence oracle**: a user could confirm whether an id they
+can't see exists (ids are caller-supplied and often meaningful), and could mark-read notifications
+outside their audience. A shared helper keeps every use identical (so what you count == what you see
+== what you can act on):
 
 ```ts
 // Appends audience params to `params`, returns the SQL fragment. No identity-table joins.
@@ -98,6 +101,14 @@ function audiencePredicate(p: Principal, params: unknown[]): string {
 - Feed list: `AND` this into the existing `WHERE n.suppressed = false ...` before the keyset
   comparison. The existing `notifications_audience_idx` supports it.
 - Counts: `AND` the same fragment into the counts aggregate's `WHERE`.
+- `POST /notifications/:id/read`: the existence check becomes
+  `SELECT 1 FROM notifications WHERE id = $1 AND <audiencePredicate>` — an out-of-audience id 404s
+  exactly like a nonexistent one (closes the oracle; also prevents marking-read an invisible item).
+- Bulk `POST /notifications/read`: the `SELECT ... WHERE n.id = ANY($ids)` gains
+  `AND <audiencePredicate>`, so only visible ids get a read row (unknown/invisible ids are dropped
+  silently, same as today's unknown-id behavior).
+- `DELETE /notifications/:id/read` needs no change: it only removes the caller's own read row and is
+  idempotent (always 204), so it neither leaks existence nor affects anyone else.
 - Empty `teamKeys`/`roles` arrays are fine — `= ANY('{}')` simply matches nothing, leaving `global`
   - `user`.
 
@@ -137,6 +148,34 @@ user now).
   (same predicate) — assert via deltas, mirroring the existing counts tests.
 - **Live delivery** (`backend/test/sse.test.ts` / pipeline): a `team`-scoped publish reaches a
   subscriber in that team and not one outside it; a `global` publish reaches all.
+- **Read-state writes scoped** (`backend/test/notifications.test.ts`): a user gets `404` marking-read
+  a notification outside their audience (no existence oracle), and the bulk mark-read skips
+  out-of-audience ids (no read row created).
+
+## Security properties (why the resolution is safe)
+
+- **No injection:** the predicate is bound params only (`= ANY($n::text[])`, `= $n`); audience values
+  are never concatenated into SQL.
+- **No identity spoofing:** the principal (`roles`/`teamKeys`/`userKey`) is derived server-side from
+  the authenticated session, never from request input. SSE is behind `requireUser` and keys the
+  subscriber by the session `user.id`.
+- **Fails closed:** exact, scope-qualified matching; empty membership → `= ANY('{}')` matches nothing;
+  a `team` key can't collide with a `role` key (scope-branched). A mismatch under-delivers, never over.
+- **No stale-role leak:** roles/teams are re-read per request, so a membership change takes effect on
+  the next request.
+- **Consistent boundary:** the _same_ predicate gates content reads, counts, and read-state writes —
+  no endpoint can see or act on a notification another can't (closes the existence oracle).
+
+**Caveats the implementer must respect:**
+
+- **`userKey` must be stable and non-reassignable.** `username` is `UNIQUE` today, so it's
+  unambiguous — but if a username is ever freed and reassigned to a different person, that person
+  would inherit the prior holder's `user`-scoped notifications. Don't reuse usernames (or, later, key
+  on a truly immutable host subject id). A rename intentionally redirects a user's targeting.
+- **Trust boundary (not this module's job):** audience resolution faithfully delivers to whoever a
+  _publisher_ addressed; it does not verify the publisher was _allowed_ to target that audience. That
+  authorization lives at the intake boundary (the internal publish token) — audience scoping assumes
+  the caller that reached intake is trusted to set any audience.
 
 ## Out of scope
 
