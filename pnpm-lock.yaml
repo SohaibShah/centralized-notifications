@@ -41,6 +41,12 @@ importers:
       '@node-rs/argon2':
         specifier: ^2.0.2
         version: 2.0.2
+      '@notifications/core':
+        specifier: workspace:*
+        version: link:../packages/core
+      '@notifications/server-fastify':
+        specifier: workspace:*
+        version: link:../packages/server-fastify
       '@notifications/shared':
         specifier: workspace:*
         version: link:../packages/shared

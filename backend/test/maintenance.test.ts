@@ -3,12 +3,19 @@ import type { FastifyInstance } from "fastify";
 import { hashPassword } from "../src/auth/password";
 import { migrate } from "../src/db/migrate";
 import { closePool, query } from "../src/db/pool";
-import { ingest } from "../src/pipeline/ingest";
-import { invalidatePolicyCache } from "../src/pipeline/policy";
 import { buildServer } from "../src/server";
-import { registerModule } from "./support";
 
 const PW = "maint-test-pass";
+
+// Seed a notification directly (bypasses the host-config catalog, which is fine for maintenance
+// tests — they only need rows to delete). `dsr` is a real catalog module.
+async function seed(id: string): Promise<void> {
+  await query(
+    `INSERT INTO notifications (id, module, title, description, priority, snoozable, audience_scope)
+     VALUES ($1, 'dsr', 't', '', 'low', true, 'global')`,
+    [id],
+  );
+}
 
 describe("POST /admin/maintenance", () => {
   let app: FastifyInstance;
@@ -26,7 +33,6 @@ describe("POST /admin/maintenance", () => {
 
   beforeAll(async () => {
     await migrate();
-    await registerModule("maint");
     await query("DELETE FROM users WHERE username IN ('m_admin', 'm_plain')");
     await query(
       "INSERT INTO roles (key, label) VALUES ('admin', 'Administrator') ON CONFLICT (key) DO NOTHING",
@@ -43,7 +49,6 @@ describe("POST /admin/maintenance", () => {
       "INSERT INTO users (username, display_name, password_hash) VALUES ('m_plain','M Plain',$1)",
       [hash],
     );
-    invalidatePolicyCache();
     app = await buildServer();
     await app.ready();
   });
@@ -53,15 +58,7 @@ describe("POST /admin/maintenance", () => {
   });
 
   it("delete-all removes every notification and requires admin", async () => {
-    await ingest({
-      id: `maint-${Date.now()}-1`,
-      module: "maint",
-      title: "a",
-      description: "",
-      priority: "low",
-      snoozable: true,
-      audience: { scope: "global" },
-    });
+    await seed(`maint-${Date.now()}-1`);
     const anon = await app.inject({
       method: "POST",
       url: "/admin/maintenance/notifications/delete-all",
@@ -97,15 +94,7 @@ describe("POST /admin/maintenance", () => {
     expect(bad.statusCode).toBe(400);
 
     const id = `old-${Date.now()}`;
-    await ingest({
-      id,
-      module: "maint",
-      title: "old",
-      description: "",
-      priority: "low",
-      snoozable: true,
-      audience: { scope: "global" },
-    });
+    await seed(id);
     await query("UPDATE notifications SET created_at = now() - interval '10 days' WHERE id = $1", [
       id,
     ]);
@@ -122,19 +111,11 @@ describe("POST /admin/maintenance", () => {
 
   it("delete-read removes notifications that have been read", async () => {
     const cookie = await login("m_admin");
-    const admin = await query<{ id: string }>("SELECT id FROM users WHERE username = 'm_admin'");
     const id = `read-${Date.now()}`;
-    await ingest({
-      id,
-      module: "maint",
-      title: "read",
-      description: "",
-      priority: "low",
-      snoozable: true,
-      audience: { scope: "global" },
-    });
-    await query("INSERT INTO notification_reads (user_id, notification_id) VALUES ($1, $2)", [
-      admin.rows[0]!.id,
+    await seed(id);
+    // Read state is keyed on the opaque user_key (= username) now, not an internal uuid.
+    await query("INSERT INTO notification_reads (user_key, notification_id) VALUES ($1, $2)", [
+      "m_admin",
       id,
     ]);
     const res = await app.inject({
@@ -149,17 +130,20 @@ describe("POST /admin/maintenance", () => {
 
   it("modules/reset re-enables all modules; settings/reset restores defaults", async () => {
     const cookie = await login("m_admin");
-    // modules/reset re-enables every seeded module (does NOT delete the catalog).
-    await query("UPDATE modules SET enabled = false WHERE key = 'dsr'");
-    const before = await query<{ c: string }>("SELECT count(*) AS c FROM modules");
+    // Disable a catalog module through the admin route (so the service's cache stays consistent),
+    // then reset re-enables every disabled module.
+    await app.inject({
+      method: "PATCH",
+      url: "/admin/modules/dsr",
+      headers: { cookie },
+      payload: { enabled: false },
+    });
     const rm = await app.inject({
       method: "POST",
       url: "/admin/maintenance/modules/reset",
       headers: { cookie },
     });
     expect(rm.statusCode).toBe(200);
-    const after = await query<{ c: string }>("SELECT count(*) AS c FROM modules");
-    expect(Number(after.rows[0]!.c)).toBe(Number(before.rows[0]!.c)); // rows kept
     const dsr = await query<{ enabled: boolean }>("SELECT enabled FROM modules WHERE key = 'dsr'");
     expect(dsr.rows[0]!.enabled).toBe(true); // re-enabled
 

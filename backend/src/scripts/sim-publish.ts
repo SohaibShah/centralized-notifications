@@ -1,5 +1,6 @@
 import "../config/load-env";
 import { closePool } from "../db/pool";
+import { createReferenceService } from "../reference/service";
 import { publishSimulated } from "../sim/publish";
 
 // Dev CLI: `pnpm --filter @notifications/backend sim:publish [count] [seed]`
@@ -12,7 +13,10 @@ if (process.env.NODE_ENV === "production") {
 const count = process.argv[2] ? Number(process.argv[2]) : 20;
 const seed = process.argv[3] ? Number(process.argv[3]) : undefined;
 
-publishSimulated({ count, seed })
+const service = createReferenceService();
+service
+  .ready()
+  .then(() => publishSimulated(service, { count, seed }))
   .then((summary) => {
     console.log("published simulated notifications:", summary);
     return closePool();

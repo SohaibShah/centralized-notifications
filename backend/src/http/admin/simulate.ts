@@ -1,10 +1,9 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { NotificationService } from "@notifications/core";
 import { type Notification, notificationSchema } from "@notifications/shared";
 import { requireAdmin } from "../../auth/guards";
 import { getEnv } from "../../config/env";
-import { ingest } from "../../pipeline/ingest";
-import { isModuleEnabled } from "../../pipeline/policy";
 import { buildPreset, PRESET_IDS, sampleActions } from "../../sim/presets";
 import { simulate } from "../../sim/simulator";
 
@@ -92,26 +91,21 @@ function buildBatch(spec: SimulateInput): Notification[] {
 const CHUNK = 100;
 
 /**
- * Ingest a batch, chunked, tallying published vs policy-suppressed. Since the pipeline's
- * IngestResult doesn't expose the delivered/suppressed flag, we re-derive it per module
- * via isModuleEnabled (cheap, cached in the policy layer and locally memoized here).
+ * Ingest a batch, chunked, tallying published vs policy-suppressed. IngestResult doesn't expose the
+ * delivered/suppressed flag, so we re-derive per module from the service's module list (enabled
+ * state), snapshotted once before the loop.
  */
-async function ingestAll(batch: Notification[]): Promise<SimulateResult> {
+async function ingestAll(service: NotificationService, batch: Notification[]): Promise<SimulateResult> {
   let published = 0;
   let suppressed = 0;
-  const enabledByModule = new Map<string, boolean>();
+  const enabledByModule = new Map((await service.listModules()).map((m) => [m.id, m.enabled]));
   for (let i = 0; i < batch.length; i += CHUNK) {
     const chunk = batch.slice(i, i + CHUNK);
     await Promise.all(
       chunk.map(async (n) => {
-        const res = await ingest(n);
+        const res = await service.ingest(n);
         if (res.status !== "accepted") return; // duplicate/invalid: not counted (ids are unique)
-        let enabled = enabledByModule.get(n.module);
-        if (enabled === undefined) {
-          enabled = await isModuleEnabled(n.module);
-          enabledByModule.set(n.module, enabled);
-        }
-        if (enabled) published++;
+        if (enabledByModule.get(n.module) ?? true) published++;
         else suppressed++;
       }),
     );
@@ -119,11 +113,11 @@ async function ingestAll(batch: Notification[]): Promise<SimulateResult> {
   return { published, suppressed };
 }
 
-export async function simulateRoutes(app: FastifyInstance): Promise<void> {
+export async function simulateRoutes(app: FastifyInstance, service: NotificationService): Promise<void> {
   app.post("/admin/simulate", { preHandler: requireAdmin }, async (req, reply) => {
     const parsed = simulateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request body" });
-    const result = await ingestAll(buildBatch(parsed.data));
+    const result = await ingestAll(service, buildBatch(parsed.data));
     return reply.code(200).send(result);
   });
 }

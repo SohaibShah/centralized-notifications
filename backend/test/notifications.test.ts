@@ -193,8 +193,8 @@ describe("GET /notifications", () => {
 
   it("reflects this user's read state via the LEFT JOIN", async () => {
     await query(
-      "INSERT INTO notification_reads (user_id, notification_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
-      [userId, `${ID_PREFIX}3`],
+      "INSERT INTO notification_reads (user_key, notification_id) VALUES ($1, $2) ON CONFLICT DO NOTHING",
+      [USERNAME, `${ID_PREFIX}3`],
     );
     const { body } = await list("?limit=100");
     const byId = new Map(body.items.map((n) => [n.id, n]));
@@ -448,8 +448,8 @@ describe("GET /notifications", () => {
       expect(byId.get(IDS[0]!)).toBe(true);
       expect(byId.get(IDS[1]!)).toBe(true);
       const reads = await query<{ n: string }>(
-        "SELECT count(*)::text AS n FROM notification_reads WHERE user_id = $1 AND notification_id = $2",
-        [userId, bogus],
+        "SELECT count(*)::text AS n FROM notification_reads WHERE user_key = $1 AND notification_id = $2",
+        [USERNAME, bogus],
       );
       expect(reads.rows[0]!.n).toBe("0");
     });
@@ -481,16 +481,14 @@ describe("GET /notifications", () => {
     const CP = "test-counts-";
     const CU = "t_counts";
     let cookie: string;
-    let cUserId: string;
 
     beforeAll(async () => {
       await query("DELETE FROM notifications WHERE id LIKE $1", [`${CP}%`]);
       await query("DELETE FROM users WHERE username = $1", [CU]);
-      const { rows } = await query<{ id: string }>(
-        "INSERT INTO users (username, display_name, password_hash) VALUES ($1, 'Counts', $2) RETURNING id",
+      await query(
+        "INSERT INTO users (username, display_name, password_hash) VALUES ($1, 'Counts', $2)",
         [CU, await hashPassword(PW)],
       );
-      cUserId = rows[0]!.id;
       const login = await app.inject({
         method: "POST",
         url: "/auth/login",
@@ -531,8 +529,8 @@ describe("GET /notifications", () => {
       expect(after.unreadByPriority.high - before.unreadByPriority.high).toBe(1);
       expect(after.unread - before.unread).toBe(3);
 
-      await query("INSERT INTO notification_reads (user_id, notification_id) VALUES ($1, $2)", [
-        cUserId,
+      await query("INSERT INTO notification_reads (user_key, notification_id) VALUES ($1, $2)", [
+        CU,
         `${CP}c1`,
       ]);
       const afterRead = (await getCounts()).body;

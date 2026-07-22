@@ -1,18 +1,22 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
+import type { NotificationService } from "@notifications/core";
 import { requireAdmin } from "../../auth/guards";
 import { query } from "../../db/pool";
-import { invalidatePolicyCache } from "../../pipeline/policy";
 
 /**
  * Dev/QA database maintenance (POST /admin/maintenance/*). Registered only in non-production
  * (see server.ts isSimulatorEnabled) alongside the generator. All routes are requireAdmin and
- * destructive; each returns the affected row count. SQL is parameterized throughout.
+ * destructive; each returns the affected row count. SQL is parameterized throughout. Module/settings
+ * resets go THROUGH the service so its policy cache invalidates; raw deletes touch notifications only.
  */
 
 const olderThanSchema = z.object({ days: z.number().int().positive() });
 
-export async function maintenanceRoutes(app: FastifyInstance): Promise<void> {
+export async function maintenanceRoutes(
+  app: FastifyInstance,
+  service: NotificationService,
+): Promise<void> {
   app.post(
     "/admin/maintenance/notifications/delete-all",
     { preHandler: requireAdmin },
@@ -52,11 +56,10 @@ export async function maintenanceRoutes(app: FastifyInstance): Promise<void> {
     "/admin/maintenance/modules/reset",
     { preHandler: requireAdmin },
     async (_req, reply) => {
-      // Modules are a fixed catalog (migration 007) — "reset" re-enables all of them rather
-      // than deleting the rows.
-      const res = await query("UPDATE modules SET enabled = true WHERE enabled = false");
-      invalidatePolicyCache();
-      return reply.code(200).send({ updated: res.rowCount ?? 0 });
+      // "reset" re-enables every disabled module (via the service, so its policy cache invalidates).
+      const disabled = (await service.listModules()).filter((m) => !m.enabled);
+      for (const m of disabled) await service.setModuleEnabled(m.id, true);
+      return reply.code(200).send({ updated: disabled.length });
     },
   );
 
@@ -64,13 +67,13 @@ export async function maintenanceRoutes(app: FastifyInstance): Promise<void> {
     "/admin/maintenance/settings/reset",
     { preHandler: requireAdmin },
     async (_req, reply) => {
-      await query(
-        `UPDATE global_settings
-            SET ai_summary_enabled = true, chatbot_enabled = true, grouping_enabled = true,
-                actions_enabled = true, retention_days = 30, updated_at = now()
-          WHERE id = true`,
-      );
-      invalidatePolicyCache();
+      await service.updateSettings({
+        aiSummaryEnabled: true,
+        chatbotEnabled: true,
+        groupingEnabled: true,
+        actionsEnabled: true,
+        retentionDays: 30,
+      });
       return reply.code(200).send({ ok: true });
     },
   );

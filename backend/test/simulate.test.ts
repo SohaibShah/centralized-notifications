@@ -4,9 +4,7 @@ import { hashPassword } from "../src/auth/password";
 import { loadEnv } from "../src/config/env";
 import { migrate } from "../src/db/migrate";
 import { closePool, query } from "../src/db/pool";
-import { invalidatePolicyCache } from "../src/pipeline/policy";
 import { buildServer, isSimulatorEnabled } from "../src/server";
-import { registerModule } from "./support";
 
 const PW = "sim-test-pass";
 
@@ -40,9 +38,7 @@ describe("POST /admin/simulate", () => {
 
   beforeAll(async () => {
     await migrate();
-    await registerModule("sim-custom");
-    await query("DELETE FROM notifications WHERE id LIKE 'sim-%' OR module = 'sim-disabled'");
-    await query("DELETE FROM modules WHERE key = 'sim-disabled'");
+    await query("DELETE FROM notifications WHERE id LIKE 'sim-%'");
     await query("DELETE FROM users WHERE username IN ('sim_admin', 'sim_plain')");
     await query(
       "INSERT INTO roles (key, label) VALUES ('admin', 'Administrator') ON CONFLICT (key) DO NOTHING",
@@ -59,11 +55,6 @@ describe("POST /admin/simulate", () => {
       "INSERT INTO users (username, display_name, password_hash) VALUES ('sim_plain', 'Sim Plain', $1)",
       [hash],
     );
-    // A disabled module so a custom publish to it comes back suppressed.
-    await query(
-      "INSERT INTO modules (key, label, enabled) VALUES ('sim-disabled', 'Sim Disabled', false)",
-    );
-    invalidatePolicyCache();
     app = await buildServer();
     await app.ready();
   });
@@ -91,6 +82,7 @@ describe("POST /admin/simulate", () => {
 
   it("custom mode publishes one, with a server-assigned sim- id, and returns published:1", async () => {
     const cookie = await login("sim_admin");
+    const title = `Custom ${Date.now()}`;
     const res = await app.inject({
       method: "POST",
       url: "/admin/simulate",
@@ -100,8 +92,8 @@ describe("POST /admin/simulate", () => {
         sampleActions: 2,
         notification: {
           id: "CLIENT-SHOULD-BE-IGNORED",
-          module: "sim-custom",
-          title: "Custom one",
+          module: "dsr", // a real catalog module (unknown modules are rejected at intake)
+          title,
           description: "",
           priority: "high",
           snoozable: true,
@@ -113,47 +105,63 @@ describe("POST /admin/simulate", () => {
     expect(res.json()).toEqual({ published: 1, suppressed: 0 });
     const list = await app.inject({
       method: "GET",
-      url: "/notifications?limit=50",
+      url: "/notifications?limit=100",
       headers: { cookie },
     });
-    const items = list.json().items as { id: string; module: string; actions?: unknown[] }[];
-    const mine = items.find((n) => n.module === "sim-custom");
+    const items = list.json().items as { id: string; title: string; actions?: unknown[] }[];
+    const mine = items.find((n) => n.title === title);
     expect(mine?.id.startsWith("sim-")).toBe(true);
     expect(mine?.actions).toHaveLength(2);
   });
 
   it("a custom publish to a disabled module is suppressed and absent from the feed", async () => {
     const cookie = await login("sim_admin");
-    const res = await app.inject({
-      method: "POST",
-      url: "/admin/simulate",
+    // Disable a real catalog module through the admin route so the service sees it disabled.
+    await app.inject({
+      method: "PATCH",
+      url: "/admin/modules/assessments",
       headers: { cookie },
-      payload: {
-        mode: "custom",
-        notification: {
-          module: "sim-disabled",
-          title: "Nope",
-          description: "",
-          priority: "low",
-          snoozable: true,
-          audience: { scope: "global" },
+      payload: { enabled: false },
+    });
+    try {
+      const title = `Suppressed ${Date.now()}`;
+      const res = await app.inject({
+        method: "POST",
+        url: "/admin/simulate",
+        headers: { cookie },
+        payload: {
+          mode: "custom",
+          notification: {
+            module: "assessments",
+            title,
+            description: "",
+            priority: "low",
+            snoozable: true,
+            audience: { scope: "global" },
+          },
         },
-      },
-    });
-    expect(res.json()).toEqual({ published: 0, suppressed: 1 });
-    const list = await app.inject({
-      method: "GET",
-      url: "/notifications?limit=100",
-      headers: { cookie },
-    });
-    const items = list.json().items as { module: string }[];
-    expect(items.some((n) => n.module === "sim-disabled")).toBe(false);
+      });
+      expect(res.json()).toEqual({ published: 0, suppressed: 1 });
+      const list = await app.inject({
+        method: "GET",
+        url: "/notifications?limit=100",
+        headers: { cookie },
+      });
+      const items = list.json().items as { title: string }[];
+      expect(items.some((n) => n.title === title)).toBe(false);
+    } finally {
+      // Restore so the shared catalog module isn't left disabled for other tests / the demo.
+      await app.inject({
+        method: "PATCH",
+        url: "/admin/modules/assessments",
+        headers: { cookie },
+        payload: { enabled: true },
+      });
+    }
   });
 
   it("burst mode publishes N (published + suppressed == N)", async () => {
     const cookie = await login("sim_admin");
-    // No fixed seed: simulate()'s ids are then time-based and unique per run, so a rerun
-    // doesn't see the previous run's notifications as duplicates.
     const res = await app.inject({
       method: "POST",
       url: "/admin/simulate",
