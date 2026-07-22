@@ -15,7 +15,8 @@
   "types": "./src/index.ts",
   "files": [
     "src",
-    "dist"
+    "dist",
+    "migrations"
   ],
   "scripts": {
     "build": "tsup",
