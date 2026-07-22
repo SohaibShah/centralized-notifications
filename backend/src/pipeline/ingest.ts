@@ -1,3 +1,4 @@
+import { resolveRecipients } from "../audience/recipients";
 import { deliveryHub } from "../delivery/hub";
 import type { IngestResult } from "../intake/boundary";
 import { touchModule } from "./modules";
@@ -31,7 +32,13 @@ export async function ingest(raw: unknown): Promise<IngestResult> {
   }
   const status = await persist(result.data, !enabled);
   if (status === "accepted") {
-    if (enabled) deliveryHub.broadcast(result.data);
+    if (enabled) {
+      // Deliver only to the addressed audience: global fans out to all connected subscribers,
+      // team/role/user goes to the resolved recipient set (empty set = no live socket, still persisted).
+      const recipients = await resolveRecipients(result.data.audience);
+      if (recipients === "all") deliveryHub.broadcast(result.data);
+      else deliveryHub.publishToRecipients(recipients, result.data);
+    }
     // Best-effort recency bump; a failure here must never abort an already-delivered notification.
     try {
       await touchModule(result.data.module);

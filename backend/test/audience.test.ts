@@ -6,6 +6,8 @@ import { resolveRecipients } from "../src/audience/recipients";
 import { hashPassword } from "../src/auth/password";
 import { migrate } from "../src/db/migrate";
 import { closePool, query } from "../src/db/pool";
+import { deliveryHub } from "../src/delivery/hub";
+import { ingest } from "../src/pipeline/ingest";
 import { buildServer } from "../src/server";
 
 const P = "aud-seam-";
@@ -190,6 +192,60 @@ describe("audience-scoped endpoints", () => {
       [uid[`${A}nobody`], `${A}%`],
     );
     expect(reads.rows[0]!.n).toBe("0");
+  });
+});
+
+describe("audience-aware live delivery", () => {
+  const D = "aud-del-";
+  const memberId = "11111111-1111-1111-1111-111111111111";
+  const outsiderId = "22222222-2222-2222-2222-222222222222";
+
+  beforeAll(async () => {
+    await migrate();
+    await query("INSERT INTO teams (key,label) VALUES ($1,$1) ON CONFLICT DO NOTHING", [
+      `${D}team`,
+    ]);
+    await query(
+      "INSERT INTO users (id,username,display_name,password_hash) VALUES ($1,$2,'x','x') ON CONFLICT DO NOTHING",
+      [memberId, `${D}member`],
+    );
+    await query("INSERT INTO user_teams (user_id,team_key) VALUES ($1,$2) ON CONFLICT DO NOTHING", [
+      memberId,
+      `${D}team`,
+    ]);
+  });
+  afterAll(async () => {
+    await query("DELETE FROM notifications WHERE id LIKE $1", [`${D}%`]);
+    await query("DELETE FROM user_teams WHERE team_key LIKE $1", [`${D}%`]);
+    await query("DELETE FROM users WHERE username LIKE $1", [`${D}%`]);
+    await query("DELETE FROM teams WHERE key LIKE $1", [`${D}%`]);
+  });
+
+  it("delivers a team-scoped notification only to a subscriber in that team", async () => {
+    const got: string[] = [];
+    const offMember = deliveryHub.subscribe({
+      userId: memberId,
+      deliver: () => got.push("member"),
+    });
+    const offOutsider = deliveryHub.subscribe({
+      userId: outsiderId,
+      deliver: () => got.push("outsider"),
+    });
+    try {
+      await ingest({
+        id: `${D}t1`,
+        module: "dsr", // seeded + enabled (migration 007)
+        title: "team only",
+        description: "",
+        priority: "normal",
+        snoozable: true,
+        audience: { scope: "team", id: `${D}team` },
+      });
+    } finally {
+      offMember();
+      offOutsider();
+    }
+    expect(got).toEqual(["member"]); // outsider did NOT receive it
   });
 });
 
