@@ -66,9 +66,26 @@ Each entry in `actions`:
 
 The feed **read** path: returns the caller's notifications as one keyset-paginated page, ordered by the [`sort`](#request) param (newest-first by default). Read-only — no side effects. Notifications from a module an admin has disabled (`suppressed = true` — see the [Admin API](./admin.md)) are excluded from the returned list; they are still recorded, just never surfaced here.
 
-Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts), [`backend/src/audience/principal.ts`](../../backend/src/audience/principal.ts).
 
-> **Week-1 limitation.** Every authenticated user currently receives **every** notification — there is no audience resolution yet (that lands in Week 4). This is intentional for the prototype; do not mistake it for the final per-audience feed.
+> **Audience-scoped (implemented).** The feed returns **only** notifications addressed to the authenticated caller — not every notification. See [Audience scoping](#audience-scoping) below for exactly which rows a caller sees. (This replaces the earlier prototype behavior where every authenticated user saw every notification; audience resolution is now in place, not deferred.)
+
+#### Audience scoping
+
+A notification is visible to the caller **iff** its [`audience`](#audience) matches the caller's identity — resolved from the session into a principal (`userKey` = **username**, plus the caller's role keys and team keys; see [`backend/src/audience/principal.ts`](../../backend/src/audience/principal.ts)). A row is returned when **any** of these holds:
+
+| `audience.scope` | Included when                                                                                                   |
+| ---------------- | --------------------------------------------------------------------------------------------------------------- |
+| `global`         | always (reaches every authenticated user)                                                                       |
+| `team`           | `audience.id` is one of the caller's team keys                                                                  |
+| `role`           | `audience.id` is one of the caller's role keys                                                                  |
+| `user`           | `audience.id` **equals the caller's username** (for `user` scope, `audience.id` holds the recipient's username) |
+
+The match runs in SQL against the principal's arrays passed as bound parameters — there is no join to the identity tables, so the same filter is reusable when the host supplies identity directly. An empty role/team array fails closed (`= ANY('{}')` matches nothing), leaving `global` plus the caller's own `user`-scoped rows.
+
+**Same filter, everywhere.** This exact audience predicate gates the feed **read** path, the [unread counts](#get-notificationscounts), and the [mark-read](#post-notificationsidread) endpoints. Because reads, counts, and mark-read all apply it, **no endpoint leaks the existence of a notification the caller can't see** — a caller can't infer an out-of-audience notification's existence from a count, a page, or a mark-read result.
+
+**No admin bypass.** Admins are audience-scoped exactly like everyone else — being an admin does not reveal notifications addressed to others. (Admin module suppression is separate; it only ever hides rows, never reveals them.)
 
 ### Request
 
@@ -162,9 +179,9 @@ Returns the current user's **unread** notification counts (FR-5), aggregated **s
 
 Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
 
-The counted set uses the **same filters as the [feed read path](#get-notifications)**: it excludes rows this user has already read (per-user [`notification_reads`](#feednotification), matched by a `LEFT JOIN … WHERE r.user_id IS NULL`) and excludes `suppressed` rows (from admin-disabled modules — see the [Admin API](./admin.md)). A notification the user has read, or that belongs to a disabled module, contributes to none of the buckets.
+The counted set uses the **same filters as the [feed read path](#get-notifications)**: it applies the identical [audience scoping](#audience-scoping) (only notifications addressed to the caller are counted), excludes rows this user has already read (per-user [`notification_reads`](#feednotification), matched by a `LEFT JOIN … WHERE r.user_id IS NULL`), and excludes `suppressed` rows (from admin-disabled modules — see the [Admin API](./admin.md)). A notification outside the caller's audience, one the user has read, or one that belongs to a disabled module contributes to none of the buckets — so the count equals exactly the caller's visible unread set.
 
-> **Week-1 limitation.** Same as [`GET /notifications`](#get-notifications): every authenticated user currently counts **every** notification — there is no audience resolution yet (that lands in Week 4). These counts are not per-audience scoped; do not read them as "notifications targeted at this user."
+> **Audience-scoped (implemented).** These counts are per-audience scoped: they count only notifications targeted at this user, under the same rules as [`GET /notifications`](#get-notifications). (This replaces the earlier prototype behavior where the counts spanned every notification regardless of audience.)
 
 ### Request
 
@@ -197,6 +214,8 @@ None — read-only.
 
 Marks a notification **read for the current user** (FR-6). Read state is per-user, so this only ever affects the caller's own `notification_reads` row — one user marking a notification read never changes another user's state.
 
+**Audience-scoped.** The write is gated by the same [audience filter](#audience-scoping) as the read path: a notification **outside the caller's audience** returns `404`, **indistinguishable from a nonexistent `id`**. This is deliberate — it prevents an existence oracle (a caller can't tell "not addressed to me" apart from "doesn't exist"), and it stops a caller seeding a read row for a notification they can't see.
+
 Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
 
 ### Request
@@ -217,11 +236,11 @@ Path parameter:
 
 ### Errors
 
-| Status | Body                                     | Reason                                                                                   |
-| ------ | ---------------------------------------- | ---------------------------------------------------------------------------------------- |
-| `400`  | `{ "error": "invalid notification id" }` | `id` is empty or longer than 200 chars.                                                  |
-| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                 |
-| `404`  | `{ "error": "notification not found" }`  | No notification with that `id` exists — a client can't seed read rows for arbitrary ids. |
+| Status | Body                                     | Reason                                                                                                                                                                                                                                                     |
+| ------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid notification id" }` | `id` is empty or longer than 200 chars.                                                                                                                                                                                                                    |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                                                                                                                                                                                   |
+| `404`  | `{ "error": "notification not found" }`  | No notification with that `id` exists **or** it exists but is outside the caller's [audience](#audience-scoping) — the two cases are deliberately indistinguishable (no existence oracle). A client can't seed read rows for arbitrary or unaddressed ids. |
 
 ### Side effects
 
@@ -284,11 +303,15 @@ Body:
 { "ids": ["dsr-1234-sla-warning-72h", "scan-run-556-sensitive-found"] }
 ```
 
-**Unknown ids are silently ignored.** Unlike the single-id endpoint (which 404s for an id
-that doesn't exist), the bulk endpoint filters the batch down to ids that exist
-(`WHERE n.id = ANY($2::text[])`) and marks only those read — an id that isn't a real
-notification simply contributes no row, so a client doesn't need to pre-filter its batch
-and one stale id can't fail the whole request.
+**Unknown and out-of-audience ids are silently skipped.** Unlike the single-id endpoint
+(which 404s for an id it can't see), the bulk endpoint filters the batch down to ids that
+both exist **and** fall within the caller's [audience](#audience-scoping)
+(`WHERE n.id = ANY($2::text[]) AND <audience filter>`) and marks only those read. An id
+that isn't a real notification, or one addressed to someone else, simply contributes no
+row — so a client doesn't need to pre-filter its batch, one stale id can't fail the whole
+request, and no read row is ever created for a notification the caller can't see. This is
+the same silent-skip behavior the endpoint already had for unknown ids, now extended to
+out-of-audience ids.
 
 **Idempotent.** Same mechanism as the single-id endpoint — `INSERT … ON CONFLICT
 (user_id, notification_id) DO NOTHING` — so repeating a batch (or overlapping it with a
@@ -298,7 +321,8 @@ never creates duplicate rows.
 ### Response `204`
 
 `204 No Content` — no body. A subsequent [`GET /notifications`](#get-notifications) then
-returns `read: true` for every id in the batch that existed, for this user.
+returns `read: true` for every id in the batch that existed **and was in the caller's
+audience**, for this user.
 
 ### Errors
 
@@ -310,7 +334,8 @@ returns `read: true` for every id in the batch that existed, for this user.
 ### Side effects
 
 Zero or more inserts into `notification_reads` — one per id in the batch that corresponds
-to an existing notification (keyed by the authenticated user). No events published.
+to an existing notification **within the caller's [audience](#audience-scoping)** (keyed by
+the authenticated user). No events published.
 
 ## Design decisions
 

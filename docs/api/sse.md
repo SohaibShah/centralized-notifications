@@ -12,22 +12,29 @@ connection to `GET /sse` and renders new cards as frames arrive.
 
 This is the read side of the pipeline. Notifications enter via
 [`POST /internal/publish`](./intake.md), are validated/deduped/persisted, and newly-accepted
-ones are handed to an in-process **delivery hub** that fans them out to every open SSE
-connection. The [notification contract](./notifications.md) is the shape each frame carries.
+ones are handed to an in-process **delivery hub** that fans them out to the open SSE
+connections **the notification is addressed to**. The
+[notification contract](./notifications.md) is the shape each frame carries.
 
 Source of truth:
 [`backend/src/http/sse/routes.ts`](../../backend/src/http/sse/routes.ts) (the endpoint,
 headers, coalescing, heartbeat),
 [`backend/src/http/sse/coalescing-buffer.ts`](../../backend/src/http/sse/coalescing-buffer.ts)
 (burst batching),
-[`backend/src/delivery/hub.ts`](../../backend/src/delivery/hub.ts) (fan-out).
+[`backend/src/delivery/hub.ts`](../../backend/src/delivery/hub.ts) (fan-out),
+[`backend/src/pipeline/ingest.ts`](../../backend/src/pipeline/ingest.ts) +
+[`backend/src/audience/recipients.ts`](../../backend/src/audience/recipients.ts) (recipient
+resolution).
 
-> **Week-1 limitation — delivery is GLOBAL-ONLY.** Every connected authenticated user
-> currently receives **every** accepted notification, regardless of its `audience`
-> (`global` / `team` / `role` / `user`). The stream is effectively a shared firehose. The
-> hub's `broadcast()` path is what's wired up today; per-user audience resolution
-> (`publishToRecipients`) lands in **Week 4**. Do **not** assume the stream is
-> audience-scoped yet.
+> **Audience-scoped (implemented).** A notification is pushed only to connected users it is
+> [addressed to](./notifications.md#audience-scoping): `audience.scope="global"` reaches
+> every connected user (hub `broadcast()`), while `team` / `role` / `user` reaches only the
+> resolved member set (hub `publishToRecipients()`). A `user`-scoped notification resolves by
+> **username**; `team` / `role` resolve through the membership tables. If nobody addressed is
+> currently connected, the live push simply reaches no one — the notification is still
+> persisted and shows up on the next feed load. (This replaces the earlier prototype behavior
+> where the stream was a global-only firehose; per-audience delivery is now in place, not
+> deferred.)
 
 ---
 
@@ -107,8 +114,10 @@ sent on connect is the same kind of comment.
   the client is briefly disconnected is **not replayed** on reconnect — there is **no
   `Last-Event-ID` / replay support** in the prototype. The durable record still exists in the
   database; the live stream is not the system of record.
-- **Global-only fan-out (Week 1).** See the limitation banner above — audience is not yet
-  honored.
+- **Audience-scoped fan-out.** A notification is delivered only to connected users it is
+  [addressed to](./notifications.md#audience-scoping) — `global` reaches all connected users,
+  `team` / `role` / `user` reaches the resolved member set. See the banner above. Admins get
+  no bypass: they receive only notifications addressed to them, like any other user.
 
 ### Errors
 

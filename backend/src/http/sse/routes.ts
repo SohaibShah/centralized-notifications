@@ -18,8 +18,9 @@ const MAX_BUFFERED_BYTES = 1024 * 1024;
  * hub and coalesces bursts into batched `event: notifications` frames. Auth is the
  * session cookie (EventSource sends it same-origin), so it reuses `requireUser`.
  *
- * Week-1 limitation: the hub broadcasts every accepted notification to all connected
- * users (no audience filtering yet) — Week-4 audience resolution scopes this per user.
+ * Audience-scoped: delivery is targeted upstream in `ingest` (global fans out to all connected
+ * subscribers; team/role/user goes to the resolved recipients) — this endpoint just subscribes the
+ * connection under its session `user.id`, which is what recipient matching keys on.
  */
 export async function sseRoutes(app: FastifyInstance): Promise<void> {
   app.get("/sse", { preHandler: requireUser }, async (req, reply) => {

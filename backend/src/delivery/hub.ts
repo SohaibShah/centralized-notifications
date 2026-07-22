@@ -2,7 +2,7 @@ import type { Notification } from "@notifications/shared";
 
 /**
  * A connected consumer of the delivery stream. `userId` is what audience-targeted
- * delivery matches against (Week 4); `deliver` hands off one notification. `deliver`
+ * delivery matches against (see `publishToRecipients`); `deliver` hands off one notification. `deliver`
  * MUST NOT throw — the hub guards it anyway, but a subscriber that buffers/writes
  * should swallow its own transport errors so one bad connection can't affect others.
  */
@@ -28,7 +28,7 @@ export class DeliveryHub {
     };
   }
 
-  /** Week-1 shortcut: deliver to every connected subscriber regardless of audience. */
+  /** Deliver to every connected subscriber — used for `global`-audience notifications. */
   broadcast(notification: Notification): void {
     for (const subscriber of this.subscribers) {
       this.safeDeliver(subscriber, notification);
@@ -36,8 +36,8 @@ export class DeliveryHub {
   }
 
   /**
-   * Week-4 seam: deliver only to subscribers whose user is in `userIds`. `ingest`
-   * will call this with the resolved recipients once audience resolution exists.
+   * Deliver only to subscribers whose user is in `userIds` — `ingest` calls this with the
+   * recipients resolved from a team/role/user-scoped notification's audience (see resolveRecipients).
    */
   publishToRecipients(userIds: string[], notification: Notification): void {
     const recipients = new Set(userIds);
