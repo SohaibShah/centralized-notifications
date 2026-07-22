@@ -7,13 +7,36 @@ tags: [api, admin, governance]
 
 The Week-2 admin governance endpoints: per-module enable/disable and global feature
 kill-switches. Every route on this page except [`GET /settings/features`](#get-settingsfeatures)
-requires the `admin` role — see [`requireAdmin`](../../backend/src/auth/guards.ts) and the
-[Auth model](./auth.md#auth-model). A module that is disabled here has its notifications
-**recorded but suppressed** — they are persisted (so history isn't lost) but never delivered
-to recipients; see the `suppressed` flag below and the note on
-[`GET /notifications`](./notifications.md#get-notifications).
+requires the `admin` role, and the [Auth model](./auth.md#auth-model). A module that is
+disabled here has its notifications **recorded but suppressed** — they are persisted (so
+history isn't lost) but never delivered to recipients; see the `suppressed` flag below and
+the note on [`GET /notifications`](./notifications.md#get-notifications).
 
-Source of truth: [`backend/src/http/admin/routes.ts`](../../backend/src/http/admin/routes.ts).
+> **`/admin/modules*`, `/admin/settings`, and `/settings/features` are served by
+> `@notifications/server-fastify`.** They are no longer hand-written `backend/` routes — they
+> are mounted by the `notificationFastifyPlugin` (see the [BE library integration
+> guide](../architecture/be-library-integration.md)). The request/response shapes below are
+> **unchanged** by the extraction. (The [`POST /admin/simulate`](#post-adminsimulate) and
+> [`/admin/maintenance/*`](#maintenance-devqa) dev/QA routes are **not** part of the library —
+> they remain reference-app routes in `backend/`.)
+>
+> **Identity and the admin gate come from the host.** There is no owned session or users
+> table in the library. The plugin's `requireAdmin` preHandler calls the host's `auth(req)`
+> adapter to resolve a `Principal` (`{ userKey, roles, teamKeys }`), returns `401` if it is
+> `null`, and `403` unless the `Principal`'s `roles` include the service's configured
+> **`adminRole`** (`NotificationServiceConfig.adminRole`, default `"admin"`). `GET
+/settings/features` uses `requirePrincipal` only (any resolved `Principal`). In the
+> reference app the adapter maps the `session`-cookie user to a `Principal`.
+>
+> **Module labels are host config; module state and settings are library-owned.** The module
+> `key`/`label` list is the host-supplied catalog passed to `createNotificationService`
+> ([`backend/src/reference/catalog.ts`](../../backend/src/reference/catalog.ts)); only the
+> per-module `enabled`/`last_seen` state and the global `Settings` live in the library's DB.
+
+Source of truth (plugin routes):
+[`packages/server-fastify/src/routes/admin.ts`](../../packages/server-fastify/src/routes/admin.ts)
+(the routes) and [`packages/core/src/policy/store.ts`](../../packages/core/src/policy/store.ts)
+(module/settings state).
 
 ## GET /admin/modules
 
@@ -116,7 +139,7 @@ A body without `enabled` (including an empty body, or one carrying only a now-un
 ### Side effects
 
 Updates the `modules` row's `enabled` column. **Invalidates the in-memory policy
-cache** ([`invalidatePolicyCache`](../../backend/src/pipeline/policy.ts)) — a disable/enable
+cache** (the service's [`PolicyStore`](../../packages/core/src/policy/store.ts) invalidates its cache on any write) — a disable/enable
 takes effect starting with the module's **next ingest**, not retroactively on already-persisted
 notifications.
 
@@ -198,7 +221,7 @@ Body — any subset of the four boolean flags; at least one is required:
 
 Updates the singleton `global_settings` row (only the columns for fields present in the
 body) and its `updated_at`. **Invalidates the in-memory policy cache**
-([`invalidatePolicyCache`](../../backend/src/pipeline/policy.ts)) — the new flag values take
+(the service's [`PolicyStore`](../../packages/core/src/policy/store.ts) invalidates its cache on any write) — the new flag values take
 effect on the next read.
 
 ## GET /settings/features
@@ -499,7 +522,7 @@ No parameters.
 #### Side effects
 
 Sets every disabled module back to `enabled` and **invalidates the in-memory policy cache**
-([`invalidatePolicyCache`](../../backend/src/pipeline/policy.ts)) — the re-enabled modules
+(the service's [`PolicyStore`](../../packages/core/src/policy/store.ts) invalidates its cache on any write) — the re-enabled modules
 deliver again starting on their next ingest.
 
 ### POST /admin/maintenance/settings/reset
@@ -525,5 +548,5 @@ No parameters.
 #### Side effects
 
 Resets the `global_settings` feature flags and `retention_days`, and **invalidates the
-in-memory policy cache** ([`invalidatePolicyCache`](../../backend/src/pipeline/policy.ts)) — the
+in-memory policy cache** (the service's [`PolicyStore`](../../packages/core/src/policy/store.ts) invalidates its cache on any write) — the
 restored flag values take effect on the next read.

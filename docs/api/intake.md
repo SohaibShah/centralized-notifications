@@ -15,12 +15,25 @@ The transport is deliberately thin — it adapts the HTTP request to `unknown[]`
 the pipeline once per item — so the same pipeline can sit behind a Redis Stream consumer
 later (Week 5) with no rewrite.
 
+> **Served by `@notifications/server-fastify`.** This route is no longer a hand-written
+> `backend/` route — it is mounted by the `notificationFastifyPlugin` (see the [BE library
+> integration guide](../architecture/be-library-integration.md)). Its request/response shape
+> is **unchanged** by the extraction.
+>
+> **Auth is a host-supplied adapter, not a session.** The plugin gates this route with the
+> host's `intakeAuth(req) -> boolean` (returning `false` → `401`); it owns no notion of how
+> the host authenticates a producer. In the reference app that adapter is the constant-time
+> `x-internal-token` check described below.
+
 Source of truth:
-[`backend/src/intake/http-intake.ts`](../../backend/src/intake/http-intake.ts) (route +
-auth + batching),
-[`backend/src/intake/boundary.ts`](../../backend/src/intake/boundary.ts) (result shape),
-[`backend/src/pipeline/ingest.ts`](../../backend/src/pipeline/ingest.ts) (per-item
-validate → dedupe → persist).
+[`packages/server-fastify/src/routes/intake.ts`](../../packages/server-fastify/src/routes/intake.ts)
+(route + batching + `intakeAuth` gate),
+[`packages/core/src/pipeline/boundary.ts`](../../packages/core/src/pipeline/boundary.ts)
+(result shape),
+[`packages/core/src/pipeline/ingest.ts`](../../packages/core/src/pipeline/ingest.ts)
+(per-item validate → dedupe → persist → deliver). The reference app's `intakeAuth`
+implementation (constant-time token compare) lives in
+[`backend/src/server.ts`](../../backend/src/server.ts).
 
 ---
 
@@ -195,7 +208,6 @@ Request without a valid `x-internal-token` header:
 | 400    | `{ "error": "empty batch" }`                                    | Body was an empty array.                                                    |
 | 400    | `{ "error": "batch exceeds max of 500" }`                       | Array contained more than 500 items.                                        |
 | 401    | `{ "error": "invalid or missing internal token" }`              | `x-internal-token` header absent or did not match `INTERNAL_INTAKE_TOKEN`.  |
-| 429    | (rate-limit body from `@fastify/rate-limit`)                    | Per-IP rate limit exceeded (see [Rate limiting](#rate-limiting)).           |
 
 Note: a **contract-invalid notification — or one from an unknown module — is not a `4xx`** —
 it comes back inside a `200` response as an `invalid` result. The `400`s above are about the
@@ -203,12 +215,21 @@ request envelope (shape and batch size), not about individual notification valid
 
 ### Rate limiting
 
-Per-IP, **~120 requests/minute** (`@fastify/rate-limit`); exceeding it returns `429`.
-Publishing is a burst endpoint, so this ceiling is higher than login's. Under `NODE_ENV=test`
-the limit is relaxed (10000/min) so the test suite's rapid injects aren't throttled.
+**Rate limiting is a host concern.** The `@notifications/server-fastify` plugin deliberately
+does **not** rate-limit this route (see the note in
+[`routes/intake.ts`](../../packages/server-fastify/src/routes/intake.ts): "the host adds it
+around this route if wanted"). The reference `backend/` app registers `@fastify/rate-limit`
+with `global: false` and does **not** currently opt `/internal/publish` in, so as wired today
+it is **not** rate-limited — see the note below flagging this. A host that wants a ceiling
+must add it around the plugin registration.
 
 ### Side effects
 
 Accepted notifications are **persisted to the `notifications` table** (Postgres). Duplicates
-and invalid items (including unknown-module rejections) write nothing. **No delivery / fan-out
-happens yet** — no Redis Stream event is published at this stage; that lands in a later task.
+and invalid items (including unknown-module rejections) write nothing. Each accepted
+notification **belonging to an enabled module** is then handed to the in-process delivery hub
+and fanned out live to the SSE connections it is [addressed to](./notifications.md#audience-scoping)
+(see the [SSE page](./sse.md)); an accepted notification for an admin-disabled module is
+persisted as `suppressed` and **not** delivered. Delivery is still in-process only — there is
+no Redis Stream transport yet (a documented future seam; see the [BE library integration
+guide](../architecture/be-library-integration.md#delivery-is-in-process-for-now)).

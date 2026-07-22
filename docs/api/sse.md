@@ -16,15 +16,31 @@ ones are handed to an in-process **delivery hub** that fans them out to the open
 connections **the notification is addressed to**. The
 [notification contract](./notifications.md) is the shape each frame carries.
 
+> **Served by `@notifications/server-fastify`.** `GET /sse` is no longer a hand-written
+> `backend/` route — it is mounted by the `notificationFastifyPlugin` from
+> `@notifications/server-fastify` (see the [BE library integration
+> guide](../architecture/be-library-integration.md)). The frame format and delivery semantics
+> below are **unchanged** by the extraction.
+>
+> **Identity comes from the host, not an owned session.** The connection is gated by the
+> plugin's `requirePrincipal` preHandler, which calls the host's `auth(req)` adapter and
+> returns `401` when it resolves to `null`. The resulting `Principal`
+> (`{ userKey, roles, teamKeys }`) is captured at connect time and is what the delivery hub
+> matches each notification's `audience` against. In the reference app the adapter maps the
+> `session`-cookie user to a `Principal` with `userKey = username`.
+>
+> **Single in-process hub.** Delivery is fan-out inside one process
+> ([`packages/core/src/delivery/hub.ts`](../../packages/core/src/delivery/hub.ts)); a
+> distributed transport for multi-instance delivery is a documented future seam (see the
+> [integration guide](../architecture/be-library-integration.md#delivery-is-in-process-for-now)).
+
 Source of truth:
-[`backend/src/http/sse/routes.ts`](../../backend/src/http/sse/routes.ts) (the endpoint,
-headers, coalescing, heartbeat),
-[`backend/src/http/sse/coalescing-buffer.ts`](../../backend/src/http/sse/coalescing-buffer.ts)
+[`packages/server-fastify/src/routes/sse.ts`](../../packages/server-fastify/src/routes/sse.ts)
+(the endpoint, headers, coalescing, heartbeat),
+[`packages/core/src/delivery/coalescing-buffer.ts`](../../packages/core/src/delivery/coalescing-buffer.ts)
 (burst batching),
-[`backend/src/delivery/hub.ts`](../../backend/src/delivery/hub.ts) (fan-out),
-[`backend/src/pipeline/ingest.ts`](../../backend/src/pipeline/ingest.ts) +
-[`backend/src/audience/recipients.ts`](../../backend/src/audience/recipients.ts) (recipient
-resolution).
+[`packages/core/src/delivery/hub.ts`](../../packages/core/src/delivery/hub.ts) (fan-out +
+audience matching).
 
 > **Audience-scoped (implemented).** A notification is pushed only to connected users it is
 > [addressed to](./notifications.md#audience-scoping): `audience.scope="global"` reaches
@@ -40,10 +56,10 @@ resolution).
 
 ## GET /sse
 
-**Auth:** required (valid `session` cookie). Guarded by the same `requireUser` as
-[`GET /auth/me`](./auth.md#get-authme). The browser's `EventSource` sends the `session`
-cookie automatically on a same-origin request, so no extra header is needed. No cookie / not
-logged in → `401`.
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`;
+`401` if it returns `null`). In the reference app that means a valid `session` cookie: the
+browser's `EventSource` sends it automatically on a same-origin request, so no extra header
+is needed. Not logged in → `401`.
 
 Opens a long-lived Server-Sent Events stream. This is **not** a normal request/response —
 the socket stays open and the server pushes frames until the client disconnects.

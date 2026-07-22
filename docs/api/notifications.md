@@ -20,6 +20,23 @@ there is exactly one definition of "a valid notification."
 > `POST /internal/publish` — is documented separately on the [Intake page](./intake.md)
 > (auth, batching, dedupe, response shape, side effects).
 
+> **Served by `@notifications/server-fastify`.** These routes are no longer hand-written in
+> `backend/`. They are mounted by the `notificationFastifyPlugin` from
+> `@notifications/server-fastify` (see the [BE library integration
+> guide](../architecture/be-library-integration.md)), which the reference `backend/` app
+> registers like any other host. The endpoint request/response shapes below are **unchanged**
+> by the extraction.
+>
+> **Identity comes from the host, not an owned session.** The plugin never reads a session
+> or a users table. The host supplies an `auth(req)` adapter that resolves its own identity to
+> a `Principal` (`{ userKey, roles, teamKeys }`); the plugin's `requirePrincipal` preHandler
+> calls it and returns `401` when it yields `null`. In the reference app that adapter maps the
+> `session`-cookie user to a `Principal` with `userKey = username`. Read state is keyed on the
+> opaque **`user_key`** (= that username), and the audience filter matches `userKey` /
+> `roles` / `teamKeys` against `audience.scope` `user` / `role` / `team`. Wherever the pages
+> below say "session cookie", that is the reference host's adapter — the plugin itself only
+> ever sees the resolved `Principal`.
+
 ## Schema
 
 Because this schema is the **input-validation boundary**, every free-text field and the
@@ -62,17 +79,17 @@ Each entry in `actions`:
 
 ## GET /notifications
 
-**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in). The cookie is same-origin, so a browser `fetch`/`EventSource` sends it automatically through the dev proxy.
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie. The cookie is same-origin, so a browser `fetch`/`EventSource` sends it automatically through the dev proxy.
 
 The feed **read** path: returns the caller's notifications as one keyset-paginated page, ordered by the [`sort`](#request) param (newest-first by default). Read-only — no side effects. Notifications from a module an admin has disabled (`suppressed = true` — see the [Admin API](./admin.md)) are excluded from the returned list; they are still recorded, just never surfaced here.
 
-Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts), [`backend/src/audience/principal.ts`](../../backend/src/audience/principal.ts).
+Source of truth: [`packages/server-fastify/src/routes/notifications.ts`](../../packages/server-fastify/src/routes/notifications.ts), [`packages/core/src/read/feed.ts`](../../packages/core/src/read/feed.ts), [`packages/core/src/audience/match.ts`](../../packages/core/src/audience/match.ts). The reference host maps its session user to a `Principal` in [`backend/src/reference/principal-adapter.ts`](../../backend/src/reference/principal-adapter.ts).
 
 > **Audience-scoped (implemented).** The feed returns **only** notifications addressed to the authenticated caller — not every notification. See [Audience scoping](#audience-scoping) below for exactly which rows a caller sees. (This replaces the earlier prototype behavior where every authenticated user saw every notification; audience resolution is now in place, not deferred.)
 
 #### Audience scoping
 
-A notification is visible to the caller **iff** its [`audience`](#audience) matches the caller's identity — resolved from the session into a principal (`userKey` = **username**, plus the caller's role keys and team keys; see [`backend/src/audience/principal.ts`](../../backend/src/audience/principal.ts)). A row is returned when **any** of these holds:
+A notification is visible to the caller **iff** its [`audience`](#audience) matches the caller's identity — resolved by the host `auth` adapter into a `Principal` (`userKey` = **username** in the reference app, plus the caller's `roles` and `teamKeys`; see [`backend/src/reference/principal-adapter.ts`](../../backend/src/reference/principal-adapter.ts) and [`packages/core/src/audience/match.ts`](../../packages/core/src/audience/match.ts)). A row is returned when **any** of these holds:
 
 | `audience.scope` | Included when                                                                                                   |
 | ---------------- | --------------------------------------------------------------------------------------------------------------- |
@@ -157,7 +174,7 @@ Each item is the full [notification contract](#schema) above **plus** two server
 | `createdAt` | string (ISO 8601) | Server **receive** time (`notifications.created_at`), distinct from the module's own optional [`timestamp`](#schema). The feed's ordering key under `newest`/`oldest`, and the tie-breaker within a level under the priority sorts (see [`sort`](#request)). |
 | `read`      | boolean           | Whether **the requesting user** has read this notification (`LEFT JOIN` against `notification_reads`). Per-user: the same notification can be `read: true` for one user and `false` for another.                                                             |
 
-Read state lives in its own table — `notification_reads(user_id, notification_id, read_at, PRIMARY KEY(user_id, notification_id))`, both foreign keys `ON DELETE CASCADE` (see [`backend/migrations/003_notification_reads.sql`](../../backend/migrations/003_notification_reads.sql)). A row exists **iff** that user has read that notification; absence of a row means unread. The write endpoint that marks a notification read is [`POST /notifications/:id/read`](#post-notificationsidread), documented below.
+Read state lives in its own table — `notification_reads(user_key, notification_id, read_at, PRIMARY KEY(user_key, notification_id))` (see [`packages/core/migrations/002_notification_reads.sql`](../../packages/core/migrations/002_notification_reads.sql)). It is keyed on the opaque **`user_key`** (the host's user identifier — username in the reference app), so there is **no** foreign key to any identity table; only `notification_id` cascades `ON DELETE`. A row exists **iff** that user has read that notification; absence of a row means unread. The write endpoint that marks a notification read is [`POST /notifications/:id/read`](#post-notificationsidread), documented below.
 
 ### Errors
 
@@ -173,13 +190,13 @@ None — read-only.
 
 ## GET /notifications/counts
 
-**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
 
 Returns the current user's **unread** notification counts (FR-5), aggregated **server-side over the whole dataset** — not just the notifications on the loaded feed page. This is what the bell badge, the "Needs action" header count, and the per-priority chip counts read from, so they stay accurate rather than reflecting only the loaded keyset window. Read-only — no side effects.
 
-Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+Source of truth: [`packages/server-fastify/src/routes/notifications.ts`](../../packages/server-fastify/src/routes/notifications.ts) (the route) and [`packages/core/src/read/`](../../packages/core/src/read/) (the query logic).
 
-The counted set uses the **same filters as the [feed read path](#get-notifications)**: it applies the identical [audience scoping](#audience-scoping) (only notifications addressed to the caller are counted), excludes rows this user has already read (per-user [`notification_reads`](#feednotification), matched by a `LEFT JOIN … WHERE r.user_id IS NULL`), and excludes `suppressed` rows (from admin-disabled modules — see the [Admin API](./admin.md)). A notification outside the caller's audience, one the user has read, or one that belongs to a disabled module contributes to none of the buckets — so the count equals exactly the caller's visible unread set.
+The counted set uses the **same filters as the [feed read path](#get-notifications)**: it applies the identical [audience scoping](#audience-scoping) (only notifications addressed to the caller are counted), excludes rows this user has already read (per-user [`notification_reads`](#feednotification), matched by a `LEFT JOIN … WHERE r.user_key IS NULL`), and excludes `suppressed` rows (from admin-disabled modules — see the [Admin API](./admin.md)). A notification outside the caller's audience, one the user has read, or one that belongs to a disabled module contributes to none of the buckets — so the count equals exactly the caller's visible unread set.
 
 > **Audience-scoped (implemented).** These counts are per-audience scoped: they count only notifications targeted at this user, under the same rules as [`GET /notifications`](#get-notifications). (This replaces the earlier prototype behavior where the counts spanned every notification regardless of audience.)
 
@@ -210,13 +227,13 @@ None — read-only.
 
 ## POST /notifications/:id/read
 
-**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
 
 Marks a notification **read for the current user** (FR-6). Read state is per-user, so this only ever affects the caller's own `notification_reads` row — one user marking a notification read never changes another user's state.
 
 **Audience-scoped.** The write is gated by the same [audience filter](#audience-scoping) as the read path: a notification **outside the caller's audience** returns `404`, **indistinguishable from a nonexistent `id`**. This is deliberate — it prevents an existence oracle (a caller can't tell "not addressed to me" apart from "doesn't exist"), and it stops a caller seeding a read row for a notification they can't see.
 
-Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+Source of truth: [`packages/server-fastify/src/routes/notifications.ts`](../../packages/server-fastify/src/routes/notifications.ts) (the route) and [`packages/core/src/read/`](../../packages/core/src/read/) (the query logic).
 
 ### Request
 
@@ -228,7 +245,7 @@ Path parameter:
 
 **No request body.** The client sends no body and no content-type.
 
-**Idempotent.** The mark is an `INSERT … ON CONFLICT (user_id, notification_id) DO NOTHING`, so repeating the call is a no-op — a double-click or an at-least-once retry never errors and never creates a duplicate row.
+**Idempotent.** The mark is an `INSERT … ON CONFLICT (user_key, notification_id) DO NOTHING`, so repeating the call is a no-op — a double-click or an at-least-once retry never errors and never creates a duplicate row.
 
 ### Response `204`
 
@@ -244,15 +261,15 @@ Path parameter:
 
 ### Side effects
 
-One upsert into `notification_reads` (`(user_id, notification_id)`, keyed by the authenticated user). No events published.
+One upsert into `notification_reads` (`(user_key, notification_id)`, keyed by the authenticated user). No events published.
 
 ## DELETE /notifications/:id/read
 
-**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
 
 Undoes a read **for the current user** — the inverse of [`POST /notifications/:id/read`](#post-notificationsidread). Removes the caller's row from `notification_reads` so the notification returns to "Needs action" (unread) in their feed. Read state is per-user, so this only ever affects the caller's own row — undoing one user's read never changes another user's state.
 
-Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+Source of truth: [`packages/server-fastify/src/routes/notifications.ts`](../../packages/server-fastify/src/routes/notifications.ts) (the route) and [`packages/core/src/read/`](../../packages/core/src/read/) (the query logic).
 
 ### Request
 
@@ -264,7 +281,7 @@ Path parameter:
 
 **No request body.** The client sends no body and no content-type.
 
-**Idempotent.** The handler is a plain `DELETE … WHERE user_id = $1 AND notification_id = $2`, so removing a row that isn't there is a no-op. Unlike the `POST` counterpart there is **no existence check** on the notification — deleting a read for an id that was never read (or that doesn't exist at all) still returns `204`, never `404`.
+**Idempotent.** The handler is a plain `DELETE … WHERE user_key = $1 AND notification_id = $2`, so removing a row that isn't there is a no-op. Unlike the `POST` counterpart there is **no existence check** on the notification — deleting a read for an id that was never read (or that doesn't exist at all) still returns `204`, never `404`.
 
 ### Response `204`
 
@@ -279,17 +296,17 @@ Path parameter:
 
 ### Side effects
 
-At most one delete from `notification_reads` (`(user_id, notification_id)`, keyed by the authenticated user) — zero rows if the user had not read it. No events published.
+At most one delete from `notification_reads` (`(user_key, notification_id)`, keyed by the authenticated user) — zero rows if the user had not read it. No events published.
 
 ## POST /notifications/read
 
-**Auth:** required (session cookie — [`requireUser`](../../backend/src/http/notifications/routes.ts); `401` if not logged in).
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
 
 Bulk mark-read for the current user — what the panel's "mark all read" calls. Marks each
 id in the batch read **for the caller**; read state is per-user, so this only ever affects
 the caller's own `notification_reads` rows, same as the single-id endpoint above.
 
-Source of truth: [`backend/src/http/notifications/routes.ts`](../../backend/src/http/notifications/routes.ts).
+Source of truth: [`packages/server-fastify/src/routes/notifications.ts`](../../packages/server-fastify/src/routes/notifications.ts) (the route) and [`packages/core/src/read/`](../../packages/core/src/read/) (the query logic).
 
 ### Request
 
@@ -314,7 +331,7 @@ the same silent-skip behavior the endpoint already had for unknown ids, now exte
 out-of-audience ids.
 
 **Idempotent.** Same mechanism as the single-id endpoint — `INSERT … ON CONFLICT
-(user_id, notification_id) DO NOTHING` — so repeating a batch (or overlapping it with a
+(user_key, notification_id) DO NOTHING` — so repeating a batch (or overlapping it with a
 previous one) is a no-op; a retry or a double-click on "mark all read" never errors and
 never creates duplicate rows.
 
