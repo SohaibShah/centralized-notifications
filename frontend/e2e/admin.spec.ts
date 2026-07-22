@@ -32,49 +32,52 @@ test.describe("admin", () => {
     const token = process.env.INTERNAL_INTAKE_TOKEN ?? "";
     expect(token, "INTERNAL_INTAKE_TOKEN must be set").not.toBe("");
 
-    // A throwaway module unique to this run — leaving it disabled afterwards is harmless.
-    const mod = `e2e-admin-${Date.now()}`;
+    // Modules are a fixed, seeded catalog now (auto-discovery was removed — an unknown module is
+    // rejected at intake), so this test toggles a REAL module and restores it in `finally` so the
+    // shared dev catalog is never left changed. `assessments` is only used by this test.
+    const mod = "assessments";
 
     await login(page, "admin", DEV_PASSWORD);
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
 
-    // Publish once so the module is auto-discovered, then open the admin console.
-    await publish(request, token, {
-      id: `${mod}-seed`,
-      module: mod,
-      title: "seed",
-      description: "",
-      priority: "high",
-      snoozable: true,
-      audience: { scope: "global" },
-    });
-
     await page.goto("/admin");
     await expect(page.getByRole("heading", { name: "Admin" })).toBeVisible();
 
-    // The seed publish auto-discovered the module; disable it.
     const toggle = page.locator(`[data-test="toggle-${mod}"]`);
     await expect(toggle).toBeVisible({ timeout: 10_000 });
+    // Normalize to enabled first (a prior interrupted run may have left it disabled).
+    if ((await toggle.getAttribute("aria-checked")) === "false") await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "true");
+
+    // Disable it.
     await toggle.click();
     await expect(toggle).toHaveAttribute("aria-checked", "false");
 
-    // Publish again from the now-disabled module → it must be suppressed (never delivered).
-    const hiddenTitle = `Hidden ${Date.now()}`;
-    await publish(request, token, {
-      id: `${mod}-hidden`,
-      module: mod,
-      title: hiddenTitle,
-      description: "",
-      priority: "high",
-      snoozable: true,
-      audience: { scope: "global" },
-    });
+    try {
+      // Publish from the now-disabled module → it must be suppressed (never delivered).
+      const hiddenTitle = `Hidden ${Date.now()}`;
+      await publish(request, token, {
+        id: `e2e-suppressed-${Date.now()}`,
+        module: mod,
+        title: hiddenTitle,
+        description: "",
+        priority: "high",
+        snoozable: true,
+        audience: { scope: "global" },
+      });
 
-    // Open the bell; the suppressed title never arrives over SSE.
-    await page.getByRole("button", { name: /Notifications/ }).click();
-    await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
-    await expect(page.getByRole("button", { name: hiddenTitle })).toHaveCount(0);
+      // Open the bell; the suppressed title never arrives over SSE.
+      await page.getByRole("button", { name: /Notifications/ }).click();
+      await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
+      await expect(page.getByRole("button", { name: hiddenTitle })).toHaveCount(0);
+    } finally {
+      // Always re-enable so a real product module isn't left disabled for the demo / other runs.
+      await page.goto("/admin");
+      const restore = page.locator(`[data-test="toggle-${mod}"]`);
+      await expect(restore).toBeVisible({ timeout: 10_000 });
+      if ((await restore.getAttribute("aria-checked")) === "false") await restore.click();
+      await expect(restore).toHaveAttribute("aria-checked", "true");
+    }
   });
 
   test("a non-admin cannot reach /admin", async ({ page }) => {

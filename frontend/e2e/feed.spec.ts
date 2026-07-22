@@ -49,7 +49,7 @@ test.describe("notifications dashboard", () => {
       headers: { "x-internal-token": intakeTokenValue, "content-type": "application/json" },
       data: {
         id,
-        module: "e2e",
+        module: "dsr", // a real seeded catalog module (unknown modules are rejected at intake)
         title,
         description: "delivered over SSE",
         priority: "high",
@@ -75,7 +75,9 @@ test.describe("notifications dashboard", () => {
 
     // Open-and-seen / sticky read: the card STAYS in "Needs action" so you can read it, now
     // showing the "Mark as unread" control — it does NOT relocate to "Earlier" on the click.
-    await expect(page.getByRole("button", { name: "Mark as unread" })).toBeVisible();
+    // Scope to our card's article (other read rows in the shared dev DB also expose the toggle).
+    const cardArticle = page.locator("article").filter({ has: card });
+    await expect(cardArticle.getByRole("button", { name: "Mark as unread" })).toBeVisible();
     await expect(card).toBeVisible();
 
     // Close and reopen the panel → NotificationPopover remounts and flushSessionReads() settles
@@ -85,12 +87,10 @@ test.describe("notifications dashboard", () => {
     await page.getByRole("button", { name: /Notifications/ }).click();
     await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
 
-    // Now it's in the collapsed "Earlier" group; expanding reveals it as a read row.
-    await expect(card).toHaveCount(0);
-    const showEarlier = page.getByRole("button", { name: /Show \d+ earlier/ });
-    await expect(showEarlier).toBeVisible();
-    await showEarlier.click();
-    await expect(page.getByRole("button", { name: new RegExp(title) })).toBeVisible();
+    // The read card has settled into the "Earlier" group (expanded by default) — it's no longer in
+    // "Needs action" but is still visible as a read row within the earlier list.
+    const earlierList = page.locator('[data-test="earlier-list"]');
+    await expect(earlierList.getByRole("button", { name: title, exact: true })).toBeVisible();
   });
 
   test("shows a bottom-right toast for a critical notification and View opens the panel", async ({
@@ -118,7 +118,7 @@ test.describe("notifications dashboard", () => {
       headers: { "x-internal-token": intakeTokenValue, "content-type": "application/json" },
       data: {
         id: `e2e-crit-${stamp}`,
-        module: "e2e",
+        module: "dsr", // a real seeded catalog module (unknown modules are rejected at intake)
         title,
         description: "critical via SSE",
         priority: "critical",

@@ -34,7 +34,7 @@ test.describe("QoL", () => {
       headers: { "x-internal-token": token, "content-type": "application/json" },
       data: {
         id: `qol-${stamp}`,
-        module: "qol",
+        module: "dsr", // a real seeded catalog module (unknown modules are rejected at intake)
         title,
         description: "z".repeat(200), // long enough to be expandable
         priority: "high",
@@ -54,16 +54,30 @@ test.describe("QoL", () => {
       card.click(),
     ]);
 
-    // Open Earlier — the item is now a full card (title still a button), re-readable.
-    await page.getByRole("button", { name: /Show \d+ earlier/ }).click();
-    await expect(page.getByRole("button", { name: title, exact: true })).toBeVisible();
+    // Our specific card, wherever it sits — scoped to the article so the many other read rows in
+    // the shared dev DB don't interfere with the toggle assertion/click.
+    const ourCard = page
+      .locator("article")
+      .filter({ has: page.getByRole("button", { name: title, exact: true }) });
+
+    // Sticky read: it stays in Needs action showing "Mark as unread" until the panel is reopened.
+    await expect(ourCard.getByRole("button", { name: "Mark as unread" })).toBeVisible();
+
+    // Close + reopen → flushSessionReads settles it into the (expanded-by-default) Earlier group,
+    // where it remains a full, re-readable card.
+    await page.getByRole("button", { name: "Close notifications" }).click();
+    await expect(page.getByRole("dialog", { name: "Notifications" })).toBeHidden();
+    await page.getByRole("button", { name: /Notifications/ }).click();
+    await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
+
+    await expect(ourCard).toBeVisible();
 
     // Mark as unread → DELETE 204 → it returns to Needs action.
     const [del] = await Promise.all([
       page.waitForResponse(
         (r) => /\/notifications\/.+\/read$/.test(r.url()) && r.request().method() === "DELETE",
       ),
-      page.getByRole("button", { name: "Mark as unread" }).first().click(),
+      ourCard.getByRole("button", { name: "Mark as unread" }).click(),
     ]);
     expect(del.status()).toBe(204);
   });
