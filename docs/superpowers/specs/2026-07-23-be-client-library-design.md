@@ -76,8 +76,10 @@ svc.counts({ principal }): Promise<NotificationCounts>
 svc.markRead({ principal, id }): Promise<void>             // out-of-audience id 404-equivs (no oracle)
 svc.markReadBulk({ principal, ids }): Promise<...>         // skips out-of-audience ids silently
 svc.markUnread({ principal, id }): Promise<void>
-svc.listModules(): Promise<ModulePolicyView[]>             // catalog ⨝ enabled/disabled state
+svc.listModules(): Promise<ModulePolicyView[]>             // host-catalog ⨝ state ⨝ notification aggregate
 svc.setModuleEnabled(id: string, enabled: boolean): Promise<void>
+svc.getSettings(): Promise<Settings>                       // feature flags + retentionDays
+svc.updateSettings(patch: Partial<Settings>): Promise<void>
 svc.delivery                                               // hub: subscribe(principal) → stream
 ```
 
@@ -147,7 +149,8 @@ app.register(notificationFastifyPlugin, {
 
 - Mounts: `GET /notifications`, `GET /notifications/counts`, `POST /notifications/:id/read`, bulk
   `POST /notifications/read`, `DELETE /notifications/:id/read`, `GET /sse`, `POST /internal/publish`,
-  and the module-policy admin routes.
+  the admin routes (`GET/PATCH /admin/modules`, `GET/PATCH /admin/settings`), and the
+  `GET /settings/features` read route.
 - **Admin gating is a role check.** The plugin guards module-policy routes on
   `principal.roles.includes(config.adminRole)`. Login, sessions, password hashing, the users table
   are **not** in the library — the host's `auth` adapter is the sole identity source. The reference
@@ -155,14 +158,33 @@ app.register(notificationFastifyPlugin, {
 - `maxParamLength` (256, for the ≤200-char notification id path param) is set by the plugin so a valid
   long id does not 414 before the handler runs.
 
-## Module catalog / policy
+## Module catalog / policy & admin settings
 
-- Host passes the `modules` catalog config.
-- The library persists enabled/disabled **state** in a `module_policy` table, reconciled on startup:
-  each configured module gets a row defaulting **enabled** if absent.
-- `listModules()` returns catalog ⨝ state; `setModuleEnabled(id, enabled)` writes state.
-- Intake rejects a module not in the host catalog (unchanged behavior — unknown module = caller bug,
-  logged, never persisted/delivered).
+**Modules.**
+
+- Host passes the module catalog (`id` + `label` + metadata) as config. Catalog metadata is
+  host-owned; only runtime state is library-owned.
+- The library persists per-module **state** — `{ enabled, last_seen_at }` — in a `module_state`
+  table keyed by module id, reconciled on startup: each configured module gets a row defaulting
+  **enabled** if absent.
+- `listModules()` returns host-catalog ⨝ library-state ⨝ the per-module notification aggregate
+  (total / suppressed / by-priority counts, as the admin panel shows today);
+  `setModuleEnabled(id, enabled)` writes state; `touchModule(id)` bumps `last_seen_at` on intake.
+- Intake rejects a module not in the host catalog (unchanged — unknown module = caller bug, logged,
+  never persisted/delivered).
+
+**Settings (feature flags + retention) — library-owned state.**
+
+- The library owns `global_settings` (a single-row settings table): `aiSummaryEnabled`,
+  `chatbotEnabled`, `groupingEnabled`, `actionsEnabled`, `retentionDays`. These are runtime-toggleable
+  notification-domain settings (the AI kill-switches carry into the summarizer sub-project).
+- Exposed via the service (`getSettings()` / `updateSettings(patch)`) and via the plugin's admin
+  routes plus the `GET /settings/features` read route the frontend consumes.
+
+**Dev-only tools stay in the reference app.** The maintenance routes (delete-all, etc.) and the
+QA simulator are non-prod dev tooling (already gated by `isSimulatorEnabled`) — they are **not**
+library surface. They stay reference-app-side and drive the library through `svc.ingest` / the
+public routes like any other producer.
 
 ## DB / migration ownership
 
