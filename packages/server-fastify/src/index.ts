@@ -1,8 +1,10 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import type { NotificationService, Principal } from "@notifications/core";
-import { makeRequirePrincipal } from "./auth";
+import { makeRequireAdmin, makeRequirePrincipal } from "./auth";
 import { notificationReadRoutes } from "./routes/notifications";
 import { notificationSseRoute } from "./routes/sse";
+import { notificationIntakeRoute } from "./routes/intake";
+import { notificationAdminRoutes } from "./routes/admin";
 
 /**
  * What a host supplies when mounting the notification routes. `auth` resolves the host's identity to
@@ -29,5 +31,7 @@ export const notificationFastifyPlugin: FastifyPluginAsync<NotificationPluginOpt
   const requirePrincipal = makeRequirePrincipal(opts.auth);
   notificationReadRoutes(app, { service: opts.service, requirePrincipal });
   notificationSseRoute(app, { service: opts.service, requirePrincipal });
-  // intake + admin route groups are registered here in Tasks 15–16.
+  notificationIntakeRoute(app, { service: opts.service, intakeAuth: opts.intakeAuth });
+  const requireAdmin = makeRequireAdmin(opts.auth, opts.service.adminRole);
+  notificationAdminRoutes(app, { service: opts.service, requireAdmin, requirePrincipal });
 };
