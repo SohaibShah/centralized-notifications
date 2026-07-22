@@ -1,5 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import type { NotificationService, Principal } from "@notifications/core";
+import { makeRequirePrincipal } from "./auth";
+import { notificationReadRoutes } from "./routes/notifications";
 
 /**
  * What a host supplies when mounting the notification routes. `auth` resolves the host's identity to
@@ -12,9 +14,18 @@ export interface NotificationPluginOptions {
   intakeAuth: (req: FastifyRequest) => Promise<boolean> | boolean;
 }
 
-/** Mounts the notification HTTP + SSE routes onto the host's Fastify server. */
-export const notificationFastifyPlugin: FastifyPluginAsync<
-  NotificationPluginOptions
-> = async () => {
-  // Route groups are registered here in Tasks 13–16.
+/**
+ * Mounts the notification HTTP + SSE routes onto the host's Fastify server.
+ *
+ * NOTE: a notification id can be up to 200 chars (the `:id` path param on the read routes). The HOST
+ * must construct Fastify with `maxParamLength >= 256` (default is 100) or a valid long id will 414
+ * before the handler runs — a plugin can't change the server-level option.
+ */
+export const notificationFastifyPlugin: FastifyPluginAsync<NotificationPluginOptions> = async (
+  app,
+  opts,
+) => {
+  const requirePrincipal = makeRequirePrincipal(opts.auth);
+  notificationReadRoutes(app, { service: opts.service, requirePrincipal });
+  // SSE, intake, and admin route groups are registered here in Tasks 14–16.
 };
