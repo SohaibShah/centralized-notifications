@@ -95,7 +95,10 @@ const CHUNK = 100;
  * delivered/suppressed flag, so we re-derive per module from the service's module list (enabled
  * state), snapshotted once before the loop.
  */
-async function ingestAll(service: NotificationService, batch: Notification[]): Promise<SimulateResult> {
+async function ingestAll(
+  service: NotificationService,
+  batch: Notification[],
+): Promise<SimulateResult> {
   let published = 0;
   let suppressed = 0;
   const enabledByModule = new Map((await service.listModules()).map((m) => [m.id, m.enabled]));
@@ -113,7 +116,13 @@ async function ingestAll(service: NotificationService, batch: Notification[]): P
   return { published, suppressed };
 }
 
-export async function simulateRoutes(app: FastifyInstance, service: NotificationService): Promise<void> {
+export async function simulateRoutes(
+  app: FastifyInstance,
+  service: NotificationService,
+): Promise<void> {
+  // Dev/QA route — a REFERENCE-APP concern, not part of the library. It deliberately authorizes via
+  // the host's own session guard (`requireAdmin`), NOT the plugin's Principal-based admin check; keep
+  // the two role checks semantically in sync (both mean "holds the admin role").
   app.post("/admin/simulate", { preHandler: requireAdmin }, async (req, reply) => {
     const parsed = simulateSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request body" });

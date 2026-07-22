@@ -112,3 +112,23 @@ test("marking read an out-of-audience id returns 404 (no existence oracle)", asy
   });
   expect(res.statusCode).toBe(404);
 });
+
+test("bulk mark-read is audience-scoped: out-of-audience ids write no read row", async () => {
+  const outOfAudience = `fh-user-bob-${s}`; // bob's user-scoped notification — invisible to dave
+  const res = await app.inject({
+    method: "POST",
+    url: "/notifications/read",
+    headers: { "x-fake-user": "dave" },
+    payload: { ids: [`fh-global-${s}`, outOfAudience] },
+  });
+  expect(res.statusCode).toBe(204); // silent drop of the out-of-audience id (no oracle)
+
+  // The visible (global) id got a read row for dave; the out-of-audience one did NOT.
+  const { rows } = await pool.query<{ notification_id: string }>(
+    "SELECT notification_id FROM notification_reads WHERE user_key = $1 AND notification_id = ANY($2::text[])",
+    ["dave", [`fh-global-${s}`, outOfAudience]],
+  );
+  const marked = rows.map((r) => r.notification_id);
+  expect(marked).toContain(`fh-global-${s}`);
+  expect(marked).not.toContain(outOfAudience);
+});

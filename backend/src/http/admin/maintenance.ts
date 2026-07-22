@@ -17,6 +17,9 @@ export async function maintenanceRoutes(
   app: FastifyInstance,
   service: NotificationService,
 ): Promise<void> {
+  // Dev/QA routes — REFERENCE-APP concerns, not part of the library. They deliberately authorize via
+  // the host's own session guard (`requireAdmin`), NOT the plugin's Principal-based admin check; keep
+  // the two role checks semantically in sync (both mean "holds the admin role").
   app.post(
     "/admin/maintenance/notifications/delete-all",
     { preHandler: requireAdmin },
