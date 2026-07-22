@@ -29,7 +29,18 @@ export function notificationAdminRoutes(
   const { service, requireAdmin, requirePrincipal } = deps;
 
   app.get("/admin/modules", { preHandler: requireAdmin }, async (_req, reply) => {
-    return reply.code(200).send(await service.listModules());
+    // Wire contract exposes the module id as `key` (what producers publish under and the admin UI
+    // renders/toggles on); core models it as `id` internally.
+    const modules = (await service.listModules()).map((m) => ({
+      key: m.id,
+      label: m.label,
+      enabled: m.enabled,
+      lastSeenAt: m.lastSeenAt,
+      total: m.total,
+      suppressed: m.suppressed,
+      byPriority: m.byPriority,
+    }));
+    return reply.code(200).send(modules);
   });
 
   app.patch("/admin/modules/:key", { preHandler: requireAdmin }, async (req, reply) => {

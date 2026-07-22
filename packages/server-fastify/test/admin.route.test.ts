@@ -53,8 +53,8 @@ test("a non-admin is 403 on /admin/modules", async () => {
 test("an admin lists modules including the configured catalog", async () => {
   const res = await app.inject({ method: "GET", url: "/admin/modules", headers: admin });
   expect(res.statusCode).toBe(200);
-  const mods = res.json() as { id: string; label: string }[];
-  expect(mods.find((m) => m.id === "dsr")?.label).toBe("DSR");
+  const mods = res.json() as { key: string; label: string }[];
+  expect(mods.find((m) => m.key === "dsr")?.label).toBe("DSR");
 });
 
 test("toggling a module persists via setModuleEnabled", async () => {
@@ -68,10 +68,10 @@ test("toggling a module persists via setModuleEnabled", async () => {
   const disabled = (
     await app.inject({ method: "GET", url: "/admin/modules", headers: admin })
   ).json() as {
-    id: string;
+    key: string;
     enabled: boolean;
   }[];
-  expect(disabled.find((m) => m.id === "dsr")?.enabled).toBe(false);
+  expect(disabled.find((m) => m.key === "dsr")?.enabled).toBe(false);
   // Re-enable through the route and confirm via listModules.
   await app.inject({
     method: "PATCH",
@@ -82,10 +82,10 @@ test("toggling a module persists via setModuleEnabled", async () => {
   const mods = (
     await app.inject({ method: "GET", url: "/admin/modules", headers: admin })
   ).json() as {
-    id: string;
+    key: string;
     enabled: boolean;
   }[];
-  expect(mods.find((m) => m.id === "dsr")?.enabled).toBe(true);
+  expect(mods.find((m) => m.key === "dsr")?.enabled).toBe(true);
 });
 
 test("PATCH an unknown module → 404", async () => {
