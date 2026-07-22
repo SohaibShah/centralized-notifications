@@ -9,6 +9,7 @@ import type {
 } from "@notifications/shared";
 import { actionSchema, FEED_SORTS, NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import { requireUser } from "../../auth/guards";
+import { audienceWhere, resolvePrincipal } from "../../audience/principal";
 import { query } from "../../db/pool";
 
 const DEFAULT_LIMIT = 25;
@@ -136,9 +137,9 @@ function toFeedNotification(row: FeedRow): FeedNotification {
  * comparison against the cursor — so deep pages cost the same as the first (NFR-2);
  * there is no OFFSET and no total count.
  *
- * Week-1 limitation: every notification is returned to every authenticated user (no
- * audience resolution yet — that is Week 4). SQL is parameterized throughout; the only
- * interpolated fragments are constant `$N` placeholder strings, never user input.
+ * Audience-scoped: only notifications addressed to this user are returned — `global`, or whose
+ * `team`/`role`/`user` audience matches the caller (see `audienceWhere`). SQL is parameterized
+ * throughout; the only interpolated fragments are constant `$N` placeholder strings, never user input.
  */
 export async function notificationRoutes(app: FastifyInstance): Promise<void> {
   app.get("/notifications", { preHandler: requireUser }, async (req, reply) => {
@@ -191,6 +192,10 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       }
     }
 
+    // Only notifications addressed to this user (global, or their team/role/user). Matched against
+    // the principal's arrays as bound params — no join to the identity tables (the seam boundary).
+    where += ` AND ${audienceWhere(resolvePrincipal(user), params)}`;
+
     params.push(limit + 1);
     const limitPlaceholder = `$${params.length}`;
 
@@ -236,7 +241,14 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: "invalid notification id" });
     const { id } = parsed.data;
 
-    const exists = await query("SELECT 1 FROM notifications WHERE id = $1", [id]);
+    // Audience-scoped existence check: a notification outside the caller's audience 404s exactly
+    // like a nonexistent one — no existence oracle, and no marking-read an invisible item.
+    const params: unknown[] = [id];
+    const audience = audienceWhere(resolvePrincipal(user), params);
+    const exists = await query(
+      `SELECT 1 FROM notifications n WHERE n.id = $1 AND ${audience}`,
+      params,
+    );
     if (exists.rowCount === 0) return reply.code(404).send({ error: "notification not found" });
 
     await query(
@@ -283,11 +295,15 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
     if (!parsed.success) return reply.code(400).send({ error: "invalid request body" });
     const { ids } = parsed.data;
 
+    // Only mark-read ids the caller can actually see (audience-scoped) — out-of-audience or unknown
+    // ids are dropped silently, same effect as today's unknown-id filter.
+    const params: unknown[] = [user.id, ids];
+    const audience = audienceWhere(resolvePrincipal(user), params);
     await query(
       `INSERT INTO notification_reads (user_id, notification_id)
-         SELECT $1, n.id FROM notifications n WHERE n.id = ANY($2::text[])
+         SELECT $1, n.id FROM notifications n WHERE n.id = ANY($2::text[]) AND ${audience}
          ON CONFLICT (user_id, notification_id) DO NOTHING`,
-      [user.id, ids],
+      params,
     );
     return reply.code(204).send();
   });
@@ -295,22 +311,24 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
   /**
    * Unread counts for the current user (FR-5): `GET /notifications/counts`. Aggregates over the
    * WHOLE dataset (not a page), so the bell badge / needs-action / chip counts are accurate rather
-   * than reflecting only the loaded window. Mirrors the feed read path's join + suppressed filter;
-   * counts only rows this user hasn't read. `unread` is the sum of the per-priority buckets.
-   * Absolute for now (no filter params) — audience resolution / server-side filtering are later.
+   * than reflecting only the loaded window. Mirrors the feed read path's join + suppressed filter
+   * AND the same `audienceWhere` gate, so the count equals exactly the user's visible unread set.
+   * `unread` is the sum of the per-priority buckets.
    */
   app.get("/notifications/counts", { preHandler: requireUser }, async (req, reply) => {
     const user = req.user;
     if (!user) return reply.code(401).send({ error: "authentication required" });
 
+    const params: unknown[] = [user.id];
+    const audience = audienceWhere(resolvePrincipal(user), params);
     const { rows } = await query<{ priority: NotificationPriority; n: number }>(
       `SELECT n.priority, count(*)::int AS n
          FROM notifications n
          LEFT JOIN notification_reads r
            ON r.notification_id = n.id AND r.user_id = $1
-        WHERE n.suppressed = false AND r.user_id IS NULL
+        WHERE n.suppressed = false AND r.user_id IS NULL AND ${audience}
         GROUP BY n.priority`,
-      [user.id],
+      params,
     );
 
     const unreadByPriority = Object.fromEntries(

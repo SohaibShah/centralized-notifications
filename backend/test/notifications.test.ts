@@ -36,6 +36,12 @@ describe("GET /notifications", () => {
       [USERNAME, await hashPassword(PW)],
     );
     userId = rows[0]!.id;
+    // The feed is now audience-scoped: put this user on team `eng` so the team-scoped n2 (below) is
+    // visible to it — these tests exercise ordering/pagination over the full seeded set, not audience.
+    await query(
+      "INSERT INTO teams (key, label) VALUES ('eng', 'Engineering') ON CONFLICT DO NOTHING",
+    );
+    await query("INSERT INTO user_teams (user_id, team_key) VALUES ($1, 'eng')", [userId]);
 
     // Seed five notifications; n2 is team-scoped to exercise audience reconstruction.
     for (let i = 0; i < IDS.length; i++) {
@@ -230,11 +236,27 @@ describe("GET /notifications", () => {
       return body.items.filter((n) => n.id.startsWith(SP)).map((n) => n.id);
     }
 
+    // Collect our SP rows across all keyset pages for a sort. The shared dev DB holds hundreds of
+    // rows, and our future-dated rows land on the LAST page under an ascending sort — so a single
+    // limit=100 page isn't enough; walk to the end (cap guards a non-terminating cursor).
+    async function collectMine(sort: string): Promise<string[]> {
+      const out: string[] = [];
+      let cursor: string | null = null;
+      for (let i = 0; i < 50; i++) {
+        const qs = `?limit=100&sort=${sort}${cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""}`;
+        const { body } = await list(qs);
+        out.push(...mine(body));
+        cursor = body.nextCursor;
+        if (!cursor) break;
+      }
+      return out;
+    }
+
     it("sorts newest and oldest by time", async () => {
       await seedSortSet();
-      const newest = mine((await list("?limit=100&sort=newest")).body);
+      const newest = await collectMine("newest");
       expect(newest).toEqual([`${SP}crit-new`, `${SP}low`, `${SP}high`, `${SP}crit-old`]);
-      const oldest = mine((await list("?limit=100&sort=oldest")).body);
+      const oldest = await collectMine("oldest");
       expect(oldest).toEqual([...newest].reverse());
     });
 
