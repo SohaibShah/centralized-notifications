@@ -25,3 +25,26 @@ export function makeRequirePrincipal(
     req.principal = principal;
   };
 }
+
+/**
+ * Build the preHandler that requires the resolved Principal to hold `adminRole`. 401 if unauthed,
+ * 403 if authed without the role. Admin power is just a role in the host's identity — the library
+ * owns no admin concept beyond this check.
+ */
+export function makeRequireAdmin(
+  auth: NotificationPluginOptions["auth"],
+  adminRole: string,
+): preHandlerHookHandler {
+  return async function requireAdmin(req: FastifyRequest, reply: FastifyReply) {
+    const principal = await auth(req);
+    if (!principal) {
+      reply.code(401).send({ error: "authentication required" });
+      return;
+    }
+    if (!principal.roles.includes(adminRole)) {
+      reply.code(403).send({ error: "admin role required" });
+      return;
+    }
+    req.principal = principal;
+  };
+}
