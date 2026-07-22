@@ -101,12 +101,20 @@ describe("audience-scoped endpoints", () => {
     cookies[name] = ((Array.isArray(sc) ? sc[0] : sc) ?? "").split(";")[0] ?? "";
   }
 
-  async function seedNotif(id: string, scope: string, audId: string | null) {
+  async function seedNotif(id: string, scope: string, audId: string | null, priority = "normal") {
     await query(
       `INSERT INTO notifications (id,module,title,description,priority,snoozable,audience_scope,audience_id)
-       VALUES ($1,'test','t','','normal',true,$2,$3)`,
-      [id, scope, audId],
+       VALUES ($1,'test','t','',$4,true,$2,$3)`,
+      [id, scope, audId, priority],
     );
+  }
+
+  function counts(
+    name: string,
+  ): Promise<{ unread: number; unreadByPriority: Record<string, number> }> {
+    return app
+      .inject({ method: "GET", url: "/notifications/counts", headers: { cookie: cookies[name]! } })
+      .then((r) => r.json() as { unread: number; unreadByPriority: Record<string, number> });
   }
 
   function feedIds(name: string): Promise<string[]> {
@@ -134,6 +142,8 @@ describe("audience-scoped endpoints", () => {
     await seedNotif(`${A}team-sec`, "team", `${A}sec`);
     await seedNotif(`${A}role-analyst`, "role", `${A}analyst`);
     await seedNotif(`${A}user-casey`, "user", `${A}casey`); // audience.id = username
+    // A CRITICAL item scoped to casey's team only — used to prove counts EXCLUDE out-of-audience.
+    await seedNotif(`${A}crit-privacy`, "team", `${A}privacy`, "critical");
   });
   afterAll(async () => {
     await query("DELETE FROM notifications WHERE id LIKE $1", [`${A}%`]);
@@ -145,24 +155,25 @@ describe("audience-scoped endpoints", () => {
 
   it("feed returns exactly global + the user's team/role/user items", async () => {
     expect((await feedIds(`${A}casey`)).sort()).toEqual(
-      [`${A}g`, `${A}team-privacy`, `${A}role-analyst`, `${A}user-casey`].sort(),
+      [
+        `${A}g`,
+        `${A}team-privacy`,
+        `${A}role-analyst`,
+        `${A}user-casey`,
+        `${A}crit-privacy`,
+      ].sort(),
     );
     expect((await feedIds(`${A}sam`)).sort()).toEqual([`${A}g`, `${A}team-sec`].sort());
     expect(await feedIds(`${A}nobody`)).toEqual([`${A}g`]);
   });
 
-  it("counts reflect only the visible set", async () => {
-    const counts = await app
-      .inject({
-        method: "GET",
-        url: "/notifications/counts",
-        headers: { cookie: cookies[`${A}sam`]! },
-      })
-      .then((r) => r.json() as { unread: number });
-    // sam sees exactly {g, team-sec} from our set — both unread. Other suites' globals may add to
-    // the shared total, so assert a floor consistent with the visible feed rather than equality.
-    expect(await feedIds(`${A}sam`)).toHaveLength(2);
-    expect(counts.unread).toBeGreaterThanOrEqual(2);
+  it("counts EXCLUDE out-of-audience items (a critical in casey's team is counted for casey, not sam)", async () => {
+    // The critical is scoped to casey's team (aud-ep-privacy); sam is not in it. Critical globals
+    // count equally for both, so the casey−sam delta isolates our audience-specific critical. If the
+    // audience gate were missing from counts, both would see it and the delta would be 0.
+    const casey = await counts(`${A}casey`);
+    const sam = await counts(`${A}sam`);
+    expect(casey.unreadByPriority.critical! - sam.unreadByPriority.critical!).toBe(1);
   });
 
   it("mark-read 404s for a notification outside the caller's audience (no existence oracle)", async () => {
@@ -192,6 +203,20 @@ describe("audience-scoped endpoints", () => {
       [uid[`${A}nobody`], `${A}%`],
     );
     expect(reads.rows[0]!.n).toBe("0");
+  });
+
+  it("bulk mark-read DOES create a read row for an in-audience id", async () => {
+    await app.inject({
+      method: "POST",
+      url: "/notifications/read",
+      headers: { cookie: cookies[`${A}casey`]! },
+      payload: { ids: [`${A}role-analyst`] }, // visible to casey (analyst role)
+    });
+    const reads = await query<{ n: string }>(
+      "SELECT count(*)::text AS n FROM notification_reads WHERE user_id = $1 AND notification_id = $2",
+      [uid[`${A}casey`], `${A}role-analyst`],
+    );
+    expect(reads.rows[0]!.n).toBe("1");
   });
 });
 
@@ -246,6 +271,33 @@ describe("audience-aware live delivery", () => {
       offOutsider();
     }
     expect(got).toEqual(["member"]); // outsider did NOT receive it
+  });
+
+  it("delivers a global notification to every connected subscriber (broadcast branch)", async () => {
+    const got: string[] = [];
+    const offMember = deliveryHub.subscribe({
+      userId: memberId,
+      deliver: () => got.push("member"),
+    });
+    const offOutsider = deliveryHub.subscribe({
+      userId: outsiderId,
+      deliver: () => got.push("outsider"),
+    });
+    try {
+      await ingest({
+        id: `${D}g1`,
+        module: "dsr",
+        title: "everyone",
+        description: "",
+        priority: "normal",
+        snoozable: true,
+        audience: { scope: "global" },
+      });
+    } finally {
+      offMember();
+      offOutsider();
+    }
+    expect(got.sort()).toEqual(["member", "outsider"]); // global reaches all connected
   });
 });
 

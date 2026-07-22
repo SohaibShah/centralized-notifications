@@ -159,9 +159,9 @@ export async function notificationRoutes(app: FastifyInstance): Promise<void> {
       if (!cursor || cursor.s !== sort) return reply.code(400).send({ error: "invalid cursor" });
     }
 
-    // $1 is always the user id (for the read LEFT JOIN). A cursor adds its keyset params; the
-    // limit is always the final positional parameter. Fetch one extra row to learn whether an
-    // older page exists without a second COUNT query.
+    // $1 is always the user id (for the read LEFT JOIN). A cursor adds its keyset params, then the
+    // audience params, then the limit — which stays the final positional parameter. Fetch one extra
+    // row to learn whether an older page exists without a second COUNT query.
     const params: unknown[] = [user.id];
     // Notifications from an admin-disabled module are recorded but never shown.
     let where = "WHERE n.suppressed = false";

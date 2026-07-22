@@ -5,6 +5,9 @@ import { query } from "../db/pool";
  * WHO a live notification reaches: the ids the delivery hub keys subscribers by
  * (`Subscriber.userId` = internal user id today), or "all" for global (caller broadcasts).
  * Backed by the internal membership tables now; the host resolves this at extraction.
+ *
+ * Must stay in lockstep with `audienceWhere` (read filter): both encode the same membership rule
+ * (user-scope keys on username), so what a user receives live matches what their feed would show.
  */
 export async function resolveRecipients(audience: Audience): Promise<string[] | "all"> {
   if (audience.scope === "global") return "all";

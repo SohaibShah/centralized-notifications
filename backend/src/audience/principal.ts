@@ -23,6 +23,14 @@ export function resolvePrincipal(user: SessionUser): Principal {
  * `params` and returns a fragment referencing `n.audience_scope` / `n.audience_id`; the caller
  * aliases the notifications table as `n`. Empty arrays → `= ANY('{}')` matches nothing (fails
  * closed), leaving global + own user-scoped.
+ *
+ * Must stay in lockstep with `resolveRecipients` (live delivery): both encode the same membership
+ * rule (user-scope keys on username), so read-visibility and SSE delivery agree.
+ *
+ * Perf caveat: this OR-predicate can't be served by the same index as the feed's keyset ORDER BY,
+ * so for a user whose visible set is sparse relative to a large table the planner filters more rows
+ * per page — NFR-2's "deep pages cost the same as the first" becomes conditional on audience density.
+ * Fine at current scale; revisit with a visibility-aligned index if the table grows large.
  */
 export function audienceWhere(p: Principal, params: unknown[]): string {
   params.push(p.teamKeys, p.roles, p.userKey);
