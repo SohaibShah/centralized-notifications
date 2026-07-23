@@ -23,6 +23,7 @@ describe("CitationChip", () => {
     expect(wrapper.text()).toContain("Acme DSAR");
     expect(wrapper.find('[data-test="chip-action"]').exists()).toBe(false); // collapsed
     await wrapper.find('[data-test="chip-toggle"]').trigger("click");
+    expect(wrapper.text()).toContain("10m old"); // minute-resolution age, not "0h old"
     const btn = wrapper.find('[data-test="chip-action"]');
     expect(btn.exists()).toBe(true);
     await btn.trigger("click");

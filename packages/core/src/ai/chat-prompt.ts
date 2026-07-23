@@ -1,4 +1,4 @@
-import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
+import { NOTIFICATION_PRIORITIES, formatRelativeAge } from "@notifications/shared";
 import type { AiMessage } from "../types";
 import type { ChatContext, ChatContextItem, ChatContextStats } from "./retrieve";
 
@@ -11,6 +11,7 @@ const MAX_HISTORY_TURNS = 8;
 
 const INSTRUCTIONS = [
   "You are an assistant that helps a user with THEIR notifications, and nothing else.",
+  "Always respond in English.",
   "Answer ONLY from the notifications provided below — if the answer isn't in them, say you don't have that information. Never invent notifications.",
   "You do not write code, answer general-knowledge questions, do unrelated math, translate text, or roleplay. If asked to do anything that isn't about the user's notifications, briefly decline and offer to help with their notifications instead.",
   "The counts line gives the true totals across ALL the user's notifications; the list below it is a relevant sample and may not contain every item — use the counts for questions about totals or priority mix.",
@@ -28,12 +29,8 @@ function statsLine(stats: ChatContextStats): string {
 }
 
 function line(i: ChatContextItem, ref: string): string {
-  const age =
-    i.ageMinutes >= 1440
-      ? `${Math.floor(i.ageMinutes / 1440)}d`
-      : `${Math.floor(i.ageMinutes / 60)}h`;
   const cat = i.category ? `, ${i.category}` : "";
-  return `- [${ref}] [${i.read ? "read" : "unread"}] [${i.priority}] (${i.module}${cat}, ${age} old${i.hasActions ? ", has actions" : ""}): ${i.title} — ${i.description}`;
+  return `- [${ref}] [${i.read ? "read" : "unread"}] [${i.priority}] (${i.module}${cat}, ${formatRelativeAge(i.ageMinutes)} old${i.hasActions ? ", has actions" : ""}): ${i.title} — ${i.description}`;
 }
 
 /** Build chat messages: one system message (instructions + true distribution + a sampled list of the

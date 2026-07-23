@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import type { ChatSource } from "@notifications/shared";
+import { formatRelativeAge } from "@notifications/shared";
 import { actionIcon } from "@/design/icons";
 import Icon from "@/components/ui/Icon.vue";
 import { useNotificationActions } from "@/composables/useNotificationActions";
@@ -16,10 +17,6 @@ const dotClass: Record<ChatSource["priority"], string> = {
   normal: "bg-muted",
   low: "ring-1 ring-line-strong",
 };
-
-function age(minutes: number): string {
-  return minutes >= 1440 ? `${Math.floor(minutes / 1440)}d` : `${Math.floor(minutes / 60)}h`;
-}
 </script>
 
 <template>
@@ -40,7 +37,7 @@ function age(minutes: number): string {
       class="mt-1 flex flex-col gap-1.5 rounded-md border border-line bg-surface px-2.5 py-2 text-[12px]"
     >
       <span class="text-muted"
-        >{{ props.source.priority }} · {{ age(props.source.ageMinutes) }} old</span
+        >{{ props.source.priority }} · {{ formatRelativeAge(props.source.ageMinutes) }} old</span
       >
       <span v-if="props.source.actions.length" class="flex flex-wrap gap-2">
         <button

@@ -57,6 +57,7 @@ test("system carries grounding + read/unread tagging + a scope guardrail + [n#] 
   expect(lower).toContain("only"); // answer ONLY from provided notifications
   expect(lower).toContain("unread");
   expect(lower).toContain("do not write code"); // scope guardrail
+  expect(lower).toContain("in english"); // language constraint
   expect(lower).toContain("include its exact tag"); // cite instruction
   expect(system).toContain("[n1]"); // the ref tag on the first item's line
   expect(system).toContain("[unread]");
@@ -68,6 +69,49 @@ test("system carries grounding + read/unread tagging + a scope guardrail + [n#] 
   // history + question appended in order, last message is the question
   expect(msgs.some((m) => m.role === "assistant" && m.content === "hello")).toBe(true);
   expect(msgs.at(-1)).toEqual({ role: "user", content: "any unread DSARs?" });
+});
+
+test("recent items get minute-resolution age so recency is distinguishable", () => {
+  const items: ChatContextItem[] = [
+    {
+      id: "r1",
+      title: "Just now",
+      description: "",
+      priority: "critical",
+      module: "dsr",
+      ageMinutes: 3,
+      read: false,
+      hasActions: false,
+      actions: [],
+    },
+    {
+      id: "r2",
+      title: "Bit older",
+      description: "",
+      priority: "critical",
+      module: "dsr",
+      ageMinutes: 40,
+      read: false,
+      hasActions: false,
+      actions: [],
+    },
+  ];
+  const context: ChatContext = {
+    stats: stats({ total: 2, byPriority: { critical: 2, high: 0, normal: 0, low: 0 } }),
+    items,
+  };
+  const system = buildChatMessages(
+    context,
+    [
+      { ref: "n1", id: "r1" },
+      { ref: "n2", id: "r2" },
+    ],
+    [],
+    "newest?",
+  )[0]!.content;
+  expect(system).toContain("3m old");
+  expect(system).toContain("40m old");
+  expect(system).not.toContain("0h old"); // the old bucketing collapsed both to "0h"
 });
 
 test("history is capped to the most recent 8 turns", () => {

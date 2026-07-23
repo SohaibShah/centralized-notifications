@@ -94,6 +94,19 @@ export type Notification = z.infer<typeof notificationSchema>;
 export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[number];
 
 /**
+ * A compact relative age from a minute count: `34m` under an hour, `3h` under a day, else `2d`.
+ * Minute resolution under an hour matters — bucketing everything recent to `0h` makes items
+ * indistinguishable by recency (e.g. the AI chat couldn't tell which notification was newest).
+ * Shared so the model-facing prompt and the user-facing citation chip format age identically.
+ */
+export function formatRelativeAge(minutes: number): string {
+  const m = Math.max(0, Math.floor(minutes));
+  if (m < 60) return `${m}m`;
+  if (m < 1440) return `${Math.floor(m / 60)}h`;
+  return `${Math.floor(m / 1440)}d`;
+}
+
+/**
  * A notification the AI chat may cite, carried in the chat stream's `sources` frame. The wire
  * contract between the server (which builds it from the trusted, audience-scoped grounding set) and
  * the client (which renders cited refs as action buttons). `ref` is a stable per-answer id ("n1"..).
