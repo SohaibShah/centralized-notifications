@@ -10,7 +10,7 @@ import {
   ShieldCheck,
 } from "@lucide/vue";
 import { useRouter } from "vue-router";
-import Icon from "@/components/ui/Icon.vue";
+import { Icon } from "@notifications/vue";
 import { useSessionStore } from "@/stores/session";
 
 // Role-aware navigation. Only "Dashboard" and "Settings" route to real (stub) pages this

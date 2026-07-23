@@ -1,38 +1,37 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from "vue";
-import { useFeedStore } from "@/stores/feed";
-import { useToastStore } from "@/stores/toast";
-import { useSettingsStore } from "@/stores/settings";
+import { computed } from "vue";
+import {
+  NotificationProvider,
+  CriticalToastViewport,
+  type NotificationConfig,
+} from "@notifications/vue";
+import { useSessionStore } from "@/stores/session";
 import DashboardSidebar from "./components/DashboardSidebar.vue";
 import DashboardTopBar from "./components/DashboardTopBar.vue";
-import CriticalToastViewport from "@/features/notifications/CriticalToastViewport.vue";
+import DashboardNotificationsLifecycle from "./DashboardNotificationsLifecycle.vue";
 
-// The shell owns the feed lifecycle now (not the feed view): SSE connects on entry so the
-// topbar bell's unread badge is live even while the panel is closed. reset() clears any
-// prior user's feed; connect() subscribes before load() so a burst mid-load isn't lost.
-const feed = useFeedStore();
-const toast = useToastStore();
-const settings = useSettingsStore();
-onMounted(() => {
-  feed.reset();
-  toast.reset();
-  feed.connect();
-  void feed.load();
-  // Feature flags gate UI (e.g. the AI-summary band); fire-and-forget — flags default on.
-  void settings.load();
-});
-onBeforeUnmount(() => feed.disconnect());
+// The dashboard shell mounts the notification library: <NotificationProvider> injects the host's
+// identity (from the session) + same-origin transport, and the lifecycle child drives connect/load.
+const session = useSessionStore();
+const config = computed<NotificationConfig>(() => ({
+  baseUrl: "",
+  user: session.user ? { roles: session.user.roles, teamKeys: session.user.teamIds } : null,
+}));
 </script>
 
 <template>
-  <div class="flex h-screen overflow-hidden">
-    <DashboardSidebar />
-    <div class="flex min-w-0 flex-1 flex-col">
-      <DashboardTopBar />
-      <main class="min-h-0 flex-1 overflow-y-auto bg-bg">
-        <RouterView />
-      </main>
-    </div>
-    <CriticalToastViewport />
-  </div>
+  <NotificationProvider :config="config">
+    <DashboardNotificationsLifecycle>
+      <div class="flex h-screen overflow-hidden">
+        <DashboardSidebar />
+        <div class="flex min-w-0 flex-1 flex-col">
+          <DashboardTopBar />
+          <main class="min-h-0 flex-1 overflow-y-auto bg-bg">
+            <RouterView />
+          </main>
+        </div>
+        <CriticalToastViewport />
+      </div>
+    </DashboardNotificationsLifecycle>
+  </NotificationProvider>
 </template>

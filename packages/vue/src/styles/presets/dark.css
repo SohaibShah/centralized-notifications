@@ -1,0 +1,12 @@
+/* Dark token preset for @notifications/vue. Import AFTER style.css. Overrides the neutral --nt-*
+ * tokens; accent/danger/warning inherit from the base unless the host overrides them too. */
+.notifications-root {
+  --nt-color-bg: oklch(0.22 0.01 260);
+  --nt-color-surface: oklch(0.26 0.012 260);
+  --nt-color-sunken: oklch(0.2 0.01 260);
+  --nt-color-text: oklch(0.95 0.01 90);
+  --nt-color-muted: oklch(0.72 0.02 260);
+  --nt-color-faint: oklch(0.6 0.02 260);
+  --nt-color-line: oklch(0.34 0.012 260);
+  --nt-color-line-strong: oklch(0.4 0.014 260);
+}

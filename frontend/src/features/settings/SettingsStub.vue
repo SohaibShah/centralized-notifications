@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { BellOff } from "@lucide/vue";
-import StatePanel from "@/components/ui/StatePanel.vue";
+import { StatePanel } from "@notifications/vue";
 </script>
 
 <template>

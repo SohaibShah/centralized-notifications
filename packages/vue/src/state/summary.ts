@@ -1,0 +1,44 @@
+import { reactive, ref } from "vue";
+import { ApiError } from "../transport/cookie-transport";
+import type { Transport } from "../transport/types";
+
+interface SummaryResponse {
+  summary: string;
+  basedOn: number;
+}
+
+/**
+ * The AI triage summary for the current user's unread set. Fetched lazily on the first disclosure
+ * expand; the server caches by the unread signature, so re-fetches are cheap. States: idle → loading
+ * → ready | error.
+ */
+export function createSummaryState(deps: { transport: Transport }) {
+  const status = ref<"idle" | "loading" | "ready" | "error">("idle");
+  const text = ref("");
+  const error = ref<string | null>(null);
+
+  async function fetchSummary(force = false): Promise<void> {
+    if (status.value === "loading") return; // never double-fire an in-flight request
+    if (!force && status.value === "ready") return; // client cache — bypassed by force (stale set)
+    status.value = "loading";
+    error.value = null;
+    try {
+      const res = await deps.transport.get<SummaryResponse>("/notifications/summary");
+      text.value = res.summary;
+      status.value = "ready";
+    } catch (err) {
+      error.value = err instanceof ApiError ? err.message : "Couldn't generate a summary";
+      status.value = "error";
+    }
+  }
+
+  function reset(): void {
+    status.value = "idle";
+    text.value = "";
+    error.value = null;
+  }
+
+  return reactive({ status, text, error, fetchSummary, reset });
+}
+
+export type SummaryState = ReturnType<typeof createSummaryState>;

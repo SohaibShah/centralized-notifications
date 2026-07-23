@@ -1,0 +1,14 @@
+/* Vuetify (v3) token preset for @notifications/vue. Import AFTER style.css inside a Vuetify app so
+ * the notification UI adopts the host's Material theme (light or dark, whichever Vuetify applies).
+ * Vuetify exposes its theme colors as `--v-theme-*` RGB triplets on the v-application root. */
+.notifications-root {
+  --nt-color-bg: rgb(var(--v-theme-background));
+  --nt-color-surface: rgb(var(--v-theme-surface));
+  --nt-color-sunken: rgb(var(--v-theme-surface-variant, var(--v-theme-surface)));
+  --nt-color-text: rgb(var(--v-theme-on-surface));
+  --nt-color-accent: rgb(var(--v-theme-primary));
+  --nt-color-accent-ink: rgb(var(--v-theme-on-primary));
+  --nt-color-danger: rgb(var(--v-theme-error));
+  --nt-color-warning: rgb(var(--v-theme-warning));
+  --nt-font-sans: inherit;
+}

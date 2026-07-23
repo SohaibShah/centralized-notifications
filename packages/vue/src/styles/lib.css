@@ -1,0 +1,275 @@
+/* @notifications/vue stylesheet.
+ *
+ * Ships Tailwind's theme + utilities (NO global Preflight — a preflight reset would fight a host's
+ * own reset / Vuetify). The design tokens are the public theming API: real values are `--nt-*` on
+ * `.notifications-root` (not `:root`), so they neither override the host's variables nor get
+ * overridden. Tailwind's `@theme` names point at the `--nt-*` tokens, so the utility classes the
+ * components use (bg-accent, text-muted, …) and the custom classes below (which reference
+ * var(--color-*)) both resolve to the scoped tokens. Override the `--nt-*` vars to re-theme. */
+
+@layer theme, base, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "tailwindcss/utilities.css" layer(utilities);
+
+/* Tailwind theme names → the scoped --nt-* tokens (utilities emit var(--color-*), which resolves to
+ * var(--nt-*) inside .notifications-root). */
+@theme inline {
+  --font-sans: var(--nt-font-sans);
+  --font-display: var(--nt-font-display);
+  --font-mono: var(--nt-font-mono);
+
+  --color-bg: var(--nt-color-bg);
+  --color-surface: var(--nt-color-surface);
+  --color-sunken: var(--nt-color-sunken);
+  --color-text: var(--nt-color-text);
+  --color-muted: var(--nt-color-muted);
+  --color-faint: var(--nt-color-faint);
+  --color-line: var(--nt-color-line);
+  --color-line-strong: var(--nt-color-line-strong);
+  --color-accent: var(--nt-color-accent);
+  --color-accent-ink: var(--nt-color-accent-ink);
+  --color-danger: var(--nt-color-danger);
+  --color-danger-ink: var(--nt-color-danger-ink);
+  --color-warning: var(--nt-color-warning);
+  --color-warning-strong: var(--nt-color-warning-strong);
+  --color-success: var(--nt-color-success);
+  --color-ai-1: var(--nt-color-ai-1);
+  --color-ai-2: var(--nt-color-ai-2);
+  --color-ai-3: var(--nt-color-ai-3);
+  --color-ai: var(--nt-color-ai);
+
+  --radius-sm: var(--nt-radius-sm);
+  --radius-md: var(--nt-radius-md);
+  --radius-lg: var(--nt-radius-lg);
+
+  --ease-out: var(--nt-ease-out);
+}
+
+/* The real token values (Editorial Ivory defaults). A host re-themes by overriding any of these on
+ * .notifications-root (or ships a preset). --nt-font-sans defaults to inherit → adopts the host font. */
+.notifications-root {
+  --nt-font-sans: inherit;
+  --nt-font-display: "Fraunces Variable", ui-serif, Georgia, serif;
+  --nt-font-mono: "JetBrains Mono Variable", ui-monospace, SFMono-Regular, monospace;
+
+  --nt-color-bg: oklch(0.975 0.012 85);
+  --nt-color-surface: oklch(0.995 0.006 85);
+  --nt-color-sunken: oklch(0.965 0.013 85);
+  --nt-color-text: oklch(0.23 0.02 60);
+  --nt-color-muted: oklch(0.5 0.02 60);
+  --nt-color-faint: oklch(0.55 0.018 70);
+  --nt-color-line: oklch(0.9 0.012 80);
+  --nt-color-line-strong: oklch(0.87 0.014 80);
+
+  --nt-color-accent: oklch(0.45 0.09 155);
+  --nt-color-accent-ink: oklch(0.98 0.01 155);
+  --nt-color-danger: oklch(0.52 0.17 28);
+  --nt-color-danger-ink: oklch(0.98 0.01 28);
+  --nt-color-warning: oklch(0.72 0.14 68);
+  --nt-color-warning-strong: oklch(0.53 0.13 68);
+  --nt-color-success: oklch(0.55 0.1 150);
+
+  --nt-color-ai-1: oklch(0.55 0.1 160);
+  --nt-color-ai-2: oklch(0.65 0.11 185);
+  --nt-color-ai-3: oklch(0.56 0.15 264);
+  --nt-color-ai: oklch(0.5 0.11 185);
+
+  --nt-radius-sm: 6px;
+  --nt-radius-md: 9px;
+  --nt-radius-lg: 12px;
+  --nt-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Scoped `--color-*` aliases for the custom classes below (.prio-*, .ai-*, .animate-enter) that
+   * reference var(--color-*). With `@theme inline` above, Tailwind inlines --nt-* into the utilities
+   * and does NOT emit --color-* at :root — so these aliases live HERE (scoped), never polluting the
+   * host's :root, and overriding --nt-* actually re-themes both utilities and custom classes. */
+  --color-bg: var(--nt-color-bg);
+  --color-surface: var(--nt-color-surface);
+  --color-sunken: var(--nt-color-sunken);
+  --color-text: var(--nt-color-text);
+  --color-muted: var(--nt-color-muted);
+  --color-faint: var(--nt-color-faint);
+  --color-line: var(--nt-color-line);
+  --color-line-strong: var(--nt-color-line-strong);
+  --color-accent: var(--nt-color-accent);
+  --color-accent-ink: var(--nt-color-accent-ink);
+  --color-danger: var(--nt-color-danger);
+  --color-danger-ink: var(--nt-color-danger-ink);
+  --color-warning: var(--nt-color-warning);
+  --color-warning-strong: var(--nt-color-warning-strong);
+  --color-success: var(--nt-color-success);
+  --color-ai-1: var(--nt-color-ai-1);
+  --color-ai-2: var(--nt-color-ai-2);
+  --color-ai-3: var(--nt-color-ai-3);
+  --color-ai: var(--nt-color-ai);
+  --ease-out: var(--nt-ease-out);
+
+  color: var(--nt-color-text);
+  font-family: var(--nt-font-sans);
+}
+
+/* Scoped baseline — the parts of Tailwind Preflight the components rely on, confined to the library
+ * subtree via :where() (0 specificity). Wrapped in @layer base so Tailwind's utilities (@layer
+ * utilities, ordered AFTER base) win over the reset. Unlayered, the `:where(button)` normalize below
+ * would beat every layered `bg-*`/`text-*`/`font-*` utility on a <button> (chips, toggle switches,
+ * action buttons), stripping their fill/size/weight — the parity regression this fixes. */
+@layer base {
+  .notifications-root :where(svg) {
+    display: block;
+  }
+  .notifications-root :where(*, *::before, *::after) {
+    box-sizing: border-box;
+  }
+  .notifications-root :where(h1, h2, h3, h4, h5, h6, p, figure, blockquote, dl, dd) {
+    margin: 0;
+  }
+  .notifications-root :where(h1, h2, h3) {
+    font-family: var(--nt-font-display);
+    font-weight: 560;
+    letter-spacing: -0.02em;
+  }
+  .notifications-root :where(button, input, select, textarea) {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+  }
+  .notifications-root :where(button) {
+    background: none;
+    border: 0;
+  }
+  .notifications-root :where(:focus-visible) {
+    outline: 2px solid var(--nt-color-accent);
+    outline-offset: 2px;
+  }
+  .notifications-root
+    :where(button:not(:disabled), [role="button"], [role="tab"], label[for], summary, a[href]) {
+    cursor: pointer;
+  }
+  .notifications-root :where(:disabled, [aria-disabled="true"]) {
+    cursor: not-allowed;
+  }
+}
+
+/* ── Custom component classes (reference var(--color-*) → the scoped --nt-* tokens) ── */
+
+@keyframes enter-rise {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-enter {
+  animation: enter-rise 200ms var(--ease-out, cubic-bezier(0.16, 1, 0.3, 1)) both;
+}
+
+.prio-critical {
+  background: color-mix(in oklab, var(--color-danger) 8%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-danger);
+}
+.prio-critical:hover {
+  background: color-mix(in oklab, var(--color-danger) 14%, transparent);
+}
+.prio-high {
+  background: color-mix(in oklab, var(--color-warning) 10%, transparent);
+  box-shadow: inset 3px 0 0 var(--color-warning-strong);
+}
+.prio-high:hover {
+  background: color-mix(in oklab, var(--color-warning) 16%, transparent);
+}
+
+@keyframes countdown-recede {
+  from {
+    transform: scaleX(1);
+  }
+  to {
+    transform: scaleX(0);
+  }
+}
+.toast-countdown {
+  transform-origin: left;
+  animation-name: countdown-recede;
+  animation-timing-function: linear;
+  animation-fill-mode: both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-countdown {
+    animation: none;
+  }
+  .notifications-root :where(*, *::before, *::after) {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+@keyframes ai-gradient-shift {
+  to {
+    background-position: 200% 0;
+  }
+}
+@keyframes ai-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@keyframes ai-bloom {
+  from {
+    opacity: 0.55;
+  }
+  to {
+    opacity: var(--ai-glow-rest, 0.13);
+  }
+}
+.ai-gradient-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-surface), var(--color-surface)) padding-box,
+    linear-gradient(100deg, var(--color-ai-1), var(--color-ai-2), var(--color-ai-3)) border-box;
+  background-size:
+    100% 100%,
+    200% 100%;
+  animation: ai-gradient-shift 7s linear infinite;
+}
+.ai-gradient-bg {
+  background: linear-gradient(100deg, var(--color-ai-1), var(--color-ai-2), var(--color-ai-3));
+}
+.ai-glow {
+  --ai-glow-rest: 0.13;
+  position: absolute;
+  inset: -35%;
+  border-radius: 9999px;
+  background: conic-gradient(
+    from 0deg,
+    var(--color-ai-1),
+    var(--color-ai-2),
+    var(--color-ai-3),
+    var(--color-ai-1)
+  );
+  filter: blur(19px);
+  opacity: var(--ai-glow-rest);
+  animation: ai-spin 9s linear infinite;
+  transition: opacity 0.35s ease;
+}
+.group:hover .ai-glow {
+  opacity: 0.3;
+}
+.ai-glow.is-blooming {
+  animation:
+    ai-spin 9s linear infinite,
+    ai-bloom 1.3s ease-out;
+}
+.ai-bubble-border {
+  border: 1px solid transparent;
+  background:
+    linear-gradient(var(--color-sunken), var(--color-sunken)) padding-box,
+    linear-gradient(
+        100deg,
+        color-mix(in oklab, var(--color-ai-1) 55%, transparent),
+        color-mix(in oklab, var(--color-ai-3) 55%, transparent)
+      )
+      border-box;
+}

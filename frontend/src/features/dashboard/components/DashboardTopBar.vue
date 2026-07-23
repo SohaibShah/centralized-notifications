@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { useRoute } from "vue-router";
-import NotificationBell from "@/features/notifications/NotificationBell.vue";
+import { NotificationBell } from "@notifications/vue";
 
 // Dashboard chrome. Left: current page title (single h1 per view). Right: the
 // notifications bell. Deliberately thin — the feed's search/filters moved into the

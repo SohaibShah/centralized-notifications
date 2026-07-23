@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import FormRenderer from "@/forms/FormRenderer.vue";
+import { FormRenderer, ApiError, type FormValues } from "@notifications/vue";
 import { loginForm } from "@/forms/login.form";
-import type { FormValues } from "@/forms/types";
-import { ApiError } from "@/api/client";
 import { useSessionStore } from "@/stores/session";
 
 const session = useSessionStore();

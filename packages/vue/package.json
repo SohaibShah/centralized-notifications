@@ -1,0 +1,56 @@
+{
+  "name": "@notifications/vue",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Reusable Vue 3 notification UI (bell, panel, chat, admin) mounted via <NotificationProvider>. Host injects transport + identity. Publishable-shaped; flip private -> false at the split.",
+  "type": "module",
+  "sideEffects": [
+    "**/*.css"
+  ],
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./style.css": "./dist/style.css",
+    "./presets/vuetify.css": "./src/styles/presets/vuetify.css",
+    "./presets/dark.css": "./src/styles/presets/dark.css"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "build": "vite build && pnpm build:css",
+    "build:css": "tailwindcss -i ./src/styles/lib.css -o ./dist/style.css --minify",
+    "dev:css": "tailwindcss -i ./src/styles/lib.css -o ./dist/style.css --watch",
+    "typecheck": "vue-tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@lucide/vue": "^1.23.0",
+    "@notifications/shared": "workspace:*",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "marked": "^18.0.7",
+    "tailwind-merge": "^3.6.0",
+    "zod": "^3.24.1"
+  },
+  "peerDependencies": {
+    "vue": "^3.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.2",
+    "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/test-utils": "^2.4.11",
+    "jsdom": "^29.1.1",
+    "tailwindcss": "^4.3.2",
+    "typescript": "^5.7.3",
+    "vite": "^6.0.7",
+    "vitest": "^3.0.0",
+    "vue": "^3.5.13",
+    "vue-tsc": "^2.2.0"
+  }
+}
