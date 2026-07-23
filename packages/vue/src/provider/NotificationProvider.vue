@@ -13,6 +13,9 @@ import { NOTIFICATIONS_KEY, type NotificationConfig, type NotificationsContext }
 
 const props = defineProps<{ config: NotificationConfig }>();
 
+// The connection fields (baseUrl/transport/connectSse) are resolved ONCE at setup — state is built a
+// single time. Only `config.user` is live (see the reactive `toRef` below); a host that reactively
+// swaps baseUrl/transport after mount would need to remount the provider.
 const baseUrl = props.config.baseUrl ?? "";
 const transport = props.config.transport ?? createCookieTransport(baseUrl);
 const connectSse = props.config.connectSse ?? ((opts) => defaultConnectSse(baseUrl, opts));

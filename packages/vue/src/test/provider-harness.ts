@@ -28,25 +28,19 @@ function stubTransport(): Transport {
 export function buildTestContext(over: Partial<NotificationsContext> = {}): NotificationsContext {
   const transport = over.transport ?? stubTransport();
   const connectSse = () => ({ close: () => {} });
-  const toast = createToastState();
-  const settings = createSettingsState({ transport });
-  const summary = createSummaryState({ transport });
-  const feed = createFeedState({ transport, connectSse });
-  const chat = createChatState({ baseUrl: "" });
-  const actions = createNotificationActions({ feed });
-  const panel = createPanelState();
+  const feed = over.feed ?? createFeedState({ transport, connectSse });
   return {
     feed,
-    chat,
-    summary,
-    settings,
-    toast,
-    panel,
-    actions,
-    user: ref(null),
+    chat: over.chat ?? createChatState({ baseUrl: "" }),
+    summary: over.summary ?? createSummaryState({ transport }),
+    settings: over.settings ?? createSettingsState({ transport }),
+    toast: over.toast ?? createToastState(),
+    panel: over.panel ?? createPanelState(),
+    // Wire actions to whatever `feed` is in play (real or overridden) so runAction hits the same slice.
+    actions: over.actions ?? createNotificationActions({ feed }),
+    user: over.user ?? ref(null),
     transport,
-    baseUrl: "",
-    ...over,
+    baseUrl: over.baseUrl ?? "",
   };
 }
 
