@@ -77,6 +77,40 @@ describe("AssistantTab", () => {
     expect(wrapper.text()).toContain("[n9]"); // unknown ref → left as plain text
   });
 
+  it("renders a grouped [n1, n2] citation as one chip per known ref", () => {
+    chatState.thread = [
+      { from: "me", text: "hi", sources: {} },
+      {
+        from: "ai",
+        text: "Both [n1, n2] are urgent.",
+        sources: {
+          n1: {
+            ref: "n1",
+            id: "a1",
+            title: "Acme DSAR",
+            priority: "critical",
+            ageMinutes: 5,
+            actions: [],
+          },
+          n2: {
+            ref: "n2",
+            id: "a2",
+            title: "Beta scan",
+            priority: "high",
+            ageMinutes: 9,
+            actions: [],
+          },
+        },
+      },
+    ];
+    const wrapper = mount(AssistantTab);
+    const chips = wrapper.findAll('[data-test="chip-toggle"]');
+    expect(chips).toHaveLength(2);
+    expect(chips[0]!.text()).toContain("Acme DSAR");
+    expect(chips[1]!.text()).toContain("Beta scan");
+    expect(wrapper.text()).not.toContain("[n1, n2]"); // the raw grouped tag is gone
+  });
+
   it("does not submit an empty question", async () => {
     const wrapper = mount(AssistantTab);
     await wrapper.find("form").trigger("submit");

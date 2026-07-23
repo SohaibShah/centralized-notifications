@@ -20,15 +20,23 @@ function onSubmit(): void {
   draft.value = "";
 }
 
-// Split an answer into literal text and [n#] citation tokens; a token becomes a chip only when the
-// turn actually carries that source (unknown refs stay as plain text).
-function segments(text: string): { kind: "text" | "ref"; value: string }[] {
+// Split an answer into literal text and citation tokens. The model cites notifications inline, and
+// (from real-model behavior) may group several into one bracket, e.g. "[n1, n2, n3]". A citation
+// segment carries every ref id in the bracket; each becomes its own chip when the turn actually
+// carries that source. Unknown refs (or a whole group with none known) stay as plain text.
+type Segment = { kind: "text"; value: string } | { kind: "refs"; refs: string[]; raw: string };
+
+// One bracket holding one-or-more n-refs separated by commas: [n1] or [n1, n2, n3].
+const CITATION_SPLIT = /(\[n\d+(?:\s*,\s*n\d+)*\])/;
+const CITATION_FULL = /^\[n\d+(?:\s*,\s*n\d+)*\]$/;
+
+function segments(text: string): Segment[] {
   return text
-    .split(/(\[n\d+\])/)
+    .split(CITATION_SPLIT)
     .filter((s) => s !== "")
     .map((s) =>
-      /^\[n\d+\]$/.test(s)
-        ? { kind: "ref" as const, value: s.slice(1, -1) }
+      CITATION_FULL.test(s)
+        ? { kind: "refs" as const, refs: s.match(/n\d+/g) ?? [], raw: s }
         : { kind: "text" as const, value: s },
     );
 }
@@ -68,11 +76,17 @@ function segments(text: string): { kind: "text" | "ref"; value: string }[] {
             class="mb-0.5 inline text-ai-2"
           />
           <template v-for="(seg, si) in segments(m.text)" :key="si">
-            <CitationChip
-              v-if="seg.kind === 'ref' && m.sources[seg.value]"
-              :source="m.sources[seg.value]!"
-            />
-            <template v-else-if="seg.kind === 'ref'">[{{ seg.value }}]</template>
+            <template v-if="seg.kind === 'refs'">
+              <template v-if="seg.refs.some((r) => m.sources[r])">
+                <CitationChip
+                  v-for="r in seg.refs.filter((ref) => m.sources[ref])"
+                  :key="r"
+                  :source="m.sources[r]!"
+                  class="mr-1"
+                />
+              </template>
+              <template v-else>{{ seg.raw }}</template>
+            </template>
             <template v-else>{{ seg.value }}</template>
           </template>
           <span
