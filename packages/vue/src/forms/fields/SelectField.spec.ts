@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import SelectField from "./fields/SelectField.vue";
+import SelectField from "./SelectField.vue";
 
 const field = {
   name: "priority",

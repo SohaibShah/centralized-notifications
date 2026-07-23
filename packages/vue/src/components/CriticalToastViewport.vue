@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount } from "vue";
-import { useToast } from "@/provider/context";
-import { usePanel } from "@/provider/context";
-import { useFeed } from "@/provider/context";
+import { useToast } from "../provider/context";
+import { usePanel } from "../provider/context";
+import { useFeed } from "../provider/context";
 import CriticalToast from "./CriticalToast.vue";
 
 const toasts = useToast();

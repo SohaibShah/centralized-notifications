@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { SendHorizontal, Sparkles } from "@lucide/vue";
-import Icon from "@/ui/Icon.vue";
-import { useChat } from "@/provider/context";
-import { useSettings } from "@/provider/context";
+import Icon from "../../ui/Icon.vue";
+import { useChat } from "../../provider/context";
+import { useSettings } from "../../provider/context";
 import CitationChip from "./CitationChip.vue";
 
 // Real streaming Q/A over the user's notifications. The thread + streaming live in the chat store;

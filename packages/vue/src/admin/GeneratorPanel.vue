@@ -2,16 +2,19 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { FlaskConical } from "@lucide/vue";
 import type { NotificationPriority } from "@notifications/shared";
-import { ApiError } from "@/api/client";
-import Button from "@/components/ui/Button.vue";
-import Icon from "@/components/ui/Icon.vue";
-import { priorityDotClass } from "@/design/tokens";
-import FormRenderer from "@/forms/FormRenderer.vue";
-import { burstForm } from "@/forms/burst.form";
-import { dripForm } from "@/forms/drip.form";
-import { generatorForm, toCustomSpec } from "@/forms/generator.form";
-import type { FormSchema, FormValues } from "@/forms/types";
-import { fetchModuleKeys, simulate, type SimulateResult, type SimulateSpec } from "./adminApi";
+import { ApiError } from "../transport/cookie-transport";
+import { useTransport } from "../provider/context";
+import Button from "../ui/Button.vue";
+import Icon from "../ui/Icon.vue";
+import { priorityDotClass } from "../design/tokens";
+import FormRenderer from "../forms/FormRenderer.vue";
+import { burstForm } from "../forms/burst.form";
+import { dripForm } from "../forms/drip.form";
+import { generatorForm, toCustomSpec } from "../forms/generator.form";
+import type { FormSchema, FormValues } from "../forms/types";
+import { createAdminApi, type SimulateResult, type SimulateSpec } from "./adminApi";
+
+const admin = createAdminApi(useTransport());
 
 type Mode = "custom" | "preset" | "burst" | "drip";
 const modes: { id: Mode; label: string }[] = [
@@ -59,7 +62,7 @@ const result = ref<SimulateResult | null>(null);
 const customSchema = ref<FormSchema>(generatorForm([]));
 onMounted(async () => {
   try {
-    customSchema.value = generatorForm(await fetchModuleKeys());
+    customSchema.value = generatorForm(await admin.fetchModuleKeys());
   } catch {
     // Datalist is a convenience; a fetch failure just means no suggestions.
   }
@@ -69,7 +72,7 @@ async function run(spec: SimulateSpec): Promise<void> {
   submitting.value = true;
   error.value = null;
   try {
-    result.value = await simulate(spec);
+    result.value = await admin.simulate(spec);
   } catch (err) {
     // Surface the real reason instead of always blaming auth: only 401/403 is an auth
     // problem; a 400 carries the server's validation message (e.g. "invalid request body").

@@ -23,7 +23,7 @@
     "dist"
   ],
   "scripts": {
-    "build": "vite build && vue-tsc -p tsconfig.build.json --emitDeclarationOnly && pnpm build:css",
+    "build": "vite build && pnpm build:css",
     "build:css": "tailwindcss -i ./src/styles/lib.css -o ./dist/style.css --minify",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run --passWithNoTests"

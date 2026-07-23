@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import FilterMenu from "./FilterMenu.vue";
-import type { NotificationsContext } from "@/provider/context";
-import { buildTestContext, mountWithProvider } from "@/test/provider-harness";
+import type { NotificationsContext } from "../../provider/context";
+import { buildTestContext, mountWithProvider } from "../../test/provider-harness";
 
 function mountMenu(ctx: NotificationsContext = buildTestContext()) {
   return mountWithProvider(FilterMenu, {

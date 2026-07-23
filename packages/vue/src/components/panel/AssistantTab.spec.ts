@@ -16,7 +16,7 @@ const { chatState, settingsState, sendSpy } = vi.hoisted(() => ({
 
 // AssistantTab reads useChat/useSettings; CitationChip (rendered for known refs) reads useActions.
 // Mock the provider accessors directly so this component test needs no real context.
-vi.mock("@/provider/context", () => ({
+vi.mock("../../provider/context", () => ({
   useChat: () => chatState,
   useSettings: () => settingsState,
   useActions: () => ({ runAction: vi.fn() }),

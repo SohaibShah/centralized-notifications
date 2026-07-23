@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import CriticalToast from "./CriticalToast.vue";
-import { NOTIFICATIONS_KEY } from "@/provider/context";
-import { buildTestContext } from "@/test/provider-harness";
+import { NOTIFICATIONS_KEY } from "../provider/context";
+import { buildTestContext } from "../test/provider-harness";
 
 const toast = { id: "a", title: "Critical a", description: "d", module: "DSAR" };
 

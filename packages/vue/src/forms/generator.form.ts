@@ -1,6 +1,6 @@
 import { AUDIENCE_SCOPES, NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import type { AudienceScope, NotificationPriority } from "@notifications/shared";
-import type { CustomSpec } from "@/features/admin/adminApi";
+import type { CustomSpec } from "../admin/adminApi";
 import type { FormSchema, FormValues } from "./types";
 
 /** The custom-notification form. `modules` become datalist suggestions on the free-text module field. */

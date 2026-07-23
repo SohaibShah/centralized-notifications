@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { FeedNotification, Notification, NotificationCounts } from "@notifications/shared";
-import { feedItem } from "@/test-support/feedItem";
+import { feedItem } from "../test-support/feedItem";
 import { ApiError } from "../transport/cookie-transport";
 import { createFeedState } from "./feed";
 import type { Transport } from "../transport/types";

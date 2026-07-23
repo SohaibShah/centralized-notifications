@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
-import Button from "@/components/ui/Button.vue";
-import Spinner from "@/components/ui/Spinner.vue";
+import Button from "../ui/Button.vue";
+import Spinner from "../ui/Spinner.vue";
 import SelectField from "./fields/SelectField.vue";
 import SwitchField from "./fields/SwitchField.vue";
 import TextField from "./fields/TextField.vue";

@@ -1,13 +1,22 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
-import { ApiError } from "@/api/client";
+import { ApiError } from "../transport/cookie-transport";
+import { NOTIFICATIONS_KEY } from "../provider/context";
+import { buildTestContext } from "../test/provider-harness";
 
 const { simulateMock, modulesMock } = vi.hoisted(() => ({
   simulateMock: vi.fn(),
   modulesMock: vi.fn(),
 }));
-vi.mock("./adminApi", () => ({ simulate: simulateMock, fetchModuleKeys: modulesMock }));
+vi.mock("./adminApi", () => ({
+  createAdminApi: () => ({ simulate: simulateMock, fetchModuleKeys: modulesMock }),
+}));
 const { default: GeneratorPanel } = await import("./GeneratorPanel.vue");
+
+const mountPanel = () =>
+  mount(GeneratorPanel, {
+    global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext() } },
+  });
 
 describe("GeneratorPanel", () => {
   beforeEach(() => {
@@ -18,7 +27,7 @@ describe("GeneratorPanel", () => {
   });
 
   it("custom submit calls simulate with the mapped custom spec", async () => {
-    const w = mount(GeneratorPanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('input[name="module"]').setValue("dsr");
     await w.get('input[name="title"]').setValue("Hello");
@@ -34,7 +43,7 @@ describe("GeneratorPanel", () => {
   });
 
   it("a preset click calls simulate with that preset id", async () => {
-    const w = mount(GeneratorPanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('[data-test="mode-preset"]').trigger("click");
     await w.get('[data-test="preset-critical-dsr"]').trigger("click");
@@ -43,7 +52,7 @@ describe("GeneratorPanel", () => {
   });
 
   it("burst submit calls simulate with count and seed", async () => {
-    const w = mount(GeneratorPanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('[data-test="mode-burst"]').trigger("click");
     await w.get('input[name="count"]').setValue("8");
@@ -56,7 +65,7 @@ describe("GeneratorPanel", () => {
   it("surfaces the server's message on a 400 rather than blaming auth", async () => {
     simulateMock.mockReset();
     simulateMock.mockRejectedValueOnce(new ApiError(400, "invalid request body"));
-    const w = mount(GeneratorPanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('input[name="module"]').setValue("dsr");
     await w.get('input[name="title"]').setValue("x");
@@ -69,7 +78,7 @@ describe("GeneratorPanel", () => {
   it("shows an auth message on a 401/403", async () => {
     simulateMock.mockReset();
     simulateMock.mockRejectedValueOnce(new ApiError(403, "admin role required"));
-    const w = mount(GeneratorPanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('input[name="module"]').setValue("dsr");
     await w.get('input[name="title"]').setValue("x");
@@ -80,7 +89,7 @@ describe("GeneratorPanel", () => {
 
   it("drip start publishes on each tick and stop clears the timer", async () => {
     vi.useFakeTimers();
-    const w = mount(GeneratorPanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('[data-test="mode-drip"]').trigger("click");
     await w.get('input[name="count"]').setValue("2");

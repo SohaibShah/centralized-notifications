@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 
 const { runActionSpy } = vi.hoisted(() => ({ runActionSpy: vi.fn() }));
-vi.mock("@/provider/context", () => ({
+vi.mock("../../provider/context", () => ({
   useActions: () => ({ runAction: runActionSpy }),
 }));
 

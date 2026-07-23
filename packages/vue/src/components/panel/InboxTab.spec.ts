@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import InboxTab from "./InboxTab.vue";
-import { feedItem } from "@/test-support/feedItem";
-import { buildTestContext, mountWithProvider } from "@/test/provider-harness";
-import type { NotificationsContext } from "@/provider/context";
+import { feedItem } from "../../test-support/feedItem";
+import { buildTestContext, mountWithProvider } from "../../test/provider-harness";
+import type { NotificationsContext } from "../../provider/context";
 
 // The AI-summary slice is overridden with a fake so the disclosure's states are directly
 // controllable and no real fetch happens. Set `summaryState.*` before mounting; `fetchSummary`

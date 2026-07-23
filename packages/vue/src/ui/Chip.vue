@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { cn } from "@/lib/cn";
+import { cn } from "../lib/cn";
 
 // Quick filter preset. `active` reflects both styling and aria-pressed.
 const props = defineProps<{ active?: boolean }>();

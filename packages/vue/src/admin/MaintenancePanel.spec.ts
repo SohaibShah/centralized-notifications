@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { flushPromises, mount } from "@vue/test-utils";
+import { NOTIFICATIONS_KEY } from "../provider/context";
+import { buildTestContext } from "../test/provider-harness";
 
 const mocks = vi.hoisted(() => ({
   getAdminSettings: vi.fn(),
@@ -10,8 +12,13 @@ const mocks = vi.hoisted(() => ({
   resetModules: vi.fn(),
   resetSettings: vi.fn(),
 }));
-vi.mock("./adminApi", () => mocks);
+vi.mock("./adminApi", () => ({ createAdminApi: () => mocks }));
 const { default: MaintenancePanel } = await import("./MaintenancePanel.vue");
+
+const mountPanel = () =>
+  mount(MaintenancePanel, {
+    global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext() } },
+  });
 
 describe("MaintenancePanel", () => {
   beforeEach(() => {
@@ -28,7 +35,7 @@ describe("MaintenancePanel", () => {
   });
 
   it("runs a simple-confirm op (delete-read) after confirmation and shows the count", async () => {
-    const w = mount(MaintenancePanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('[data-test="op-delete-read"]').trigger("click"); // reveals inline confirm
     await w.get('[data-test="op-delete-read-confirm"]').trigger("click");
@@ -38,7 +45,7 @@ describe("MaintenancePanel", () => {
   });
 
   it("gates delete-all behind a typed confirmation", async () => {
-    const w = mount(MaintenancePanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('[data-test="op-delete-all"]').trigger("click");
     const confirmBtn = w.get('[data-test="op-delete-all-confirm"]');
@@ -52,7 +59,7 @@ describe("MaintenancePanel", () => {
 
   it("saves the retention window", async () => {
     mocks.patchAdminSettings.mockResolvedValue(undefined);
-    const w = mount(MaintenancePanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('[data-test="retention-input"]').setValue("14");
     await w.get('[data-test="retention-save"]').trigger("click");
@@ -61,7 +68,7 @@ describe("MaintenancePanel", () => {
   });
 
   it("disables the retention Save button when the input is cleared to an invalid value", async () => {
-    const w = mount(MaintenancePanel);
+    const w = mountPanel();
     await flushPromises();
     await w.get('[data-test="retention-input"]').setValue("");
     expect(w.get('[data-test="retention-save"]').attributes("disabled")).toBeDefined();

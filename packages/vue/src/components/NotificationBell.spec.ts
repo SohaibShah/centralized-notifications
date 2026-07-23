@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import NotificationBell from "./NotificationBell.vue";
-import { buildTestContext, mountWithProvider } from "@/test/provider-harness";
+import { buildTestContext, mountWithProvider } from "../test/provider-harness";
 
 describe("NotificationBell", () => {
   it("shows the unread count as a badge and in the aria-label (from the server counts snapshot)", () => {

@@ -6,9 +6,9 @@ import {
   type FeedSort,
   type NotificationPriority,
 } from "@notifications/shared";
-import Icon from "@/ui/Icon.vue";
-import { priorityDotClass, priorityLabel, priorityRank } from "@/design/tokens";
-import { useFeed } from "@/provider/context";
+import Icon from "../../ui/Icon.vue";
+import { priorityDotClass, priorityLabel, priorityRank } from "../../design/tokens";
+import { useFeed } from "../../provider/context";
 
 const sortOptions: { value: FeedSort; label: string }[] = [
   { value: "newest", label: "Newest" },

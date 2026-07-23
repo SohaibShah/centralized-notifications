@@ -2,10 +2,10 @@
 import { computed, ref } from "vue";
 import { ChevronDown, Circle, CircleCheck } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
-import Icon from "@/ui/Icon.vue";
-import { actionIcon } from "@/design/icons";
-import { priorityLabel, priorityTextClass } from "@/design/tokens";
-import { exactTime, relativeTime } from "@/lib/time";
+import Icon from "../../ui/Icon.vue";
+import { actionIcon } from "../../design/icons";
+import { priorityLabel, priorityTextClass } from "../../design/tokens";
+import { exactTime, relativeTime } from "../../lib/time";
 
 // Config-driven feed row. Compact by default; clicking anywhere on the card (body or title)
 // opens it — expands any extra content (actions or a long body) AND marks it read

@@ -1,14 +1,26 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
 import { flushPromises, mount } from "@vue/test-utils";
+import { NOTIFICATIONS_KEY } from "../provider/context";
+import { buildTestContext } from "../test/provider-harness";
+import type { Transport } from "../transport/types";
+import FeaturesPanel from "./FeaturesPanel.vue";
 
-const { getMock, patchMock } = vi.hoisted(() => ({ getMock: vi.fn(), patchMock: vi.fn() }));
-vi.mock("@/api/client", () => ({ api: { get: getMock, patch: patchMock } }));
-const { default: FeaturesPanel } = await import("./FeaturesPanel.vue");
+const getMock = vi.fn();
+const patchMock = vi.fn();
+const transport = {
+  get: getMock,
+  post: vi.fn(),
+  patch: patchMock,
+  del: vi.fn(),
+} as unknown as Transport;
+
+const mountPanel = () =>
+  mount(FeaturesPanel, {
+    global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext({ transport }) } },
+  });
 
 describe("FeaturesPanel", () => {
   beforeEach(() => {
-    setActivePinia(createPinia());
     getMock.mockReset();
     patchMock.mockReset();
     getMock.mockResolvedValue({
@@ -21,7 +33,7 @@ describe("FeaturesPanel", () => {
   });
 
   it("seeds switches from GET /admin/settings and saves changes via PATCH", async () => {
-    const wrapper = mount(FeaturesPanel);
+    const wrapper = mountPanel();
     await flushPromises();
     expect(getMock).toHaveBeenCalledWith("/admin/settings");
 
@@ -42,7 +54,7 @@ describe("FeaturesPanel", () => {
   it("shows an error state (not a blank panel) when settings fail to load", async () => {
     getMock.mockReset();
     getMock.mockRejectedValueOnce(new Error("network"));
-    const wrapper = mount(FeaturesPanel);
+    const wrapper = mountPanel();
     await flushPromises();
     expect(wrapper.text()).toContain("Couldn't load settings");
     expect(wrapper.find("form").exists()).toBe(false);

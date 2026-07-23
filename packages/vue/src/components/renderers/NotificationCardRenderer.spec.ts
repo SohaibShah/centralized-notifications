@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import type { FeedNotification } from "@notifications/shared";
 import NotificationCardRenderer from "./NotificationCardRenderer.vue";
-import { feedItem } from "@/test-support/feedItem";
+import { feedItem } from "../../test-support/feedItem";
 
 function withActions(over: Partial<FeedNotification> & { id: string }): FeedNotification {
   return feedItem({

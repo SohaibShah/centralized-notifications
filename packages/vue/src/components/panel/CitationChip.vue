@@ -2,9 +2,9 @@
 import { ref } from "vue";
 import type { ChatSource } from "@notifications/shared";
 import { formatRelativeAge } from "@notifications/shared";
-import { actionIcon } from "@/design/icons";
-import Icon from "@/ui/Icon.vue";
-import { useActions } from "@/provider/context";
+import { actionIcon } from "../../design/icons";
+import Icon from "../../ui/Icon.vue";
+import { useActions } from "../../provider/context";
 
 const props = defineProps<{ source: ChatSource }>();
 const open = ref(false);

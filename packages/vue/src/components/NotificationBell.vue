@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Bell } from "@lucide/vue";
-import Icon from "@/ui/Icon.vue";
-import { useFeed } from "@/provider/context";
-import { usePanel } from "@/provider/context";
+import Icon from "../ui/Icon.vue";
+import { useFeed } from "../provider/context";
+import { usePanel } from "../provider/context";
 import NotificationPopover from "./NotificationPopover.vue";
 
 const feed = useFeed();

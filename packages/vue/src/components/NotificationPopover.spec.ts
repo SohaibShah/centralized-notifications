@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 import NotificationPopover from "./NotificationPopover.vue";
-import { NOTIFICATIONS_KEY, type NotificationsContext } from "@/provider/context";
-import { buildTestContext } from "@/test/provider-harness";
+import { NOTIFICATIONS_KEY, type NotificationsContext } from "../provider/context";
+import { buildTestContext } from "../test/provider-harness";
 
 let ctx: NotificationsContext;
 const mountPopover = () =>

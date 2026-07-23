@@ -1,16 +1,17 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { ToggleRight } from "@lucide/vue";
-import { api } from "@/api/client";
-import Button from "@/components/ui/Button.vue";
-import Spinner from "@/components/ui/Spinner.vue";
-import StatePanel from "@/components/ui/StatePanel.vue";
-import FormRenderer from "@/forms/FormRenderer.vue";
-import { featuresForm } from "@/forms/features.form";
-import type { FormValues } from "@/forms/types";
-import { useSettingsStore, type FeatureFlags } from "@/stores/settings";
+import Button from "../ui/Button.vue";
+import Spinner from "../ui/Spinner.vue";
+import StatePanel from "../ui/StatePanel.vue";
+import FormRenderer from "../forms/FormRenderer.vue";
+import { featuresForm } from "../forms/features.form";
+import type { FormValues } from "../forms/types";
+import { useSettings, useTransport } from "../provider/context";
+import type { FeatureFlags } from "../state/settings";
 
-const settings = useSettingsStore();
+const settings = useSettings();
+const transport = useTransport();
 
 const initial = ref<FormValues>({});
 const status = ref<"loading" | "ready" | "error">("loading");
@@ -20,7 +21,7 @@ const error = ref<string | null>(null);
 async function load(): Promise<void> {
   status.value = "loading";
   try {
-    const flags = await api.get<FeatureFlags>("/admin/settings");
+    const flags = await transport.get<FeatureFlags>("/admin/settings");
     initial.value = { ...flags };
     status.value = "ready";
   } catch {
@@ -33,7 +34,7 @@ async function onSubmit(values: FormValues): Promise<void> {
   saving.value = true;
   error.value = null;
   try {
-    await api.patch<void>("/admin/settings", values);
+    await transport.patch<void>("/admin/settings", values);
     // Refresh the app-wide flags so open surfaces (e.g. the bell's AI-summary band)
     // reflect the change immediately, without a page reload.
     await settings.load();

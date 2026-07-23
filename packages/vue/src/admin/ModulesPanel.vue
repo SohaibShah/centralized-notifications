@@ -3,16 +3,18 @@ import { computed, onMounted, ref } from "vue";
 import { Boxes } from "@lucide/vue";
 import type { NotificationPriority } from "@notifications/shared";
 import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
-import Button from "@/components/ui/Button.vue";
-import Chip from "@/components/ui/Chip.vue";
-import Spinner from "@/components/ui/Spinner.vue";
-import StatePanel from "@/components/ui/StatePanel.vue";
-import { priorityLabel } from "@/design/tokens";
-import { relativeTime } from "@/lib/time";
-import { fetchModules, patchModule, type AdminModule } from "./adminApi";
+import Button from "../ui/Button.vue";
+import Chip from "../ui/Chip.vue";
+import Spinner from "../ui/Spinner.vue";
+import StatePanel from "../ui/StatePanel.vue";
+import { priorityLabel } from "../design/tokens";
+import { relativeTime } from "../lib/time";
+import { useTransport } from "../provider/context";
+import { createAdminApi, type AdminModule } from "./adminApi";
 
 type Sort = "critical" | "total" | "recent" | "name";
 
+const admin = createAdminApi(useTransport());
 const modules = ref<AdminModule[]>([]);
 const status = ref<"loading" | "ready" | "error">("loading");
 const priorityFilter = ref<NotificationPriority | null>(null);
@@ -21,7 +23,7 @@ const sort = ref<Sort>("critical");
 async function load(): Promise<void> {
   status.value = "loading";
   try {
-    modules.value = await fetchModules();
+    modules.value = await admin.fetchModules();
     status.value = "ready";
   } catch {
     status.value = "error";
@@ -51,7 +53,7 @@ async function toggle(m: AdminModule): Promise<void> {
   const next = !m.enabled;
   m.enabled = next; // optimistic
   try {
-    await patchModule(m.key, { enabled: next });
+    await admin.patchModule(m.key, { enabled: next });
   } catch {
     m.enabled = !next; // revert
   }

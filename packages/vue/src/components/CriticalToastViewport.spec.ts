@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { nextTick } from "vue";
 import type { FeedNotification } from "@notifications/shared";
 import CriticalToastViewport from "./CriticalToastViewport.vue";
-import { feedItem } from "@/test-support/feedItem";
-import type { NotificationsContext } from "@/provider/context";
-import { buildTestContext, mountWithProvider } from "@/test/provider-harness";
+import { feedItem } from "../test-support/feedItem";
+import type { NotificationsContext } from "../provider/context";
+import { buildTestContext, mountWithProvider } from "../test/provider-harness";
 
 describe("CriticalToastViewport", () => {
   let fire: ((items: FeedNotification[]) => void) | null = null;

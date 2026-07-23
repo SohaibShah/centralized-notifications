@@ -1,17 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ApiError } from "@/api/client";
-import Button from "@/components/ui/Button.vue";
-import {
-  deleteAllNotifications,
-  deleteNotificationsOlderThan,
-  deleteReadNotifications,
-  getAdminSettings,
-  patchAdminSettings,
-  resetModules,
-  resetSettings,
-} from "./adminApi";
+import { ApiError } from "../transport/cookie-transport";
+import { useTransport } from "../provider/context";
+import Button from "../ui/Button.vue";
+import { createAdminApi } from "./adminApi";
 
+const admin = createAdminApi(useTransport());
 const busy = ref(false);
 const message = ref<string | null>(null);
 const error = ref<string | null>(null);
@@ -33,7 +27,7 @@ const retentionValid = computed(
 
 onMounted(async () => {
   try {
-    const s = await getAdminSettings();
+    const s = await admin.getAdminSettings();
     retentionDays.value = s.retentionDays;
     olderThanDays.value = s.retentionDays; // "delete older than N" defaults to the retention window
   } catch {
@@ -65,7 +59,7 @@ async function run(
 
 async function saveRetention(): Promise<void> {
   await run("Saved", async () => {
-    await patchAdminSettings({ retentionDays: Number(retentionDays.value) });
+    await admin.patchAdminSettings({ retentionDays: Number(retentionDays.value) });
     return { ok: true } as const;
   });
 }
@@ -93,7 +87,7 @@ async function saveRetention(): Promise<void> {
           size="sm"
           data-test="op-delete-read-confirm"
           :disabled="busy"
-          @click="run('Deleted', deleteReadNotifications)"
+          @click="run('Deleted', admin.deleteReadNotifications)"
           >Confirm</Button
         >
       </template>
@@ -127,7 +121,7 @@ async function saveRetention(): Promise<void> {
         size="sm"
         data-test="op-older-than"
         :disabled="busy || !olderThanValid"
-        @click="run('Deleted', () => deleteNotificationsOlderThan(Number(olderThanDays)))"
+        @click="run('Deleted', () => admin.deleteNotificationsOlderThan(Number(olderThanDays)))"
         >Delete</Button
       >
     </div>
@@ -145,7 +139,7 @@ async function saveRetention(): Promise<void> {
         size="sm"
         data-test="op-reset-modules"
         :disabled="busy"
-        @click="run('Reset', resetModules)"
+        @click="run('Reset', admin.resetModules)"
         >Reset modules</Button
       >
       <Button
@@ -153,7 +147,7 @@ async function saveRetention(): Promise<void> {
         size="sm"
         data-test="op-reset-settings"
         :disabled="busy"
-        @click="run('Reset', resetSettings)"
+        @click="run('Reset', admin.resetSettings)"
         >Reset settings</Button
       >
     </div>
@@ -185,7 +179,7 @@ async function saveRetention(): Promise<void> {
             size="sm"
             data-test="op-delete-all-confirm"
             :disabled="busy || deleteAllText !== 'DELETE'"
-            @click="run('Deleted', deleteAllNotifications)"
+            @click="run('Deleted', admin.deleteAllNotifications)"
             >Confirm delete</Button
           >
         </div>

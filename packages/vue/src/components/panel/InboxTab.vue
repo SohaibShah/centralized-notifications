@@ -2,15 +2,15 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { ChevronDown, Inbox, SearchX, Sparkles, WifiOff } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
-import Button from "@/ui/Button.vue";
-import Chip from "@/ui/Chip.vue";
-import Icon from "@/ui/Icon.vue";
-import Skeleton from "@/ui/Skeleton.vue";
-import StatePanel from "@/ui/StatePanel.vue";
-import { useFeed } from "@/provider/context";
-import { useSettings } from "@/provider/context";
-import { useSummary } from "@/provider/context";
-import { useActions } from "@/provider/context";
+import Button from "../../ui/Button.vue";
+import Chip from "../../ui/Chip.vue";
+import Icon from "../../ui/Icon.vue";
+import Skeleton from "../../ui/Skeleton.vue";
+import StatePanel from "../../ui/StatePanel.vue";
+import { useFeed } from "../../provider/context";
+import { useSettings } from "../../provider/context";
+import { useSummary } from "../../provider/context";
+import { useActions } from "../../provider/context";
 import FeedList from "../components/FeedList.vue";
 
 const feed = useFeed();

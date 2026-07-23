@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import type { FeedGroup } from "@/state/feed";
+import type { FeedGroup } from "../../state/feed";
 import FeedList from "./FeedList.vue";
-import { feedItem } from "@/test-support/feedItem";
+import { feedItem } from "../../test-support/feedItem";
 
 const groups: FeedGroup[] = [
   {

@@ -2,9 +2,9 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { Check } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
-import Icon from "@/ui/Icon.vue";
-import Spinner from "@/ui/Spinner.vue";
-import type { FeedGroup } from "@/state/feed";
+import Icon from "../../ui/Icon.vue";
+import Spinner from "../../ui/Spinner.vue";
+import type { FeedGroup } from "../../state/feed";
 import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue";
 
 const props = defineProps<{

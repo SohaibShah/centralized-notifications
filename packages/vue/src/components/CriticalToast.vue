@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { X } from "@lucide/vue";
-import Icon from "@/ui/Icon.vue";
-import { AUTO_DISMISS_MS, type ToastItem } from "@/state/toast";
-import { priorityDotClass } from "@/design/tokens";
-import { useToast } from "@/provider/context";
+import Icon from "../ui/Icon.vue";
+import { AUTO_DISMISS_MS, type ToastItem } from "../state/toast";
+import { priorityDotClass } from "../design/tokens";
+import { useToast } from "../provider/context";
 
 const props = defineProps<{ toast: ToastItem }>();
 const emit = defineEmits<{ dismiss: []; view: [] }>();
