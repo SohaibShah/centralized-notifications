@@ -4,6 +4,7 @@ import { SendHorizontal, Sparkles } from "@lucide/vue";
 import Icon from "@/components/ui/Icon.vue";
 import { useChatStore } from "@/stores/chat";
 import { useSettingsStore } from "@/stores/settings";
+import CitationChip from "./CitationChip.vue";
 
 // Real streaming Q/A over the user's notifications. The thread + streaming live in the chat store;
 // this component owns only the draft input. Gated on the chatbotEnabled flag (the server enforces
@@ -17,6 +18,19 @@ function onSubmit(): void {
   if (!q || chat.status === "streaming") return;
   void chat.send(q);
   draft.value = "";
+}
+
+// Split an answer into literal text and [n#] citation tokens; a token becomes a chip only when the
+// turn actually carries that source (unknown refs stay as plain text).
+function segments(text: string): { kind: "text" | "ref"; value: string }[] {
+  return text
+    .split(/(\[n\d+\])/)
+    .filter((s) => s !== "")
+    .map((s) =>
+      /^\[n\d+\]$/.test(s)
+        ? { kind: "ref" as const, value: s.slice(1, -1) }
+        : { kind: "text" as const, value: s },
+    );
 }
 </script>
 
@@ -53,8 +67,15 @@ function onSubmit(): void {
             :size="13"
             class="mb-0.5 inline text-ai-2"
           />
-          {{ m.text
-          }}<span
+          <template v-for="(seg, si) in segments(m.text)" :key="si">
+            <CitationChip
+              v-if="seg.kind === 'ref' && m.sources[seg.value]"
+              :source="m.sources[seg.value]!"
+            />
+            <template v-else-if="seg.kind === 'ref'">[{{ seg.value }}]</template>
+            <template v-else>{{ seg.value }}</template>
+          </template>
+          <span
             v-if="m.from === 'ai' && m.text === '' && chat.status === 'streaming'"
             class="text-faint"
             >…</span
