@@ -5,6 +5,7 @@ import {
   AiNotConfiguredError,
   AiProviderError,
   AiRateLimitError,
+  type AnswerChunk,
   type NotificationService,
 } from "@notifications/core";
 
@@ -42,7 +43,7 @@ export function notificationChatRoute(
     });
     const iter = stream[Symbol.asyncIterator]();
 
-    let step: IteratorResult<string>;
+    let step: IteratorResult<AnswerChunk>;
     try {
       step = await iter.next();
     } catch (err) {
@@ -74,7 +75,12 @@ export function notificationChatRoute(
     };
     try {
       while (!step.done) {
-        write(`data: ${JSON.stringify({ delta: step.value })}\n\n`);
+        const chunk = step.value;
+        if (chunk.type === "sources") {
+          write(`event: sources\ndata: ${JSON.stringify(chunk.sources)}\n\n`);
+        } else {
+          write(`data: ${JSON.stringify({ delta: chunk.text })}\n\n`);
+        }
         step = await iter.next();
       }
       write(`data: ${JSON.stringify({ done: true })}\n\n`);

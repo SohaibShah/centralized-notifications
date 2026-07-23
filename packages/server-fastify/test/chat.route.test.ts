@@ -63,6 +63,20 @@ async function seed(svc: NotificationService, userScope: string, id: string, tit
   await svc.ingest(n);
 }
 
+async function seedWithAction(svc: NotificationService, userScope: string, id: string, title = id) {
+  const n: Notification = {
+    id,
+    module: "dsr",
+    title,
+    description: "",
+    priority: "high",
+    snoozable: false,
+    audience: { scope: "user", id: userScope },
+    actions: [{ label: "Open", kind: "link", method: "GET", url: "https://x/1" }],
+  };
+  await svc.ingest(n);
+}
+
 /** Read the whole SSE body of a chat response. */
 async function readAll(res: Response): Promise<string> {
   const reader = res.body!.getReader();
@@ -86,8 +100,8 @@ afterAll(async () => {
   await pool.end();
 });
 
-test("200 streams SSE deltas assembling the answer + a done frame", async () => {
-  await seed(ok.svc, `croute-${stamp}`, `croute-a-${stamp}`);
+test("200 streams a sources frame, then SSE deltas assembling the answer + a done frame", async () => {
+  await seedWithAction(ok.svc, `croute-${stamp}`, `croute-a-${stamp}`, "Croute note");
   const res = await fetch(`${ok.baseUrl}/notifications/chat`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-test-user": `croute-${stamp}` },
@@ -96,8 +110,26 @@ test("200 streams SSE deltas assembling the answer + a done frame", async () => 
   expect(res.status).toBe(200);
   expect(res.headers.get("content-type")).toContain("text/event-stream");
   const body = await readAll(res);
-  const deltas = [...body.matchAll(/data: (\{.*\})/g)]
-    .map((m) => JSON.parse(m[1]!) as { delta?: string; done?: boolean })
+
+  // The sources frame precedes the deltas.
+  const sourcesIdx = body.indexOf("event: sources");
+  const firstDeltaIdx = body.indexOf('data: {"delta"');
+  expect(sourcesIdx).toBeGreaterThanOrEqual(0);
+  expect(firstDeltaIdx).toBeGreaterThan(sourcesIdx);
+
+  // The sources frame carries the seeded notification's real actions.
+  const sourcesLine = body
+    .slice(sourcesIdx)
+    .split("\n")
+    .find((l) => l.startsWith("data:"))!;
+  const sources = JSON.parse(sourcesLine.slice(5).trim()) as {
+    title: string;
+    actions: unknown[];
+  }[];
+  expect(sources.some((s) => s.actions.length > 0)).toBe(true);
+
+  const deltas = [...body.matchAll(/data: (\{"delta.*\})/g)]
+    .map((m) => JSON.parse(m[1]!) as { delta?: string })
     .filter((f) => typeof f.delta === "string")
     .map((f) => f.delta)
     .join("");
