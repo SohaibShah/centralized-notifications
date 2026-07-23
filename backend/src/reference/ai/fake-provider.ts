@@ -9,7 +9,7 @@ export function createFakeProvider(): AiProvider {
     completeStream: async function* () {
       for (const chunk of [
         "Based on your notifications, ",
-        "the top item is a critical DSR SLA breach. ",
+        "the most urgent item is the DSR SLA breach [n1]. ",
         "Start there.",
       ]) {
         yield chunk;

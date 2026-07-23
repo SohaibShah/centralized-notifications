@@ -13,11 +13,12 @@ describe("createFakeProvider", () => {
     expect(out.length).toBeGreaterThan(0);
   });
 
-  it("streams a canned answer in chunks", async () => {
+  it("streams a canned answer in chunks that cites [n1]", async () => {
     const out: string[] = [];
     for await (const d of createFakeProvider().completeStream!([])) out.push(d);
     expect(out.length).toBeGreaterThan(1);
     expect(out.join("")).toMatch(/notification/i);
+    expect(out.join("")).toContain("[n1]"); // exercises the citation-chip path offline
   });
 });
 
