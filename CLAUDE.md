@@ -3,12 +3,14 @@
 One-line description: [fill in — what does this app do, who uses it]
 
 ## Stack
+
 - Frontend: Vue 3 + TypeScript, Composition API with `<script setup>`, Vite, Pinia, Vue Router
 - Backend: Node.js + TypeScript (pick Express or Fastify and stay consistent — don't mix)
 - Data: PostgreSQL (system of record), Redis Streams (events/queues between services)
 - Monorepo: pnpm workspaces — `frontend/`, `backend/`, `packages/shared/`
 
 ## Non-negotiable conventions
+
 - **Forms are JSON-driven.** Never hand-roll a one-off form component. Every form is described
   by a JSON config and rendered by the shared `<FormRenderer>`. Read the `json-form-conventions`
   skill before building or touching any form.
@@ -21,6 +23,7 @@ One-line description: [fill in — what does this app do, who uses it]
   Never commit `.env`. Flag any hardcoded credential, token, or connection string immediately.
 
 ## Coding standards
+
 - TypeScript strict mode everywhere. `any` requires an inline comment explaining why.
 - `pnpm lint` and `pnpm typecheck` must be clean before a change is "done."
 - Tests: Vitest for units, Playwright for e2e. New business logic needs a test alongside it.
@@ -29,6 +32,7 @@ One-line description: [fill in — what does this app do, who uses it]
   second way to do something the codebase already does one way, stop and reuse the existing way.
 
 ## Workflow
+
 - Use **plan mode** for anything touching more than 2–3 files, the DB schema, auth, or payments.
   Present the plan and wait for approval before editing.
 - Push exploration and verbose output into subagents instead of the main conversation — see
@@ -51,6 +55,7 @@ One-line description: [fill in — what does this app do, who uses it]
   it doesn't catch "this isn't what the team actually needs."
 
 ## Project layout
+
 - `frontend/` — Vue 3 app
 - `backend/` — API + Redis Stream consumers/workers
 - `packages/shared/` — shared TypeScript types and zod schemas
@@ -60,10 +65,16 @@ One-line description: [fill in — what does this app do, who uses it]
   gets the same setup)
 
 ## Build & run
+
 Keep this section accurate as scripts change.
+
 - `pnpm install` — install all workspace dependencies (`frontend/`, `backend/`, `packages/shared/`)
 - `docker compose up -d` — Postgres (and Redis, used from week 5) for local dev
 - `pnpm dev` — runs frontend + backend together in watch mode
 - `pnpm lint` / `pnpm typecheck` — must be clean before a change is "done"
 - `pnpm test` — Vitest unit tests across all packages
 - `pnpm test:e2e` — Playwright e2e (wired with the first user-facing flow, Week 1 Task 7)
+- AI summary (optional, for the live model): install Ollama (`brew install ollama`, started via
+  `brew services start ollama`) and `ollama pull qwen2.5:7b`. Without it the app + all tests still
+  run — the summary just shows a graceful "is the local model running?" state, and the suites use a
+  fake provider (`AI_PROVIDER=fake`). `pnpm dev` uses the real model by default.

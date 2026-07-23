@@ -9,10 +9,18 @@ export {
   type NotificationService,
 } from "./service";
 export type { IngestResult, IngestStatus } from "./pipeline/boundary";
+export {
+  AiDisabledError,
+  AiNotConfiguredError,
+  AiRateLimitError,
+  AiProviderError,
+} from "./ai/errors";
 export type {
   Principal,
   ModuleCatalogEntry,
   ModulePolicyView,
   Settings,
   NotificationServiceConfig,
+  AiMessage,
+  AiProvider,
 } from "./types";

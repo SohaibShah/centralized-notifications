@@ -37,8 +37,10 @@ export default defineConfig({
   // (Postgres) is already running; migrate + seed are idempotent, then `pnpm dev` serves
   // both apps. Reuses an already-running dev server locally.
   webServer: {
+    // AI_PROVIDER=fake keeps the AI-summary e2e deterministic and offline (no dependency on a running
+    // Ollama + a downloaded model). The real model is verified manually via `pnpm dev`.
     command:
-      "pnpm --filter @notifications/backend migrate && pnpm --filter @notifications/backend seed && pnpm dev",
+      "pnpm --filter @notifications/backend migrate && pnpm --filter @notifications/backend seed && AI_PROVIDER=fake pnpm dev",
     cwd: repoRoot,
     url: "http://localhost:5173",
     reuseExistingServer: !process.env.CI,

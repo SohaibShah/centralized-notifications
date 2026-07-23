@@ -26,6 +26,14 @@ describe("loadEnv", () => {
     expect(() => loadEnv({ ...base, SESSION_SECRET: "too-short" })).toThrow();
   });
 
+  it("defaults the AI provider config and accepts AI_PROVIDER=fake", () => {
+    const env = loadEnv({ ...base });
+    expect(env.AI_PROVIDER).toBe("real");
+    expect(env.AI_BASE_URL).toBe("http://localhost:11434/v1");
+    expect(env.AI_MODEL).toBe("qwen2.5:7b");
+    expect(loadEnv({ ...base, AI_PROVIDER: "fake" }).AI_PROVIDER).toBe("fake");
+  });
+
   it("throws when INTERNAL_INTAKE_TOKEN is missing or too short", () => {
     const { INTERNAL_INTAKE_TOKEN: _omit, ...withoutToken } = base;
     expect(() => loadEnv(withoutToken)).toThrow(/INTERNAL_INTAKE_TOKEN/);

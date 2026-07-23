@@ -21,6 +21,13 @@ const envSchema = z.object({
   // Not a product limit — stress testing is a goal — just a guard so one request can't loop
   // unbounded and hang. Only consulted when the (non-prod) simulate route is registered.
   SIMULATE_MAX_BURST: z.coerce.number().int().positive().default(10000),
+  // AI summarizer provider. Real Ollama by default; `fake` selects the deterministic test-lane
+  // provider. No secret is required for local Ollama; AI_API_KEY is only for a cloud/scaled
+  // endpoint and is never logged or returned to the browser.
+  AI_PROVIDER: z.enum(["real", "fake"]).default("real"),
+  AI_BASE_URL: z.string().url().default("http://localhost:11434/v1"),
+  AI_MODEL: z.string().min(1).default("qwen2.5:7b"),
+  AI_API_KEY: z.string().min(1).optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

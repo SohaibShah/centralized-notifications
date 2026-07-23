@@ -354,6 +354,64 @@ Zero or more inserts into `notification_reads` — one per id in the batch that 
 to an existing notification **within the caller's [audience](#audience-scoping)** (keyed by
 the authenticated user). No events published.
 
+## GET /notifications/summary
+
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
+
+Returns a short **AI triage digest** of the caller's own **unread** notifications — a couple of sentences telling the user what needs attention, rather than another list. It reads the same set the [counts](#get-notificationscounts) do (audience-scoped, unread, non-suppressed), takes the **top 25 critical-first** (`ORDER BY priority_rank ASC, created_at ASC` — highest priority first, oldest first within a priority), and hands their titles/descriptions to a **host-injected `AiProvider`** to summarize. In the reference app that provider is a local Ollama model behind an OpenAI-compatible adapter (see [`AiProvider`](../../packages/core/src/types.ts) and `NotificationServiceConfig.ai`); the library owns the prompt, the host owns the model transport. Read-only from the caller's perspective — it never changes read state.
+
+**Empty unread set is short-circuited.** If the caller has nothing unread, the endpoint returns `{ "summary": "You're all caught up.", "basedOn": 0 }` **without calling the model at all** — no provider round-trip, no rate-limit charge.
+
+Source of truth: [`packages/server-fastify/src/routes/summary.ts`](../../packages/server-fastify/src/routes/summary.ts) (the route + status mapping), [`packages/core/src/ai/summarize.ts`](../../packages/core/src/ai/summarize.ts) (`SummaryEngine.summarize` — gating, cache, rate limit, provider call), and [`packages/core/src/ai/errors.ts`](../../packages/core/src/ai/errors.ts) (the error → status contract).
+
+> **Gated by a feature flag.** The digest is only available when the `aiSummaryEnabled` [setting](../../packages/core/src/types.ts) is on (see the [Admin API](./admin.md) feature flags). With it off the endpoint returns `404`, so a disabled feature is indistinguishable from a route that doesn't exist.
+
+### Request
+
+No parameters. The endpoint always summarizes the caller's full audience-scoped unread set (capped at 25); there are no query params, filters, or body.
+
+### Response `200`
+
+```json
+{
+  "summary": "2 critical items need attention: a DSR is 3 days from SLA breach and an access request is awaiting your approval. The rest can wait.",
+  "basedOn": 2
+}
+```
+
+| Field     | Type   | Notes                                                                                                                                                                                        |
+| --------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `summary` | string | The model-produced (trimmed) triage text, or the fixed `"You're all caught up."` when nothing is unread. A provider that returns empty content is treated as a `502`, never a blank summary. |
+| `basedOn` | number | How many unread notifications informed the summary — the size of the (capped, ≤ 25) set fed to the model. `0` for the caught-up case.                                                        |
+
+### Caching & cost
+
+The server caches the last summary **per user**, keyed by a **signature of the unread set** (a SHA-256 of the total-unread count plus the ordered ids of the top-25). A repeat request whose unread set hasn't changed returns the cached summary **without re-invoking the model** — so re-opening the panel is free, and only a real change to the unread set (a new notification, or one marked read) triggers a fresh model call. The signature includes the total unread count, so a change _outside_ the top-25 window still invalidates the cache. The cache is single-instance, in-process (like the policy cache), not shared across replicas.
+
+The frontend fetches this endpoint **lazily** — only on first expand of the AI-summary disclosure, not on every feed load — so a user who never opens it never triggers a model call.
+
+### Rate limit
+
+Provider calls are rate-limited **per recipient** to **6 per minute** (a sliding 60-second window). Exceeding it returns `429`. Cache hits and the empty-set short-circuit don't count against the limit — only calls that actually reach the model do.
+
+### PII
+
+To produce the summary, the caller's unread notification **titles and descriptions** (descriptions truncated to 280 chars) are sent to the configured AI provider. In the reference app that provider is local (Ollama), but a host is free to inject a cloud model — so treat the summary context as leaving the process boundary. Per the [notifications domain rules](../../.claude/rules/notifications-domain.md), the engine **never logs the prompt context or the model output**; neither the notification bodies fed in nor the generated summary appears in logs.
+
+### Errors
+
+| Status | Body                                     | Reason                                                                                                                   |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie / the host `auth` adapter resolved no `Principal`.                                               |
+| `404`  | `{ "error": "ai summary disabled" }`     | The `aiSummaryEnabled` feature flag is off — the feature is turned off for everyone (`AiDisabledError`).                 |
+| `429`  | `{ "error": "rate limited" }`            | The per-recipient rate limit (6 model calls/min) was exceeded (`AiRateLimitError`).                                      |
+| `501`  | `{ "error": "ai not configured" }`       | No `AiProvider` was injected by the host — the feature is enabled but no model is wired (`AiNotConfiguredError`).        |
+| `502`  | `{ "error": "summary unavailable" }`     | The injected provider failed — timeout, non-2xx, or empty completion (e.g. the local model is down) (`AiProviderError`). |
+
+### Side effects
+
+None on the caller's data — read-only (no read-state or notification writes, no events published). The only state touched is the in-process per-user summary cache and rate-limit window, and — on a cache miss for a non-empty set — one call to the injected `AiProvider`.
+
 ## Design decisions
 
 These are baked into the contract deliberately (contract checkpoint, see

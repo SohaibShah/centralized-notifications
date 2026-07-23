@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { ChevronDown, Inbox, SearchX, Sparkles, WifiOff } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Button from "@/components/ui/Button.vue";
@@ -9,10 +9,12 @@ import Skeleton from "@/components/ui/Skeleton.vue";
 import StatePanel from "@/components/ui/StatePanel.vue";
 import { useFeedStore } from "@/stores/feed";
 import { useSettingsStore } from "@/stores/settings";
+import { useSummaryStore } from "@/stores/summary";
 import FeedList from "../components/FeedList.vue";
 
 const feed = useFeedStore();
 const settings = useSettingsStore();
+const summary = useSummaryStore();
 const aiOpen = ref(false);
 
 // One-shot "bloom" on the AI summary glow on each click. Bumping the counter re-keys the glow
@@ -23,7 +25,23 @@ const bloomCount = ref(0);
 function toggleSummary(): void {
   aiOpen.value = !aiOpen.value;
   bloomCount.value++;
+  // Refetch fresh on every open so the digest reflects the CURRENT unread set (the server's
+  // signature cache returns instantly when nothing changed, so this is cheap).
+  if (aiOpen.value) void summary.fetchSummary(true);
 }
+
+// While the disclosure is open, keep it fresh as the unread set changes (new arrivals, reads).
+// Debounced so a burst of changes collapses into one refresh and can't spam the model.
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => feed.counts.unread,
+  () => {
+    if (!aiOpen.value) return;
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => void summary.fetchSummary(true), 1000);
+  },
+);
+onUnmounted(() => clearTimeout(refreshTimer));
 
 // Empty vs filtered-empty are different states with different remedies.
 const isEmpty = computed(() => feed.status === "ready" && feed.items.length === 0);
@@ -74,10 +92,6 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
           class="font-mono text-[11px] font-semibold uppercase tracking-wide text-ai"
           >AI summary</span
         >
-        <span
-          class="ml-1 rounded-full bg-sunken px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wide text-faint"
-          >Sample</span
-        >
         <Icon
           :icon="ChevronDown"
           :size="14"
@@ -85,14 +99,36 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
           :class="{ 'rotate-180': aiOpen }"
         />
       </button>
-      <p
+      <div
         v-if="aiOpen"
         id="ai-summary-detail"
         class="relative z-10 px-3 pb-2.5 text-[12px] leading-relaxed text-muted"
       >
-        2 need action today — an overdue DSAR and a new tracker finding. 4 lower-priority updates
-        since yesterday.
-      </p>
+        <div
+          v-if="summary.status === 'loading'"
+          data-test="ai-summary-loading"
+          class="flex items-center gap-1.5 text-ai motion-safe:animate-pulse"
+        >
+          <Icon :icon="Sparkles" :size="13" />
+          <span class="font-medium">Summarizing your inbox…</span>
+        </div>
+        <p v-else-if="summary.status === 'ready'" data-test="ai-summary-text">{{ summary.text }}</p>
+        <p
+          v-else-if="summary.status === 'error'"
+          data-test="ai-summary-error"
+          class="text-danger-ink"
+        >
+          Couldn't generate a summary — is the local model running?
+          <button
+            type="button"
+            data-test="ai-summary-retry"
+            class="underline"
+            @click="summary.fetchSummary(true)"
+          >
+            Retry
+          </button>
+        </p>
+      </div>
     </div>
 
     <div class="flex shrink-0 items-center gap-1.5 px-3 pb-2 pt-3">

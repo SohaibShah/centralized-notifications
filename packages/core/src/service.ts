@@ -8,6 +8,7 @@ import { PolicyStore } from "./policy/store";
 import { counts } from "./read/counts";
 import { list } from "./read/feed";
 import { markRead, markReadBulk, markUnread } from "./read/read-state";
+import { SummaryEngine } from "./ai/summarize";
 import type { ModulePolicyView, NotificationServiceConfig, Principal, Settings } from "./types";
 
 /** `list` was given a cursor that doesn't decode or was issued for a different sort. */
@@ -48,6 +49,10 @@ export interface NotificationService {
   getSettings(): Promise<Settings>;
   updateSettings(patch: Partial<Settings>): Promise<void>;
 
+  /** AI triage digest of the caller's audience-scoped unread set. Throws AiDisabledError (feature
+   *  off), AiNotConfiguredError (no provider), AiRateLimitError, or AiProviderError. */
+  summarize(args: { principal: Principal }): Promise<{ summary: string; basedOn: number }>;
+
   /** In-process delivery hub — the SSE transport subscribes here with a principal. */
   readonly delivery: DeliveryHub;
   /** Role that gates admin operations (module toggle, settings). */
@@ -68,6 +73,11 @@ export function createNotificationService(opts: {
   const policy = new PolicyStore({ query, catalog: opts.config.modules });
   const deps = { query, hub, policy };
   const adminRole = opts.config.adminRole ?? "admin";
+  const summaryEngine = new SummaryEngine({
+    query,
+    getSettings: () => policy.getSettings(),
+    provider: opts.config.ai?.provider,
+  });
 
   return {
     delivery: hub,
@@ -90,5 +100,6 @@ export function createNotificationService(opts: {
     setModuleEnabled: (id, enabled) => policy.setModuleEnabled(id, enabled),
     getSettings: () => policy.getSettings(),
     updateSettings: (patch) => policy.updateSettings(patch),
+    summarize: (args) => summaryEngine.summarize(args.principal),
   };
 }

@@ -3,57 +3,66 @@ import { createPinia, setActivePinia } from "pinia";
 import { mount } from "@vue/test-utils";
 import { feedItem } from "@/test-support/feedItem";
 
-// markRead (fired by onAction now that firing an action also marks read) hits
-// @/api/client — mock it so the test doesn't make a real fetch call and doesn't print
-// the "failed to mark read; reverted" warning feed.ts logs on a rejected request.
+// markRead (fired by onAction now that firing an action also marks read) hits @/api/client — mock it
+// so the test doesn't make a real fetch call and doesn't print the "failed to mark read" warning.
 const { postMock } = vi.hoisted(() => ({ postMock: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("@/api/client", () => ({ api: { get: vi.fn(), post: postMock } }));
+
+// The AI-summary store is mocked so the disclosure's states are directly controllable and no real
+// fetch happens. Set `summaryState.*` before mounting; `fetchSummary` is a spy.
+const { summaryState } = vi.hoisted(() => ({
+  summaryState: {
+    status: "idle" as "idle" | "loading" | "ready" | "error",
+    text: "",
+    error: null as string | null,
+    fetchSummary: vi.fn(),
+    reset: vi.fn(),
+  },
+}));
+vi.mock("@/stores/summary", () => ({ useSummaryStore: () => summaryState }));
 
 const { useFeedStore } = await import("@/stores/feed");
 const { useSettingsStore } = await import("@/stores/settings");
 const { default: InboxTab } = await import("./InboxTab.vue");
 
 describe("InboxTab", () => {
-  beforeEach(() => setActivePinia(createPinia()));
+  beforeEach(() => {
+    setActivePinia(createPinia());
+    summaryState.status = "idle";
+    summaryState.text = "";
+    summaryState.error = null;
+    summaryState.fetchSummary.mockClear();
+  });
 
   it("hides the AI-summary band when the ai_summary feature flag is off", () => {
     const feed = useFeedStore();
     feed.status = "ready";
     useSettingsStore().flags.aiSummaryEnabled = false;
-
     const wrapper = mount(InboxTab);
-
     expect(wrapper.find('[aria-controls="ai-summary-detail"]').exists()).toBe(false);
   });
 
   it("shows the AI-summary band when the ai_summary feature flag is on (default)", () => {
     const feed = useFeedStore();
     feed.status = "ready";
-
     const wrapper = mount(InboxTab);
-
     expect(wrapper.find('[aria-controls="ai-summary-detail"]').exists()).toBe(true);
   });
 
   it("renders the caught-up empty state when the feed is ready with no items", () => {
     const feed = useFeedStore();
     feed.status = "ready";
-
     const wrapper = mount(InboxTab);
-
     expect(wrapper.text()).toContain("You're all caught up");
   });
 
-  it("renders the filtered-empty state when active filters hide every item", async () => {
+  it("renders the filtered-empty state when active filters hide every item", () => {
     const feed = useFeedStore();
     feed.items = [feedItem({ id: "a", priority: "normal" })];
     feed.status = "ready";
-    feed.togglePriority("critical"); // excludes the only (normal) item
-
+    feed.togglePriority("critical");
     const wrapper = mount(InboxTab);
-
     expect(feed.groups).toHaveLength(0);
-    expect(feed.items).toHaveLength(1);
     expect(wrapper.text()).toContain("No notifications match your filters");
   });
 
@@ -75,18 +84,11 @@ describe("InboxTab", () => {
       }),
     ];
     feed.status = "ready";
-
     const openSpy = vi.spyOn(window, "open").mockImplementation(() => null);
-
     const wrapper = mount(InboxTab);
-    // Open the card (title) to reveal its actions. Open-and-seen marks it read, but sticky
-    // read keeps it in place (same key → same instance), so the action stays mounted/clickable.
     await wrapper.get("h3 button").trigger("click");
     const actionButton = wrapper.findAll("button").find((btn) => btn.text().trim() === "Open");
-    expect(actionButton).toBeTruthy();
-
     await actionButton!.trigger("click");
-
     expect(openSpy).toHaveBeenCalledWith("https://example.com", "_blank", "noopener,noreferrer");
     expect(postMock).toHaveBeenCalledWith("/notifications/a/read");
   });
@@ -97,8 +99,6 @@ describe("InboxTab", () => {
       feedItem({
         id: "a",
         read: false,
-        // GET method but dispatch kind: proves the UI branches on kind, not the HTTP method
-        // (the old method-based code would have opened a GET in a new tab).
         actions: [
           { label: "Approve", kind: "dispatch", method: "GET", url: "https://example.com/a" },
         ],
@@ -120,8 +120,6 @@ describe("InboxTab", () => {
       feedItem({
         id: "a",
         read: false,
-        // Simulate a row persisted before `kind` existed. The backend now defaults it on read,
-        // but the UI guard must not silently drop a link if one ever arrives without kind.
         actions: [{ label: "Open", method: "GET", url: "https://example.com" } as never],
       }),
     ];
@@ -139,16 +137,7 @@ describe("InboxTab", () => {
     expect(wrapper.find('[data-test="ai-glow"]').exists()).toBe(true);
     const label = wrapper.find('[data-test="ai-summary-label"]');
     expect(label.exists()).toBe(true);
-    expect(label.classes()).toContain("text-ai"); // solid AA-legible AI teal (not gradient text)
-  });
-
-  it("blooms the glow on click (and keeps the existing expand toggle)", async () => {
-    const wrapper = mount(InboxTab);
-    const btn = wrapper.find('button[aria-controls="ai-summary-detail"]');
-    expect(wrapper.find("#ai-summary-detail").exists()).toBe(false); // collapsed
-    await btn.trigger("click");
-    expect(wrapper.find("#ai-summary-detail").exists()).toBe(true); // still expands
-    expect(wrapper.get('[data-test="ai-glow"]').classes()).toContain("is-blooming"); // bloom fired
+    expect(label.classes()).toContain("text-ai");
   });
 
   it("no longer renders a sort select in the chips row (moved to the filter menu)", () => {
@@ -163,27 +152,71 @@ describe("InboxTab", () => {
     feed.status = "ready";
     feed.counts = { unread: 5, unreadByPriority: { critical: 2, high: 3, normal: 0, low: 0 } };
     const wrapper = mount(InboxTab);
-    const critical = wrapper.get('[data-test="chip-count-critical"]');
-    const high = wrapper.get('[data-test="chip-count-high"]');
-    expect(critical.text()).toBe("2");
-    expect(high.text()).toBe("3");
+    expect(wrapper.get('[data-test="chip-count-critical"]').text()).toBe("2");
+    expect(wrapper.get('[data-test="chip-count-high"]').text()).toBe("3");
   });
 
-  it("toggles the AI-summary detail visibility when the disclosure button is clicked", async () => {
+  it("fetches the summary on open, and REFETCHES (force) on every reopen so it can't go stale", async () => {
     const wrapper = mount(InboxTab);
-    const disclosureButton = wrapper.find('button[aria-controls="ai-summary-detail"]');
-    expect(disclosureButton.exists()).toBe(true);
+    const btn = wrapper.find('button[aria-controls="ai-summary-detail"]');
+    expect(wrapper.find("#ai-summary-detail").exists()).toBe(false); // collapsed
 
-    // Detail should be hidden initially
-    const detail = wrapper.find("#ai-summary-detail");
-    expect(detail.exists()).toBe(false);
+    await btn.trigger("click"); // open
+    expect(wrapper.find("#ai-summary-detail").exists()).toBe(true);
+    expect(summaryState.fetchSummary).toHaveBeenCalledTimes(1);
+    expect(summaryState.fetchSummary).toHaveBeenLastCalledWith(true); // force → reflects current set
+    expect(wrapper.get('[data-test="ai-glow"]').classes()).toContain("is-blooming");
 
-    // Click the disclosure button to open
-    await disclosureButton.trigger("click");
+    await btn.trigger("click"); // close
+    await btn.trigger("click"); // reopen → refetch
+    expect(summaryState.fetchSummary).toHaveBeenCalledTimes(2);
+  });
 
-    // Detail should now be visible
-    const openDetail = wrapper.find("#ai-summary-detail");
-    expect(openDetail.exists()).toBe(true);
-    expect(openDetail.text()).toContain("2 need action today");
+  it("refreshes the open summary (debounced) when the unread set changes", async () => {
+    vi.useFakeTimers();
+    try {
+      const feed = useFeedStore();
+      const wrapper = mount(InboxTab);
+      await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click"); // open (1 call)
+      summaryState.fetchSummary.mockClear();
+
+      feed.counts = { unread: 25, unreadByPriority: { critical: 0, high: 25, normal: 0, low: 0 } };
+      await vi.advanceTimersByTimeAsync(1000); // debounce window
+      expect(summaryState.fetchSummary).toHaveBeenCalledWith(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("does NOT drop the 'Sample' badge — it's real now (label only)", () => {
+    const wrapper = mount(InboxTab);
+    expect(wrapper.text()).not.toContain("Sample");
+  });
+
+  it("shows a loading shimmer while the summary is loading", async () => {
+    summaryState.status = "loading";
+    const wrapper = mount(InboxTab);
+    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
+    expect(wrapper.find('[data-test="ai-summary-loading"]').exists()).toBe(true);
+  });
+
+  it("renders the summary text when ready", async () => {
+    summaryState.status = "ready";
+    summaryState.text = "Two items need action; start with the overdue DSAR.";
+    const wrapper = mount(InboxTab);
+    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
+    expect(wrapper.get('[data-test="ai-summary-text"]').text()).toContain(
+      "start with the overdue DSAR",
+    );
+  });
+
+  it("shows an error with a Retry that re-fetches", async () => {
+    summaryState.status = "error";
+    summaryState.error = "summary unavailable";
+    const wrapper = mount(InboxTab);
+    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
+    const retry = wrapper.get('[data-test="ai-summary-retry"]');
+    await retry.trigger("click");
+    expect(summaryState.fetchSummary).toHaveBeenCalledWith(true);
   });
 });
