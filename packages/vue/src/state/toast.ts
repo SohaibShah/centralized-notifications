@@ -1,5 +1,4 @@
 import { computed, ref } from "vue";
-import { defineStore } from "pinia";
 
 export interface ToastItem {
   id: string;
@@ -16,7 +15,7 @@ export const MAX_VISIBLE = 3;
  * auto-dismiss timer (pausable on hover/focus). An id is toasted at most once ever (a
  * duplicate SSE delivery, or re-push, is ignored) so a retry can't re-alert.
  */
-export const useToastStore = defineStore("toast", () => {
+export function createToastState() {
   const queue = ref<ToastItem[]>([]);
   const seen = new Set<string>();
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -68,4 +67,6 @@ export const useToastStore = defineStore("toast", () => {
   }
 
   return { visible, overflowCount, pushCritical, dismiss, pause, resume, reset };
-});
+}
+
+export type ToastState = ReturnType<typeof createToastState>;

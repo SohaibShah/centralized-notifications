@@ -1,6 +1,5 @@
 import { reactive, ref } from "vue";
-import { defineStore } from "pinia";
-import { api } from "@/api/client";
+import type { Transport } from "../transport/types";
 
 export interface FeatureFlags {
   aiSummaryEnabled: boolean;
@@ -11,10 +10,10 @@ export interface FeatureFlags {
 
 /**
  * App-wide feature flags for UI gating (read by any user via GET /settings/features).
- * Admin edits them through the admin panel; this store only reads. Flags default to
- * enabled so the UI never hides a feature just because the fetch hasn't returned yet.
+ * Admin edits them through the admin panel; this reads only. Flags default to enabled so the UI
+ * never hides a feature just because the fetch hasn't returned yet.
  */
-export const useSettingsStore = defineStore("settings", () => {
+export function createSettingsState(deps: { transport: Transport }) {
   const flags = reactive<FeatureFlags>({
     aiSummaryEnabled: true,
     chatbotEnabled: true,
@@ -24,10 +23,12 @@ export const useSettingsStore = defineStore("settings", () => {
   const loaded = ref(false);
 
   async function load(): Promise<void> {
-    const data = await api.get<FeatureFlags>("/settings/features");
+    const data = await deps.transport.get<FeatureFlags>("/settings/features");
     Object.assign(flags, data);
     loaded.value = true;
   }
 
   return { flags, loaded, load };
-});
+}
+
+export type SettingsState = ReturnType<typeof createSettingsState>;

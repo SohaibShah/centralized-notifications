@@ -1,6 +1,6 @@
 import { ref } from "vue";
-import { defineStore } from "pinia";
-import { api, ApiError } from "@/api/client";
+import { ApiError } from "../transport/cookie-transport";
+import type { Transport } from "../transport/types";
 
 interface SummaryResponse {
   summary: string;
@@ -12,7 +12,7 @@ interface SummaryResponse {
  * expand; the server caches by the unread signature, so re-fetches are cheap. States: idle → loading
  * → ready | error.
  */
-export const useSummaryStore = defineStore("summary", () => {
+export function createSummaryState(deps: { transport: Transport }) {
   const status = ref<"idle" | "loading" | "ready" | "error">("idle");
   const text = ref("");
   const error = ref<string | null>(null);
@@ -23,7 +23,7 @@ export const useSummaryStore = defineStore("summary", () => {
     status.value = "loading";
     error.value = null;
     try {
-      const res = await api.get<SummaryResponse>("/notifications/summary");
+      const res = await deps.transport.get<SummaryResponse>("/notifications/summary");
       text.value = res.summary;
       status.value = "ready";
     } catch (err) {
@@ -39,4 +39,6 @@ export const useSummaryStore = defineStore("summary", () => {
   }
 
   return { status, text, error, fetchSummary, reset };
-});
+}
+
+export type SummaryState = ReturnType<typeof createSummaryState>;
