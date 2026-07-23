@@ -69,10 +69,8 @@ describe("chat store", () => {
     for (let i = 0; i < 10; i++) {
       await store.send(`q${i}`);
     }
-    const lastCall = fetchSpy.mock.calls.at(-1)!;
-    const body = JSON.parse((lastCall[1] as RequestInit).body as string) as {
-      history: unknown[];
-    };
+    const lastCall = fetchSpy.mock.calls.at(-1) as unknown as [string, RequestInit];
+    const body = JSON.parse(lastCall[1].body as string) as { history: unknown[] };
     expect(body.history.length).toBeLessThanOrEqual(8);
   });
 });
