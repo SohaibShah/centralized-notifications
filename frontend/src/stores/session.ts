@@ -1,6 +1,9 @@
 import { computed, ref } from "vue";
 import { defineStore } from "pinia";
-import { api } from "@/api/client";
+import { createCookieTransport } from "@notifications/vue";
+
+// Host auth calls (/auth/*) reuse the library's cookie transport — same-origin, credentials included.
+const api = createCookieTransport("");
 
 export interface SessionUser {
   id: string;

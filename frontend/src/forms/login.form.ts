@@ -1,4 +1,4 @@
-import type { FormSchema } from "./types";
+import type { FormSchema } from "@notifications/vue";
 
 export const loginForm: FormSchema = {
   id: "login",
