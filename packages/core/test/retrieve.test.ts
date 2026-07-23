@@ -80,6 +80,62 @@ test("FTS hit + recency union, audience-scoped, with read flags", async () => {
   expect(a!.description.length).toBeLessThanOrEqual(280);
 });
 
+test("team/role scoping — a principal never retrieves another team's or role's notifications", async () => {
+  const teamA = `teamA-${stamp}`;
+  const teamB = `teamB-${stamp}`;
+  const roleX = `roleX-${stamp}`;
+  const roleY = `roleY-${stamp}`;
+  const kw = `wgrp${stamp.replace(/[^a-z0-9]/gi, "")}`;
+
+  await persist(
+    query,
+    {
+      id: `grp-teamA-${stamp}`,
+      module: "dsr",
+      title: `Team A ${kw}`,
+      description: "",
+      priority: "high",
+      snoozable: false,
+      audience: { scope: "team", id: teamA },
+    },
+    false,
+  );
+  await persist(
+    query,
+    {
+      id: `grp-teamB-${stamp}`,
+      module: "dsr",
+      title: `Team B ${kw}`,
+      description: "",
+      priority: "high",
+      snoozable: false,
+      audience: { scope: "team", id: teamB },
+    },
+    false,
+  );
+  await persist(
+    query,
+    {
+      id: `grp-roleY-${stamp}`,
+      module: "dsr",
+      title: `Role Y ${kw}`,
+      description: "",
+      priority: "high",
+      snoozable: false,
+      audience: { scope: "role", id: roleY },
+    },
+    false,
+  );
+
+  // Principal is in team A and role X only.
+  const principal: Principal = { userKey: `grp-user-${stamp}`, roles: [roleX], teamKeys: [teamA] };
+  const titles = (await retrieveForAnswer(query, principal, kw)).map((i) => i.title);
+
+  expect(titles).toContain(`Team A ${kw}`); // own team → visible
+  expect(titles).not.toContain(`Team B ${kw}`); // other team → excluded
+  expect(titles).not.toContain(`Role Y ${kw}`); // role not held → excluded
+});
+
 test("description is truncated to 280 chars", async () => {
   const userKey = `rettrunc-${stamp}`;
   const long = "x".repeat(400);
