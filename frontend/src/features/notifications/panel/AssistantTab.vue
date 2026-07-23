@@ -39,6 +39,7 @@ function onSubmit(): void {
         :class="m.from === 'me' ? 'justify-end' : 'justify-start'"
       >
         <p
+          :data-test="m.from === 'ai' ? 'ai-answer' : undefined"
           class="max-w-[82%] rounded-lg px-3 py-2 text-[13px] leading-relaxed whitespace-pre-wrap"
           :class="
             m.from === 'me'
