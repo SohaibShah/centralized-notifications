@@ -5,6 +5,7 @@ import { notificationReadRoutes } from "./routes/notifications";
 import { notificationSseRoute } from "./routes/sse";
 import { notificationIntakeRoute } from "./routes/intake";
 import { notificationAdminRoutes } from "./routes/admin";
+import { notificationSummaryRoute } from "./routes/summary";
 
 /**
  * What a host supplies when mounting the notification routes. `auth` resolves the host's identity to
@@ -31,6 +32,7 @@ export const notificationFastifyPlugin: FastifyPluginAsync<NotificationPluginOpt
   const requirePrincipal = makeRequirePrincipal(opts.auth);
   notificationReadRoutes(app, { service: opts.service, requirePrincipal });
   notificationSseRoute(app, { service: opts.service, requirePrincipal });
+  notificationSummaryRoute(app, { service: opts.service, requirePrincipal });
   notificationIntakeRoute(app, { service: opts.service, intakeAuth: opts.intakeAuth });
   const requireAdmin = makeRequireAdmin(opts.auth, opts.service.adminRole);
   notificationAdminRoutes(app, { service: opts.service, requireAdmin, requirePrincipal });
