@@ -204,6 +204,17 @@ test("audience isolation — another user's notification never enters the ground
     const body = await readAll(res);
     expect(body).not.toContain(secret);
     expect(body).toContain("A visible note");
+
+    // Assert directly on the sources frame: it carries A's item and never B's.
+    const sourcesIdx = body.indexOf("event: sources");
+    expect(sourcesIdx).toBeGreaterThanOrEqual(0);
+    const sourcesLine = body
+      .slice(sourcesIdx)
+      .split("\n")
+      .find((l) => l.startsWith("data:"))!;
+    const sources = JSON.parse(sourcesLine.slice(5).trim()) as { title: string }[];
+    expect(sources.some((s) => s.title === "A visible note")).toBe(true);
+    expect(sources.some((s) => s.title === secret)).toBe(false);
   } finally {
     await app.close();
   }
