@@ -1,7 +1,8 @@
 import { reactive, ref } from "vue";
 import { defineStore } from "pinia";
+import type { ChatSource } from "@notifications/shared";
 
-type Turn = { from: "me" | "ai"; text: string };
+type Turn = { from: "me" | "ai"; text: string; sources: Record<string, ChatSource> };
 const MAX_HISTORY = 8;
 
 /** Streaming chat over the user's notifications. Client-only multi-turn: the thread lives here and
@@ -20,8 +21,8 @@ export const useChatStore = defineStore("chat", () => {
       .slice(-MAX_HISTORY)
       .map((t) => ({ role: t.from === "me" ? "user" : "assistant", content: t.text }));
 
-    thread.push({ from: "me", text: q });
-    const ai = reactive<Turn>({ from: "ai", text: "" });
+    thread.push({ from: "me", text: q, sources: {} });
+    const ai = reactive<Turn>({ from: "ai", text: "", sources: {} });
     thread.push(ai);
     status.value = "streaming";
 
@@ -57,8 +58,17 @@ export const useChatStore = defineStore("chat", () => {
           }
           const dataLine = frame.split("\n").find((l) => l.startsWith("data:"));
           if (!dataLine) continue;
+          const payload = dataLine.slice(5).trim();
+          if (frame.startsWith("event: sources")) {
+            try {
+              for (const s of JSON.parse(payload) as ChatSource[]) ai.sources[s.ref] = s;
+            } catch {
+              /* ignore */
+            }
+            continue;
+          }
           try {
-            const json = JSON.parse(dataLine.slice(5).trim()) as { delta?: string; done?: boolean };
+            const json = JSON.parse(payload) as { delta?: string; done?: boolean };
             if (typeof json.delta === "string") ai.text += json.delta;
           } catch {
             /* ignore */

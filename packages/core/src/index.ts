@@ -24,5 +24,6 @@ export type {
   AiMessage,
   AiProvider,
 } from "./types";
-export type { ChatTurn, ChatSource, AnswerChunk } from "./ai/answer";
+export type { ChatTurn, AnswerChunk } from "./ai/answer";
+export type { ChatSource } from "@notifications/shared";
 export type { ChatContextItem } from "./ai/retrieve";

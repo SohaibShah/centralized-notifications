@@ -92,6 +92,21 @@ export type NotificationAction = z.infer<typeof actionSchema>;
 export type Notification = z.infer<typeof notificationSchema>;
 
 export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[number];
+
+/**
+ * A notification the AI chat may cite, carried in the chat stream's `sources` frame. The wire
+ * contract between the server (which builds it from the trusted, audience-scoped grounding set) and
+ * the client (which renders cited refs as action buttons). `ref` is a stable per-answer id ("n1"..).
+ */
+export interface ChatSource {
+  ref: string;
+  id: string;
+  title: string;
+  priority: NotificationPriority;
+  ageMinutes: number;
+  actions: NotificationAction[];
+}
+
 export type AudienceScope = (typeof AUDIENCE_SCOPES)[number];
 export type ActionMethod = (typeof ACTION_METHODS)[number];
 export type ActionKind = (typeof ACTION_KINDS)[number];

@@ -1,4 +1,4 @@
-import type { NotificationAction, NotificationPriority } from "@notifications/shared";
+import type { ChatSource } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { AiProvider, Principal, Settings } from "../types";
 import { AiDisabledError, AiNotConfiguredError, AiProviderError, AiRateLimitError } from "./errors";
@@ -7,17 +7,9 @@ import { retrieveForAnswer } from "./retrieve";
 
 export type { ChatTurn };
 
-/** A notification the answer may cite, with a stable per-answer ref and its real actions. */
-export interface ChatSource {
-  ref: string; // "n1".."nK" within this answer
-  id: string;
-  title: string;
-  priority: NotificationPriority;
-  ageMinutes: number;
-  actions: NotificationAction[];
-}
-
-/** The stream the chat endpoint turns into SSE: the trusted grounding set first, then token deltas. */
+/** The stream the chat endpoint turns into SSE: the trusted grounding set first, then token deltas.
+ *  `ChatSource` (the wire contract) lives in `@notifications/shared` so the browser client can name
+ *  it without depending on this server library. */
 export type AnswerChunk =
   { type: "sources"; sources: ChatSource[] } | { type: "delta"; text: string };
 

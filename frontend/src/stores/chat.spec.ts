@@ -31,7 +31,7 @@ describe("chat store", () => {
     const store = useChatStore();
     await store.send("hi");
     expect(store.thread).toHaveLength(2);
-    expect(store.thread[0]).toEqual({ from: "me", text: "hi" });
+    expect(store.thread[0]).toEqual({ from: "me", text: "hi", sources: {} });
     expect(store.thread[1]!.from).toBe("ai");
     expect(store.thread[1]!.text).toBe("Hello");
     expect(store.status).toBe("idle");
@@ -57,6 +57,35 @@ describe("chat store", () => {
     await store.send("hi");
     expect(store.status).toBe("error");
     expect(store.thread[1]!.text).toBe("The answer stream failed.");
+  });
+
+  it("parses a sources frame into the ai turn's sources map", async () => {
+    const sources = [
+      {
+        ref: "n1",
+        id: "a1",
+        title: "Acme DSAR",
+        priority: "critical",
+        ageMinutes: 10,
+        actions: [],
+      },
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        streamResponse([
+          `event: sources\ndata: ${JSON.stringify(sources)}\n\n`,
+          'data: {"delta":"See "}\n\n',
+          'data: {"delta":"[n1]"}\n\n',
+          'data: {"done":true}\n\n',
+        ]),
+      ),
+    );
+    const store = useChatStore();
+    await store.send("hi");
+    const ai = store.thread[1]!;
+    expect(ai.text).toBe("See [n1]");
+    expect(ai.sources.n1?.title).toBe("Acme DSAR");
   });
 
   it("bounds the history sent with each question to 8 turns", async () => {
