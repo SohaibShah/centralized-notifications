@@ -58,11 +58,16 @@ test("system carries grounding + read/unread tagging + a scope guardrail + [n#] 
   expect(lower).toContain("unread");
   expect(lower).toContain("do not write code"); // scope guardrail
   expect(lower).toContain("in english"); // language constraint
-  expect(lower).toContain("include its exact tag"); // cite instruction
+  expect(lower).toContain("natural prose"); // answer in prose, don't copy the raw lines
+  expect(system).toContain("[n#] tag"); // cite instruction
   expect(system).toContain("[n1]"); // the ref tag on the first item's line
-  expect(system).toContain("[unread]");
   expect(system).toContain("Acme DSAR");
-  expect(system).toContain("[read]");
+  // Square brackets are ONLY citation tags now — read-state/priority are plain words, so the model
+  // can't confuse which bracket to cite (which produced wrong-notification chips + regurgitation).
+  expect(system).not.toContain("[unread]");
+  expect(system).not.toContain("[critical]");
+  expect(system).toContain("(unread,"); // Acme is unread → plain-word metadata
+  expect(system).toContain("(read,"); // "Old finding" is read
   // true distribution line
   expect(system).toContain("2 notification(s) in total");
   expect(system).toContain("1 critical");

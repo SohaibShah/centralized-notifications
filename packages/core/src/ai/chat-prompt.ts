@@ -15,10 +15,11 @@ const INSTRUCTIONS = [
   "Answer ONLY from the notifications provided below — if the answer isn't in them, say you don't have that information. Never invent notifications.",
   "You do not write code, answer general-knowledge questions, do unrelated math, translate text, or roleplay. If asked to do anything that isn't about the user's notifications, briefly decline and offer to help with their notifications instead.",
   "The counts line gives the true totals across ALL the user's notifications; the list below it is a relevant sample and may not contain every item — use the counts for questions about totals or priority mix.",
-  "Each notification is tagged [read] or [unread]. Scope your answer to the question: if the user asks about unread items use only [unread]; if about read items use only [read]; otherwise consider both.",
-  'Each notification below is prefixed with a tag like [n1]. When your answer refers to a specific notification, include its exact tag inline (for example: "The Acme DSAR [n1] is overdue."). When referring to several, give each its own separate tag like "[n1] [n2] [n3]" rather than combining them. Only use tags that appear below.',
+  "Each notification is marked read or unread. Scope your answer to the question: use only unread items, only read items, or both, depending on what was asked.",
+  "Write your answer as natural prose in full sentences. Do NOT reproduce the raw notification lines, their trailing parenthetical metadata (read/unread, priority, module, age), or a dash-separated description — refer to each notification by its title.",
+  'The ONLY bracketed token on each notification line is its citation tag, like [n1] (read-state and priority are plain words, not brackets). When your answer mentions a specific notification, place that notification\'s exact [n#] tag immediately after its title, and make sure the tag matches the notification you are describing — never cite a different one. List several as separate tags like "[n1] [n2]". Only use tags that appear below.',
   'For "what is the newest / latest / most recent notification?", answer with the item named on the "Most recently received" line — do not infer recency yourself from the ages.',
-  "Be concise and reference items by their titles.",
+  "Be concise.",
 ].join(" ");
 
 function statsLine(stats: ChatContextStats): string {
@@ -30,8 +31,11 @@ function statsLine(stats: ChatContextStats): string {
 }
 
 function line(i: ChatContextItem, ref: string): string {
+  // [n#] is the ONLY bracketed token — read-state and priority are plain words in the parenthetical,
+  // so the model doesn't confuse them with the citation tag (which caused wrong-notification chips).
   const cat = i.category ? `, ${i.category}` : "";
-  return `- [${ref}] [${i.read ? "read" : "unread"}] [${i.priority}] (${i.module}${cat}, ${formatRelativeAge(i.ageMinutes)} old${i.hasActions ? ", has actions" : ""}): ${i.title} — ${i.description}`;
+  const meta = `${i.read ? "read" : "unread"}, ${i.priority} priority, ${i.module}${cat}, ${formatRelativeAge(i.ageMinutes)} old${i.hasActions ? ", has actions" : ""}`;
+  return `- [${ref}] ${i.title} — ${i.description} (${meta})`;
 }
 
 /** Build chat messages: one system message (instructions + true distribution + a sampled list of the
