@@ -138,7 +138,7 @@ test("404 when chatbotEnabled is false", async () => {
 });
 
 test("501 when the provider has no completeStream", async () => {
-  const { app, svc, baseUrl } = await buildServer({ complete: async () => "x" });
+  const { app, baseUrl } = await buildServer({ complete: async () => "x" });
   try {
     const res = await fetch(`${baseUrl}/notifications/chat`, {
       method: "POST",

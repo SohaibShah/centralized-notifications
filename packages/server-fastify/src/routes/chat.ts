@@ -35,9 +35,12 @@ export function notificationChatRoute(
     const parsed = bodySchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request body" });
 
-    const iter = service
-      .answer({ principal, question: parsed.data.question, history: parsed.data.history })
-      [Symbol.asyncIterator]();
+    const stream = service.answer({
+      principal,
+      question: parsed.data.question,
+      history: parsed.data.history,
+    });
+    const iter = stream[Symbol.asyncIterator]();
 
     let step: IteratorResult<string>;
     try {
