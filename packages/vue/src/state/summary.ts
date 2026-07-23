@@ -1,4 +1,4 @@
-import { ref } from "vue";
+import { reactive, ref } from "vue";
 import { ApiError } from "../transport/cookie-transport";
 import type { Transport } from "../transport/types";
 
@@ -38,7 +38,7 @@ export function createSummaryState(deps: { transport: Transport }) {
     error.value = null;
   }
 
-  return { status, text, error, fetchSummary, reset };
+  return reactive({ status, text, error, fetchSummary, reset });
 }
 
 export type SummaryState = ReturnType<typeof createSummaryState>;

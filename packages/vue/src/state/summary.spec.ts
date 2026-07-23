@@ -12,8 +12,8 @@ describe("summary state", () => {
     const s = createSummaryState({ transport: fakeTransport({ get }) });
     await s.fetchSummary();
     expect(get).toHaveBeenCalledWith("/notifications/summary");
-    expect(s.status.value).toBe("ready");
-    expect(s.text.value).toBe("S");
+    expect(s.status).toBe("ready");
+    expect(s.text).toBe("S");
   });
 
   it("does not refetch when already ready, unless forced", async () => {
@@ -32,7 +32,7 @@ describe("summary state", () => {
     });
     const s = createSummaryState({ transport: fakeTransport({ get }) });
     await s.fetchSummary();
-    expect(s.status.value).toBe("error");
-    expect(s.error.value).toBe("summary unavailable");
+    expect(s.status).toBe("error");
+    expect(s.error).toBe("summary unavailable");
   });
 });

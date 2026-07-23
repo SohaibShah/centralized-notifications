@@ -9,7 +9,7 @@ describe("settings state", () => {
   it("defaults every flag to true before load", () => {
     const s = createSettingsState({ transport: fakeTransport() });
     expect(s.flags.aiSummaryEnabled).toBe(true);
-    expect(s.loaded.value).toBe(false);
+    expect(s.loaded).toBe(false);
   });
 
   it("loads flags from GET /settings/features", async () => {
@@ -23,6 +23,6 @@ describe("settings state", () => {
     await s.load();
     expect(get).toHaveBeenCalledWith("/settings/features");
     expect(s.flags.aiSummaryEnabled).toBe(false);
-    expect(s.loaded.value).toBe(true);
+    expect(s.loaded).toBe(true);
   });
 });

@@ -1,31 +1,27 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
 import type { FeedNotification, Notification, NotificationCounts } from "@notifications/shared";
 import { feedItem } from "@/test-support/feedItem";
-import { ApiError } from "@/api/client";
+import { ApiError } from "../transport/cookie-transport";
+import { createFeedState } from "./feed";
+import type { Transport } from "../transport/types";
 
-// Mock the two I/O seams (HTTP + SSE) so the store's logic is tested in isolation.
-// vi.hoisted lets the mock factories reference these before the imports are evaluated.
-const { getMock, postMock, delMock, sseState } = vi.hoisted(() => ({
-  getMock: vi.fn(),
-  postMock: vi.fn(),
-  delMock: vi.fn(),
-  sseState: { onBatch: null as null | ((batch: Notification[]) => void) },
-}));
+// The two I/O seams (HTTP + SSE) are injected as fakes so the state logic is tested in isolation.
+const getMock = vi.fn();
+const postMock = vi.fn();
+const delMock = vi.fn();
+const sseState = { onBatch: null as null | ((batch: Notification[]) => void) };
 
-vi.mock("@/api/client", async (orig) => {
-  const actual = (await orig()) as Record<string, unknown>;
-  return { ...actual, api: { get: getMock, post: postMock, del: delMock } };
-});
-vi.mock("@/api/sse", () => ({
-  connectSse: (opts: { onBatch: (batch: Notification[]) => void }) => {
-    sseState.onBatch = opts.onBatch;
-    return { close: () => {} };
-  },
-}));
-
-// Imported after the mocks are registered.
-const { useFeedStore } = await import("./feed");
+const transport: Transport = {
+  get: getMock as unknown as Transport["get"],
+  post: postMock as unknown as Transport["post"],
+  patch: vi.fn() as unknown as Transport["patch"],
+  del: delMock as unknown as Transport["del"],
+};
+const connectSse = (opts: { onBatch: (batch: Notification[]) => void }) => {
+  sseState.onBatch = opts.onBatch;
+  return { close: () => {} };
+};
+const makeFeed = () => createFeedState({ transport, connectSse });
 
 function liveNotif(over: Partial<Notification> & { id: string }): Notification {
   return {
@@ -46,7 +42,6 @@ const page = (items: FeedNotification[], nextCursor: string | null = null) => ({
 
 describe("feed store", () => {
   beforeEach(() => {
-    setActivePinia(createPinia());
     getMock.mockReset();
     postMock.mockReset();
     delMock.mockReset();
@@ -57,7 +52,7 @@ describe("feed store", () => {
 
   it("load() populates newest page and sets ready + hasMore", async () => {
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a" }), feedItem({ id: "b" })], "cur1"));
-    const feed = useFeedStore();
+    const feed = makeFeed();
     await feed.load();
     expect(feed.status).toBe("ready");
     expect(feed.items.map((n) => n.id)).toEqual(["a", "b"]);
@@ -66,14 +61,14 @@ describe("feed store", () => {
 
   it("load() sets the error state when the fetch fails", async () => {
     getMock.mockRejectedValueOnce(new Error("network"));
-    const feed = useFeedStore();
+    const feed = makeFeed();
     await feed.load();
     expect(feed.status).toBe("error");
     expect(feed.error).toBeTruthy();
   });
 
   it("loadMore() appends the next page and de-dupes overlapping ids", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a" }), feedItem({ id: "b" })], "cur1"));
     await feed.load();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "b" }), feedItem({ id: "c" })], null));
@@ -83,7 +78,7 @@ describe("feed store", () => {
   });
 
   it("a live burst prepends new notifications and de-dupes against loaded ones", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a" })], null));
     feed.connect();
     await feed.load();
@@ -94,7 +89,7 @@ describe("feed store", () => {
   });
 
   it("filters by priority, module, and free-text query", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(
       page([
         feedItem({ id: "crit", priority: "critical", module: "dsr" }),
@@ -116,7 +111,7 @@ describe("feed store", () => {
   });
 
   it("groups into Needs action and Earlier, preserving load order (no client re-sort)", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(
       page([
         feedItem({ id: "n1", priority: "normal", createdAt: "2026-07-01T00:00:00.000000Z" }),
@@ -136,7 +131,7 @@ describe("feed store", () => {
 
   it("setSort clears the loaded window and refetches page 1 with the new sort", async () => {
     getMock.mockResolvedValue(page([feedItem({ id: "a" })], null));
-    const feed = useFeedStore();
+    const feed = makeFeed();
     await feed.load();
     expect(feed.sort).toBe("newest");
     getMock.mockClear();
@@ -149,7 +144,7 @@ describe("feed store", () => {
   });
 
   it("markRead() optimistically flips the flag and POSTs (row stays put — sticky read)", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
 
@@ -162,7 +157,7 @@ describe("feed store", () => {
   });
 
   it("markRead() keeps the item in Needs action (sticky) until flushed, then moves it to Earlier", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
 
@@ -176,7 +171,7 @@ describe("feed store", () => {
   });
 
   it("markAllReadInScope() is NOT sticky — items move to Earlier immediately", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
 
@@ -185,7 +180,7 @@ describe("feed store", () => {
   });
 
   it("markUnread() clears stickiness so the item is genuinely unread again", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
     await feed.markRead("a"); // sticky read
@@ -198,7 +193,7 @@ describe("feed store", () => {
   });
 
   it("markRead() drops a stale notification (404 = deleted server-side) instead of reverting", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
     // The notification was deleted server-side (e.g. admin maintenance) while the feed stayed open.
@@ -212,7 +207,7 @@ describe("feed store", () => {
   });
 
   it("markRead() reverts the flag when the POST fails", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
     postMock.mockRejectedValueOnce(new Error("500"));
@@ -223,7 +218,7 @@ describe("feed store", () => {
   });
 
   it("markRead() failure also clears stickiness (no stale sticky entry left behind)", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
     postMock.mockRejectedValueOnce(new Error("500"));
@@ -237,7 +232,7 @@ describe("feed store", () => {
   });
 
   it("markUnread() failure restores the sticky (in-place) position, not a jump to Earlier", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
     await feed.markRead("a"); // sticky read → still in Needs action
@@ -250,7 +245,7 @@ describe("feed store", () => {
   });
 
   it("reset() clears the sticky-read set", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
     await feed.markRead("a"); // sticky
@@ -263,7 +258,7 @@ describe("feed store", () => {
   });
 
   it("markRead() is a no-op for an already-read or unknown notification", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true })]));
     await feed.load();
 
@@ -274,7 +269,7 @@ describe("feed store", () => {
   });
 
   it("markUnread() optimistically un-reads, moves the row to Needs action, and DELETEs", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true })]));
     await feed.load();
 
@@ -286,7 +281,7 @@ describe("feed store", () => {
   });
 
   it("markUnread() reverts the flag when the DELETE fails", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true })]));
     await feed.load();
     delMock.mockRejectedValueOnce(new Error("500"));
@@ -297,7 +292,7 @@ describe("feed store", () => {
   });
 
   it("markUnread() is a no-op for an already-unread or unknown notification", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));
     await feed.load();
 
@@ -308,7 +303,7 @@ describe("feed store", () => {
   });
 
   it("clearFilters() also clears the search query and resets isFiltered", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a" })]));
     await feed.load();
 
@@ -323,7 +318,7 @@ describe("feed store", () => {
   });
 
   it("markAllReadInScope marks only visible unread items and posts their ids", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(
       page([
         feedItem({ id: "a", read: false, priority: "critical" }),
@@ -342,7 +337,7 @@ describe("feed store", () => {
   });
 
   it("markAllReadInScope reverts all optimistic flips when the POST fails", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a" }), feedItem({ id: "b" })]));
     await feed.load();
     postMock.mockRejectedValueOnce(new Error("500"));
@@ -353,7 +348,7 @@ describe("feed store", () => {
   });
 
   it("onLiveCritical fires with only newly-arrived critical items", async () => {
-    const feed = useFeedStore();
+    const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "old-crit", priority: "critical" })], null));
     feed.connect();
     await feed.load();
@@ -384,14 +379,14 @@ describe("feed store", () => {
   describe("counts", () => {
     it("fetchCounts populates the counts snapshot", async () => {
       getMock.mockResolvedValueOnce(counts(5, { critical: 2, high: 3 }));
-      const feed = useFeedStore();
+      const feed = makeFeed();
       await feed.fetchCounts();
       expect(feed.counts.unread).toBe(5);
       expect(feed.counts.unreadByPriority.critical).toBe(2);
     });
 
     it("markRead applies an exact optimistic delta by priority", async () => {
-      const feed = useFeedStore();
+      const feed = makeFeed();
       getMock.mockResolvedValueOnce(
         page([feedItem({ id: "a", read: false, priority: "critical" })]),
       );
@@ -403,7 +398,7 @@ describe("feed store", () => {
     });
 
     it("markRead reverts the count delta when the POST fails", async () => {
-      const feed = useFeedStore();
+      const feed = makeFeed();
       getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false, priority: "high" })]));
       await feed.load();
       feed.counts = counts(2, { high: 2 });
@@ -414,7 +409,7 @@ describe("feed store", () => {
     });
 
     it("markUnread increments the count by priority", async () => {
-      const feed = useFeedStore();
+      const feed = makeFeed();
       getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: true, priority: "high" })]));
       await feed.load();
       feed.counts = counts(1, { high: 1 });
@@ -424,7 +419,7 @@ describe("feed store", () => {
     });
 
     it("an SSE batch increments counts for genuinely-new unread items only", async () => {
-      const feed = useFeedStore();
+      const feed = makeFeed();
       getMock.mockResolvedValueOnce(page([feedItem({ id: "a", priority: "critical" })], null));
       feed.connect();
       await feed.load();
@@ -438,7 +433,7 @@ describe("feed store", () => {
     });
 
     it("markAllReadInScope decrements the count once per flipped id (by priority)", async () => {
-      const feed = useFeedStore();
+      const feed = makeFeed();
       getMock.mockResolvedValueOnce(
         page([
           feedItem({ id: "a", read: false, priority: "critical" }),
@@ -455,7 +450,7 @@ describe("feed store", () => {
     });
 
     it("fetchCounts keeps the last snapshot when the response is malformed", async () => {
-      const feed = useFeedStore();
+      const feed = makeFeed();
       feed.counts = counts(3, { critical: 3 });
       getMock.mockResolvedValueOnce({ unread: 2, unreadByPriority: {} }); // missing buckets
       await feed.fetchCounts();
@@ -465,7 +460,7 @@ describe("feed store", () => {
     });
 
     it("counts never go negative", async () => {
-      const feed = useFeedStore();
+      const feed = makeFeed();
       getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false, priority: "low" })]));
       await feed.load();
       feed.counts = counts(0);

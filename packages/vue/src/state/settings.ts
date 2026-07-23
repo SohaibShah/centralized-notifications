@@ -28,7 +28,7 @@ export function createSettingsState(deps: { transport: Transport }) {
     loaded.value = true;
   }
 
-  return { flags, loaded, load };
+  return reactive({ flags, loaded, load });
 }
 
 export type SettingsState = ReturnType<typeof createSettingsState>;

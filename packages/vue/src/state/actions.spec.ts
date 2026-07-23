@@ -1,23 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
 import type { NotificationAction } from "@notifications/shared";
+import { createNotificationActions } from "./actions";
 
-const { markReadSpy } = vi.hoisted(() => ({ markReadSpy: vi.fn() }));
-vi.mock("@/stores/feed", () => ({ useFeedStore: () => ({ markRead: markReadSpy }) }));
+const markReadSpy = vi.fn();
+const feed = { markRead: markReadSpy };
 
-const { useNotificationActions } = await import("./useNotificationActions");
-
-describe("useNotificationActions", () => {
-  beforeEach(() => {
-    setActivePinia(createPinia());
-    markReadSpy.mockReset();
-  });
+describe("notification actions", () => {
+  beforeEach(() => markReadSpy.mockReset());
   afterEach(() => vi.unstubAllGlobals());
 
   it("a link action opens the url and marks the notification read", () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
-    const { runAction } = useNotificationActions();
+    const { runAction } = createNotificationActions({ feed });
     const action: NotificationAction = {
       label: "Open",
       kind: "link",
@@ -32,7 +27,7 @@ describe("useNotificationActions", () => {
   it("a dispatch action marks read but does not open a url (stub)", () => {
     const open = vi.fn();
     vi.stubGlobal("open", open);
-    const { runAction } = useNotificationActions();
+    const { runAction } = createNotificationActions({ feed });
     runAction({ label: "Do", kind: "dispatch", method: "POST", url: "https://x/2" }, { id: "def" });
     expect(markReadSpy).toHaveBeenCalledWith("def");
     expect(open).not.toHaveBeenCalled();

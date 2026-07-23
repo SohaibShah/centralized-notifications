@@ -1,5 +1,4 @@
-import { computed, ref, shallowRef, type Ref } from "vue";
-import { defineStore } from "pinia";
+import { computed, reactive, ref, shallowRef, type Ref } from "vue";
 import type {
   FeedNotification,
   FeedSort,
@@ -9,8 +8,8 @@ import type {
   NotificationPriority,
 } from "@notifications/shared";
 import { notificationCountsSchema } from "@notifications/shared";
-import { api, ApiError } from "@/api/client";
-import { connectSse, type SseClient, type SseStatus } from "@/api/sse";
+import { ApiError } from "../transport/cookie-transport";
+import type { SseClient, SseFactory, SseStatus, Transport } from "../transport/types";
 
 const PAGE_SIZE = 25;
 // Cap the retained window so a long-lived tab receiving live bursts can't grow `items`
@@ -38,7 +37,7 @@ export type FilterPill =
  * mutation replaces the array reference (NFR-2: we never make Vue deeply-reactive over
  * a list that can grow large — we control invalidation ourselves).
  */
-export const useFeedStore = defineStore("feed", () => {
+export function createFeedState(deps: { transport: Transport; connectSse: SseFactory }) {
   // --- history + connection -------------------------------------------------
   const items = shallowRef<FeedNotification[]>([]);
   const seen = new Set<string>(); // id set backing O(1) dedupe across load + live
@@ -96,7 +95,7 @@ export const useFeedStore = defineStore("feed", () => {
       // Parse defensively: a malformed/partial body must never poison the snapshot (a missing
       // bucket would make a later optimistic delta compute NaN). On a bad shape, keep the last one.
       const parsed = notificationCountsSchema.safeParse(
-        await api.get<unknown>("/notifications/counts"),
+        await deps.transport.get<unknown>("/notifications/counts"),
       );
       if (parsed.success) counts.value = parsed.data;
       else console.warn("[feed] counts response failed validation; keeping the last snapshot");
@@ -160,7 +159,7 @@ export const useFeedStore = defineStore("feed", () => {
     status.value = "loading";
     error.value = null;
     try {
-      const page = await api.get<NotificationPage>(
+      const page = await deps.transport.get<NotificationPage>(
         `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}`,
       );
       addBack(page.items);
@@ -179,7 +178,7 @@ export const useFeedStore = defineStore("feed", () => {
     loadingMore.value = true;
     try {
       const cursor = encodeURIComponent(nextCursor.value);
-      const page = await api.get<NotificationPage>(
+      const page = await deps.transport.get<NotificationPage>(
         `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&cursor=${cursor}`,
       );
       addBack(page.items);
@@ -236,7 +235,7 @@ export const useFeedStore = defineStore("feed", () => {
 
   function connect(): void {
     if (sse) return;
-    sse = connectSse({
+    sse = deps.connectSse({
       onBatch: onLiveBatch,
       onStatus: (s) => (connection.value = s),
     });
@@ -273,7 +272,7 @@ export const useFeedStore = defineStore("feed", () => {
     stick(id); // open-and-seen: keep it in place while it's read this session
     adjustCount(prio, -1); // optimistic: one fewer unread of this priority
     try {
-      await api.post(`/notifications/${encodeURIComponent(id)}/read`);
+      await deps.transport.post(`/notifications/${encodeURIComponent(id)}/read`);
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         // The notification no longer exists server-side (e.g. deleted via admin maintenance
@@ -304,7 +303,7 @@ export const useFeedStore = defineStore("feed", () => {
     unstick(id);
     adjustCount(prio, +1); // optimistic: one more unread of this priority
     try {
-      await api.del(`/notifications/${encodeURIComponent(id)}/read`);
+      await deps.transport.del(`/notifications/${encodeURIComponent(id)}/read`);
     } catch {
       setRead(id, true); // revert — the server didn't clear it
       if (wasSticky) stick(id); // restore its in-place (sticky) position too — a true inverse
@@ -326,7 +325,7 @@ export const useFeedStore = defineStore("feed", () => {
       adjustCount(n.priority, -1);
     }
     try {
-      await api.post("/notifications/read", { ids: targets.map((n) => n.id) });
+      await deps.transport.post("/notifications/read", { ids: targets.map((n) => n.id) });
     } catch {
       for (const n of targets) {
         setRead(n.id, false);
@@ -422,7 +421,9 @@ export const useFeedStore = defineStore("feed", () => {
     else toggleModule(pill.value);
   }
 
-  return {
+  // reactive() unwraps the nested refs on property access, preserving the Pinia store's ergonomics
+  // (feed.items, feed.query = …) so consumers don't need `.value`.
+  return reactive({
     // state
     items,
     status,
@@ -463,8 +464,10 @@ export const useFeedStore = defineStore("feed", () => {
     toggleUnreadOnly,
     clearFilters,
     removePill,
-  };
-});
+  });
+}
+
+export type FeedState = ReturnType<typeof createFeedState>;
 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);

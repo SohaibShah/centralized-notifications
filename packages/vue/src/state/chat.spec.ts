@@ -1,6 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
-import { useChatStore } from "./chat";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { createChatState } from "./chat";
 
 /** A streaming Response whose body emits the given SSE text (optionally split across reads). */
 function streamResponse(frames: string[], init: { ok?: boolean; status?: number } = {}): Response {
@@ -13,8 +12,7 @@ function streamResponse(frames: string[], init: { ok?: boolean; status?: number 
   return { ok: init.ok ?? true, status: init.status ?? 200, body } as unknown as Response;
 }
 
-describe("chat store", () => {
-  beforeEach(() => setActivePinia(createPinia()));
+describe("chat state", () => {
   afterEach(() => vi.unstubAllGlobals());
 
   it("streams deltas into an ai turn and settles idle", async () => {
@@ -28,7 +26,7 @@ describe("chat store", () => {
         ]),
       ),
     );
-    const store = useChatStore();
+    const store = createChatState({ baseUrl: "" });
     await store.send("hi");
     expect(store.thread).toHaveLength(2);
     expect(store.thread[0]).toEqual({ from: "me", text: "hi", sources: {} });
@@ -42,7 +40,7 @@ describe("chat store", () => {
       "fetch",
       vi.fn(async () => ({ ok: false, status: 404, body: null }) as unknown as Response),
     );
-    const store = useChatStore();
+    const store = createChatState({ baseUrl: "" });
     await store.send("hi");
     expect(store.thread[1]!.text).toBe("AI chat is turned off.");
     expect(store.status).toBe("error");
@@ -53,7 +51,7 @@ describe("chat store", () => {
       "fetch",
       vi.fn(async () => streamResponse(['event: error\ndata: {"error":"stream failed"}\n\n'])),
     );
-    const store = useChatStore();
+    const store = createChatState({ baseUrl: "" });
     await store.send("hi");
     expect(store.status).toBe("error");
     expect(store.thread[1]!.text).toBe("The answer stream failed.");
@@ -81,7 +79,7 @@ describe("chat store", () => {
         ]),
       ),
     );
-    const store = useChatStore();
+    const store = createChatState({ baseUrl: "" });
     await store.send("hi");
     const ai = store.thread[1]!;
     expect(ai.text).toBe("See [n1]");
@@ -93,7 +91,7 @@ describe("chat store", () => {
       streamResponse(['data: {"delta":"ok"}\n\n', 'data: {"done":true}\n\n']),
     );
     vi.stubGlobal("fetch", fetchSpy);
-    const store = useChatStore();
+    const store = createChatState({ baseUrl: "" });
     // Pre-fill the thread with 20 turns.
     for (let i = 0; i < 10; i++) {
       await store.send(`q${i}`);

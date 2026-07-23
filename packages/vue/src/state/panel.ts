@@ -1,12 +1,11 @@
-import { ref } from "vue";
-import { defineStore } from "pinia";
+import { reactive, ref } from "vue";
 
 /**
  * Open-state of the bell popover, lifted out of NotificationBell so other surfaces can
  * drive it — the critical toast opens the panel on "View" and suppresses itself while the
  * panel is already open. Dismissal/focus mechanics stay in the bell.
  */
-export const useNotificationPanelStore = defineStore("notificationPanel", () => {
+export function createPanelState() {
   const isOpen = ref(false);
   function open(): void {
     isOpen.value = true;
@@ -17,5 +16,7 @@ export const useNotificationPanelStore = defineStore("notificationPanel", () => 
   function toggle(): void {
     isOpen.value = !isOpen.value;
   }
-  return { isOpen, open, close, toggle };
-});
+  return reactive({ isOpen, open, close, toggle });
+}
+
+export type PanelState = ReturnType<typeof createPanelState>;

@@ -1,4 +1,4 @@
-import { computed, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 
 export interface ToastItem {
   id: string;
@@ -66,7 +66,7 @@ export function createToastState() {
     seen.clear();
   }
 
-  return { visible, overflowCount, pushCritical, dismiss, pause, resume, reset };
+  return reactive({ visible, overflowCount, pushCritical, dismiss, pause, resume, reset });
 }
 
 export type ToastState = ReturnType<typeof createToastState>;

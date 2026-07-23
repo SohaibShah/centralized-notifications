@@ -1,14 +1,15 @@
 import { reactive, ref } from "vue";
-import { defineStore } from "pinia";
 import type { ChatSource } from "@notifications/shared";
 
 type Turn = { from: "me" | "ai"; text: string; sources: Record<string, ChatSource> };
 const MAX_HISTORY = 8;
 
 /** Streaming chat over the user's notifications. Client-only multi-turn: the thread lives here and
- *  the last few turns are sent as history with each question. Uses raw fetch (not the api client)
- *  because it reads the response as a stream rather than parsing a JSON body. */
-export const useChatStore = defineStore("chat", () => {
+ *  the last few turns are sent as history with each question. Uses a raw streaming fetch (not the
+ *  JSON transport) because it reads the response as an SSE stream; `baseUrl` prefixes the path and
+ *  `credentials:"include"` carries the cookie. (A token-auth host would need a streaming-fetch
+ *  override — out of scope for now.) */
+export function createChatState(deps: { baseUrl: string }) {
   const thread = reactive<Turn[]>([]);
   const status = ref<"idle" | "streaming" | "error">("idle");
 
@@ -27,7 +28,7 @@ export const useChatStore = defineStore("chat", () => {
     status.value = "streaming";
 
     try {
-      const res = await fetch("/notifications/chat", {
+      const res = await fetch(deps.baseUrl + "/notifications/chat", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
@@ -83,5 +84,7 @@ export const useChatStore = defineStore("chat", () => {
     }
   }
 
-  return { thread, status, send };
-});
+  return reactive({ thread, status, send });
+}
+
+export type ChatState = ReturnType<typeof createChatState>;
