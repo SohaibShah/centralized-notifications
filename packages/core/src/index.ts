@@ -24,3 +24,5 @@ export type {
   AiMessage,
   AiProvider,
 } from "./types";
+export type { ChatTurn } from "./ai/answer";
+export type { ChatContextItem } from "./ai/retrieve";

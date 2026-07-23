@@ -9,6 +9,7 @@ import { counts } from "./read/counts";
 import { list } from "./read/feed";
 import { markRead, markReadBulk, markUnread } from "./read/read-state";
 import { SummaryEngine } from "./ai/summarize";
+import { AnswerEngine, type ChatTurn } from "./ai/answer";
 import type { ModulePolicyView, NotificationServiceConfig, Principal, Settings } from "./types";
 
 /** `list` was given a cursor that doesn't decode or was issued for a different sort. */
@@ -53,6 +54,15 @@ export interface NotificationService {
    *  off), AiNotConfiguredError (no provider), AiRateLimitError, or AiProviderError. */
   summarize(args: { principal: Principal }): Promise<{ summary: string; basedOn: number }>;
 
+  /** Streaming Q/A grounded in the caller's audience-scoped notifications (read+unread). The async
+   *  generator gates on its first `.next()`: throws AiDisabledError (chat off), AiNotConfiguredError
+   *  (no streaming provider), AiRateLimitError, then yields token deltas; AiProviderError mid-stream. */
+  answer(args: {
+    principal: Principal;
+    question: string;
+    history: ChatTurn[];
+  }): AsyncIterable<string>;
+
   /** In-process delivery hub — the SSE transport subscribes here with a principal. */
   readonly delivery: DeliveryHub;
   /** Role that gates admin operations (module toggle, settings). */
@@ -74,6 +84,11 @@ export function createNotificationService(opts: {
   const deps = { query, hub, policy };
   const adminRole = opts.config.adminRole ?? "admin";
   const summaryEngine = new SummaryEngine({
+    query,
+    getSettings: () => policy.getSettings(),
+    provider: opts.config.ai?.provider,
+  });
+  const answerEngine = new AnswerEngine({
     query,
     getSettings: () => policy.getSettings(),
     provider: opts.config.ai?.provider,
@@ -101,5 +116,6 @@ export function createNotificationService(opts: {
     getSettings: () => policy.getSettings(),
     updateSettings: (patch) => policy.updateSettings(patch),
     summarize: (args) => summaryEngine.summarize(args.principal),
+    answer: (args) => answerEngine.answer(args),
   };
 }

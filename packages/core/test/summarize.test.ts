@@ -1,4 +1,4 @@
-import { afterAll, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import type { Notification } from "@notifications/shared";
 import { AiDisabledError, AiNotConfiguredError, AiProviderError } from "../src/ai/errors";
 import { SummaryEngine } from "../src/ai/summarize";
@@ -10,6 +10,15 @@ import { testPool } from "./harness";
 const pool = testPool();
 const { query } = createDb(pool);
 afterAll(() => pool.end());
+
+// These tests assert absolute `basedOn` counts for freshly-stamped user-scoped principals. Sibling
+// test files seed GLOBAL-scoped notifications into the shared core test DB — those are visible to
+// every principal, so any that leaked in before this file runs would inflate the counts. Unique-id
+// isolation can't cover globals; clear them once so the counts are deterministic regardless of the
+// order vitest happens to run the files in.
+beforeAll(async () => {
+  await query(`DELETE FROM notifications WHERE audience_scope = 'global'`);
+});
 
 const on: Settings = {
   aiSummaryEnabled: true,
