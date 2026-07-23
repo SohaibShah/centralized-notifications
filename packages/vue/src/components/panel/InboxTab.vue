@@ -107,11 +107,7 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
           <span class="font-medium">Summarizing your inbox…</span>
         </div>
         <p v-else-if="summary.status === 'ready'" data-test="ai-summary-text">{{ summary.text }}</p>
-        <p
-          v-else-if="summary.status === 'error'"
-          data-test="ai-summary-error"
-          class="text-danger-ink"
-        >
+        <p v-else-if="summary.status === 'error'" data-test="ai-summary-error" class="text-danger">
           Couldn't generate a summary — is the local model running?
           <button
             type="button"

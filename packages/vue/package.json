@@ -25,6 +25,7 @@
   "scripts": {
     "build": "vite build && pnpm build:css",
     "build:css": "tailwindcss -i ./src/styles/lib.css -o ./dist/style.css --minify",
+    "dev:css": "tailwindcss -i ./src/styles/lib.css -o ./dist/style.css --watch",
     "typecheck": "vue-tsc --noEmit",
     "test": "vitest run --passWithNoTests"
   },

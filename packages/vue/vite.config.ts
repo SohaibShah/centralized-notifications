@@ -4,7 +4,6 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   plugins: [vue()],
-  resolve: { alias: { "@": fileURLToPath(new URL("./src", import.meta.url)) } },
   build: {
     lib: {
       entry: fileURLToPath(new URL("./src/index.ts", import.meta.url)),
