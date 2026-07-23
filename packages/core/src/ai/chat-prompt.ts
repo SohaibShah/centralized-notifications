@@ -3,6 +3,11 @@ import type { ChatContextItem } from "./retrieve";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
+/** Most recent prior turns kept in the prompt. The HTTP boundary also caps this (zod, ≤8), but core
+ *  enforces it too so a direct library caller can't blow up the context window or widen the
+ *  prompt-injection surface with an unbounded history. */
+const MAX_HISTORY_TURNS = 8;
+
 const INSTRUCTIONS = [
   "You are an assistant that answers a user's questions about THEIR notifications.",
   "Answer ONLY from the notifications provided below — if the answer isn't in them, say you don't have that information. Never invent notifications.",
@@ -20,7 +25,8 @@ function line(i: ChatContextItem): string {
 }
 
 /** Build chat messages: one system message (instructions + the retrieved notifications), then the
- *  bounded prior turns, then the new question. Core owns this prompt. */
+ *  most recent prior turns (capped at MAX_HISTORY_TURNS), then the new question. Core owns this
+ *  prompt. */
 export function buildChatMessages(
   context: ChatContextItem[],
   history: ChatTurn[],
@@ -31,7 +37,7 @@ export function buildChatMessages(
     : "The user currently has no notifications you can reference.";
   return [
     { role: "system", content: `${INSTRUCTIONS}\n\n${contextBlock}` },
-    ...history.map((t) => ({ role: t.role, content: t.content })),
+    ...history.slice(-MAX_HISTORY_TURNS).map((t) => ({ role: t.role, content: t.content })),
     { role: "user", content: question },
   ];
 }

@@ -41,6 +41,19 @@ test("system carries grounding + read/unread tagging; context, history, and ques
   expect(msgs.at(-1)).toEqual({ role: "user", content: "any unread DSARs?" });
 });
 
+test("history is capped to the most recent 8 turns", () => {
+  const history = Array.from({ length: 20 }, (_, i) => ({
+    role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
+    content: `turn-${i}`,
+  }));
+  const msgs = buildChatMessages([], history, "now?");
+  const historyMsgs = msgs.filter((m) => m.role !== "system" && m.content !== "now?");
+  expect(historyMsgs).toHaveLength(8);
+  // kept the MOST RECENT turns (turn-12 .. turn-19), dropped the oldest
+  expect(historyMsgs[0]!.content).toBe("turn-12");
+  expect(historyMsgs.at(-1)!.content).toBe("turn-19");
+});
+
 test("empty context still produces a well-formed system message", () => {
   const msgs = buildChatMessages([], [], "anything?");
   expect(msgs[0]!.role).toBe("system");
