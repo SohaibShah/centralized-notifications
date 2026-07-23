@@ -51,6 +51,12 @@ export interface AiProvider {
     messages: AiMessage[],
     opts?: { maxTokens?: number; temperature?: number },
   ): Promise<string>;
+  /** OPTIONAL streaming variant for chat — yields token deltas. A summary-only host may omit it;
+   *  `service.answer` treats its absence as "AI not configured". */
+  completeStream?(
+    messages: AiMessage[],
+    opts?: { maxTokens?: number; temperature?: number },
+  ): AsyncIterable<string>;
 }
 
 /** What a host injects when constructing the service. `modules` is the host-owned catalog; only
