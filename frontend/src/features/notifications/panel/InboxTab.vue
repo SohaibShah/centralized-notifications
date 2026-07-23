@@ -9,10 +9,12 @@ import Skeleton from "@/components/ui/Skeleton.vue";
 import StatePanel from "@/components/ui/StatePanel.vue";
 import { useFeedStore } from "@/stores/feed";
 import { useSettingsStore } from "@/stores/settings";
+import { useSummaryStore } from "@/stores/summary";
 import FeedList from "../components/FeedList.vue";
 
 const feed = useFeedStore();
 const settings = useSettingsStore();
+const summary = useSummaryStore();
 const aiOpen = ref(false);
 
 // One-shot "bloom" on the AI summary glow on each click. Bumping the counter re-keys the glow
@@ -23,6 +25,8 @@ const bloomCount = ref(0);
 function toggleSummary(): void {
   aiOpen.value = !aiOpen.value;
   bloomCount.value++;
+  // Lazy fetch: only when opening, and only if not already loaded/loading.
+  if (aiOpen.value && summary.status === "idle") void summary.fetchSummary();
 }
 
 // Empty vs filtered-empty are different states with different remedies.
@@ -74,10 +78,6 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
           class="font-mono text-[11px] font-semibold uppercase tracking-wide text-ai"
           >AI summary</span
         >
-        <span
-          class="ml-1 rounded-full bg-sunken px-1.5 py-0.5 font-mono text-[11px] uppercase tracking-wide text-faint"
-          >Sample</span
-        >
         <Icon
           :icon="ChevronDown"
           :size="14"
@@ -85,14 +85,33 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
           :class="{ 'rotate-180': aiOpen }"
         />
       </button>
-      <p
+      <div
         v-if="aiOpen"
         id="ai-summary-detail"
         class="relative z-10 px-3 pb-2.5 text-[12px] leading-relaxed text-muted"
       >
-        2 need action today — an overdue DSAR and a new tracker finding. 4 lower-priority updates
-        since yesterday.
-      </p>
+        <Skeleton
+          v-if="summary.status === 'loading'"
+          data-test="ai-summary-loading"
+          class="h-4 w-3/4"
+        />
+        <p v-else-if="summary.status === 'ready'" data-test="ai-summary-text">{{ summary.text }}</p>
+        <p
+          v-else-if="summary.status === 'error'"
+          data-test="ai-summary-error"
+          class="text-danger-ink"
+        >
+          Couldn't generate a summary — is the local model running?
+          <button
+            type="button"
+            data-test="ai-summary-retry"
+            class="underline"
+            @click="summary.fetchSummary(true)"
+          >
+            Retry
+          </button>
+        </p>
+      </div>
     </div>
 
     <div class="flex shrink-0 items-center gap-1.5 px-3 pb-2 pt-3">
