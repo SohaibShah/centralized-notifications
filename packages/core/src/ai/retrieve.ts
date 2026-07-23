@@ -1,10 +1,11 @@
-import type { NotificationPriority } from "@notifications/shared";
+import type { NotificationAction, NotificationPriority } from "@notifications/shared";
 import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { Principal } from "../types";
 import { audienceWhere } from "../audience/match";
 
 export interface ChatContextItem {
+  id: string;
   title: string;
   description: string; // ≤280
   priority: NotificationPriority;
@@ -13,6 +14,7 @@ export interface ChatContextItem {
   ageMinutes: number;
   read: boolean;
   hasActions: boolean;
+  actions: NotificationAction[]; // the notification's real actions (validated at intake); may be []
 }
 
 /** True distribution of the caller's whole audience-scoped set, so the model can answer questions
@@ -50,7 +52,10 @@ const RECENCY_LIMIT = 8;
 const TOTAL_CAP = 20;
 
 function toItem(r: Row, nowMs: number): ChatContextItem {
+  // r.actions is opaque jsonb validated at intake against actionSchema — safe to treat as actions.
+  const actions = (Array.isArray(r.actions) ? r.actions : []) as NotificationAction[];
   return {
+    id: r.id,
     title: r.title,
     description: r.description.slice(0, 280),
     priority: r.priority,
@@ -58,7 +63,8 @@ function toItem(r: Row, nowMs: number): ChatContextItem {
     ...(r.category != null ? { category: r.category } : {}),
     ageMinutes: Math.max(0, Math.floor((nowMs - r.created_at.getTime()) / 60000)),
     read: r.read,
-    hasActions: Array.isArray(r.actions) && r.actions.length > 0,
+    hasActions: actions.length > 0,
+    actions,
   };
 }
 

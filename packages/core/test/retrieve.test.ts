@@ -85,6 +85,9 @@ test("FTS hit + recency union, audience-scoped, with read flags", async () => {
   expect(a!.module).toBe("dsr");
   expect(typeof a!.hasActions).toBe("boolean");
   expect(a!.description.length).toBeLessThanOrEqual(280);
+  expect(typeof a!.id).toBe("string");
+  expect(a!.id.length).toBeGreaterThan(0);
+  expect(Array.isArray(a!.actions)).toBe(true);
 });
 
 test("team/role scoping — a principal never retrieves another team's or role's notifications", async () => {
