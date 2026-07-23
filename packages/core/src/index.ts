@@ -15,4 +15,6 @@ export type {
   ModulePolicyView,
   Settings,
   NotificationServiceConfig,
+  AiMessage,
+  AiProvider,
 } from "./types";

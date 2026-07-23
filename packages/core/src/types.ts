@@ -35,11 +35,30 @@ export interface Settings {
   retentionDays: number;
 }
 
+/** One chat message in the OpenAI-compatible shape. */
+export interface AiMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+/**
+ * A raw model transport the host injects. Core owns the domain prompts (summary now, Q/A later) and
+ * only asks the provider to turn messages into a completion — so a host brings a model endpoint, not
+ * prompt logic. OpenAI-compatible on purpose: local Ollama, a cloud API, or a scaled cluster all fit.
+ */
+export interface AiProvider {
+  complete(
+    messages: AiMessage[],
+    opts?: { maxTokens?: number; temperature?: number },
+  ): Promise<string>;
+}
+
 /** What a host injects when constructing the service. `modules` is the host-owned catalog; only
  *  runtime state (enabled/disabled, last_seen) lives in the library's DB. */
 export interface NotificationServiceConfig {
   modules: ModuleCatalogEntry[];
   /** Role that gates admin operations (module toggle, settings). Defaults to "admin". */
   adminRole?: string;
-  // ai?: LlmProviderConfig  // RESERVED for the summarizer sub-project — not built in this pass.
+  /** Optional AI transport. When absent, AI features (summarize) report "not configured". */
+  ai?: { provider: AiProvider };
 }
