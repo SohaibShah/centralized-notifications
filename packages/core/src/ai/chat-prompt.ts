@@ -17,6 +17,7 @@ const INSTRUCTIONS = [
   "The counts line gives the true totals across ALL the user's notifications; the list below it is a relevant sample and may not contain every item — use the counts for questions about totals or priority mix.",
   "Each notification is tagged [read] or [unread]. Scope your answer to the question: if the user asks about unread items use only [unread]; if about read items use only [read]; otherwise consider both.",
   'Each notification below is prefixed with a tag like [n1]. When your answer refers to a specific notification, include its exact tag inline (for example: "The Acme DSAR [n1] is overdue."). When referring to several, give each its own separate tag like "[n1] [n2] [n3]" rather than combining them. Only use tags that appear below.',
+  'For "what is the newest / latest / most recent notification?", answer with the item named on the "Most recently received" line — do not infer recency yourself from the ages.',
   "Be concise and reference items by their titles.",
 ].join(" ");
 
@@ -50,7 +51,18 @@ export function buildChatMessages(
         .map((it) => line(it, refById.get(it.id) ?? "n?"))
         .join("\n")}`
     : "There are no notifications to reference.";
-  const system = `${INSTRUCTIONS}\n\n${statsLine(stats)}\n\n${listing}`;
+
+  // The list is ordered by relevance/priority, not recency, so state the newest explicitly rather
+  // than making the model compare ages (which it does unreliably). Smallest age = most recent; the
+  // recency retrieval arm guarantees the true newest is in this sample.
+  const newest = items.length
+    ? items.reduce((a, b) => (b.ageMinutes < a.ageMinutes ? b : a))
+    : undefined;
+  const recentLine = newest
+    ? `Most recently received: [${refById.get(newest.id) ?? "n?"}] "${newest.title}" (${formatRelativeAge(newest.ageMinutes)} old).\n\n`
+    : "";
+
+  const system = `${INSTRUCTIONS}\n\n${statsLine(stats)}\n\n${recentLine}${listing}`;
   return [
     { role: "system", content: system },
     ...history.slice(-MAX_HISTORY_TURNS).map((t) => ({ role: t.role, content: t.content })),

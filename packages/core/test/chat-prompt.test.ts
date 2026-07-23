@@ -71,6 +71,49 @@ test("system carries grounding + read/unread tagging + a scope guardrail + [n#] 
   expect(msgs.at(-1)).toEqual({ role: "user", content: "any unread DSARs?" });
 });
 
+test("states the single most-recently-received item explicitly (not left to age comparison)", () => {
+  const items: ChatContextItem[] = [
+    // Listed priority-first: an old critical appears BEFORE the newest item.
+    {
+      id: "old",
+      title: "Old critical",
+      description: "",
+      priority: "critical",
+      module: "dsr",
+      ageMinutes: 60,
+      read: false,
+      hasActions: false,
+      actions: [],
+    },
+    {
+      id: "new",
+      title: "Brand new",
+      description: "",
+      priority: "normal",
+      module: "dsr",
+      ageMinutes: 1,
+      read: false,
+      hasActions: false,
+      actions: [],
+    },
+  ];
+  const context: ChatContext = {
+    stats: stats({ total: 2, byPriority: { critical: 1, high: 0, normal: 1, low: 0 } }),
+    items,
+  };
+  const system = buildChatMessages(
+    context,
+    [
+      { ref: "n1", id: "old" },
+      { ref: "n2", id: "new" },
+    ],
+    [],
+    "what's the latest?",
+  )[0]!.content;
+  // The server computes the newest and names it — the model shouldn't have to compare ages.
+  expect(system).toContain('Most recently received: [n2] "Brand new"');
+});
+
 test("recent items get minute-resolution age so recency is distinguishable", () => {
   const items: ChatContextItem[] = [
     {
