@@ -10,6 +10,7 @@ import StatePanel from "@/components/ui/StatePanel.vue";
 import { useFeedStore } from "@/stores/feed";
 import { useSettingsStore } from "@/stores/settings";
 import { useSummaryStore } from "@/stores/summary";
+import { useNotificationActions } from "@/composables/useNotificationActions";
 import FeedList from "../components/FeedList.vue";
 
 const feed = useFeedStore();
@@ -49,18 +50,11 @@ const isFilteredEmpty = computed(
   () => feed.status === "ready" && feed.items.length > 0 && feed.groups.length === 0,
 );
 
-// A module action's `kind` (not its HTTP method) decides UI behavior. "link" opens the url in a
-// new tab; "dispatch" will run through a server-side action proxy (a later cycle) — stubbed now.
-// Firing any action also marks the notification read.
+// The action path is shared with the AI chat via useNotificationActions ("link" opens the url;
+// "dispatch" is the server-side proxy stub; either marks the notification read).
+const { runAction } = useNotificationActions();
 function onAction(action: NotificationAction, notification: FeedNotification) {
-  feed.markRead(notification.id);
-  if (action.kind === "dispatch") {
-    console.info(`[actions] "${action.label}" (dispatch) — coming soon`);
-  } else {
-    // "link" — or a legacy action persisted before `kind` existed (treated as link). Never
-    // leave a link doing nothing.
-    window.open(action.url, "_blank", "noopener,noreferrer");
-  }
+  runAction(action, { id: notification.id });
 }
 </script>
 
