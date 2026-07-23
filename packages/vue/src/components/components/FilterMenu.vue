@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { SlidersHorizontal } from "@lucide/vue";
 import {
   NOTIFICATION_PRIORITIES,
@@ -31,8 +31,17 @@ const menu = ref<HTMLElement | null>(null);
 const menuStyle = ref<Record<string, string>>({});
 const searchInput = ref<HTMLInputElement | null>(null);
 
-// The dropdown is teleported to <body> so the popover's `overflow-hidden` can't clip it when
-// the panel is short. Because it leaves the normal flow, we position it `fixed`, anchored to the
+// The dropdown is teleported OUT of the panel so its `overflow-hidden` can't clip it — but to the
+// nearest `.notifications-root`, NOT <body>. Teleporting to <body> drops it outside the library's
+// token scope, leaving every `--nt-*` design token undefined (borders/colors fall back to the wrong
+// values). `.notifications-root` is an ancestor of the panel, so this still escapes the clip while
+// keeping the tokens in scope. Falls back to <body> only if no root is found (never, in practice).
+const teleportTarget = ref<HTMLElement | string>("body");
+onMounted(() => {
+  teleportTarget.value = root.value?.closest<HTMLElement>(".notifications-root") ?? document.body;
+});
+
+// Because it leaves the normal flow, we position it `fixed`, anchored to the
 // trigger button, and recompute on open + on resize.
 function positionMenu() {
   const el = triggerBtn.value;
@@ -118,7 +127,7 @@ onBeforeUnmount(() => {
       </span>
     </button>
 
-    <Teleport to="body">
+    <Teleport :to="teleportTarget">
       <div
         v-if="open"
         ref="menu"

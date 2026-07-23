@@ -109,40 +109,45 @@
 }
 
 /* Scoped baseline — the parts of Tailwind Preflight the components rely on, confined to the library
- * subtree via :where() (0 specificity) so component classes always win and the host is untouched. */
-.notifications-root :where(svg) {
-  display: block;
-}
-.notifications-root :where(*, *::before, *::after) {
-  box-sizing: border-box;
-}
-.notifications-root :where(h1, h2, h3, h4, h5, h6, p, figure, blockquote, dl, dd) {
-  margin: 0;
-}
-.notifications-root :where(h1, h2, h3) {
-  font-family: var(--nt-font-display);
-  font-weight: 560;
-  letter-spacing: -0.02em;
-}
-.notifications-root :where(button, input, select, textarea) {
-  font: inherit;
-  color: inherit;
-  letter-spacing: inherit;
-}
-.notifications-root :where(button) {
-  background: none;
-  border: 0;
-}
-.notifications-root :where(:focus-visible) {
-  outline: 2px solid var(--nt-color-accent);
-  outline-offset: 2px;
-}
-.notifications-root
-  :where(button:not(:disabled), [role="button"], [role="tab"], label[for], summary, a[href]) {
-  cursor: pointer;
-}
-.notifications-root :where(:disabled, [aria-disabled="true"]) {
-  cursor: not-allowed;
+ * subtree via :where() (0 specificity). Wrapped in @layer base so Tailwind's utilities (@layer
+ * utilities, ordered AFTER base) win over the reset. Unlayered, the `:where(button)` normalize below
+ * would beat every layered `bg-*`/`text-*`/`font-*` utility on a <button> (chips, toggle switches,
+ * action buttons), stripping their fill/size/weight — the parity regression this fixes. */
+@layer base {
+  .notifications-root :where(svg) {
+    display: block;
+  }
+  .notifications-root :where(*, *::before, *::after) {
+    box-sizing: border-box;
+  }
+  .notifications-root :where(h1, h2, h3, h4, h5, h6, p, figure, blockquote, dl, dd) {
+    margin: 0;
+  }
+  .notifications-root :where(h1, h2, h3) {
+    font-family: var(--nt-font-display);
+    font-weight: 560;
+    letter-spacing: -0.02em;
+  }
+  .notifications-root :where(button, input, select, textarea) {
+    font: inherit;
+    color: inherit;
+    letter-spacing: inherit;
+  }
+  .notifications-root :where(button) {
+    background: none;
+    border: 0;
+  }
+  .notifications-root :where(:focus-visible) {
+    outline: 2px solid var(--nt-color-accent);
+    outline-offset: 2px;
+  }
+  .notifications-root
+    :where(button:not(:disabled), [role="button"], [role="tab"], label[for], summary, a[href]) {
+    cursor: pointer;
+  }
+  .notifications-root :where(:disabled, [aria-disabled="true"]) {
+    cursor: not-allowed;
+  }
 }
 
 /* ── Custom component classes (reference var(--color-*) → the scoped --nt-* tokens) ── */
