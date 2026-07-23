@@ -1,5 +1,5 @@
 import type { NotificationAction, NotificationPriority } from "@notifications/shared";
-import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
+import { actionSchema, NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { Principal } from "../types";
 import { audienceWhere } from "../audience/match";
@@ -52,8 +52,14 @@ const RECENCY_LIMIT = 8;
 const TOTAL_CAP = 20;
 
 function toItem(r: Row, nowMs: number): ChatContextItem {
-  // r.actions is opaque jsonb validated at intake against actionSchema — safe to treat as actions.
-  const actions = (Array.isArray(r.actions) ? r.actions : []) as NotificationAction[];
+  // r.actions is opaque jsonb. Although intake validates actions against actionSchema, this is the
+  // TRUSTED channel the chat surfaces as clickable buttons — re-validate per element here so a legacy
+  // or out-of-band row can't forward a malformed/unsafe action (e.g. a non-http(s) url) to the client.
+  const actions: NotificationAction[] = [];
+  for (const a of Array.isArray(r.actions) ? r.actions : []) {
+    const parsed = actionSchema.safeParse(a);
+    if (parsed.success) actions.push(parsed.data);
+  }
   return {
     id: r.id,
     title: r.title,

@@ -166,6 +166,30 @@ test("description is truncated to 280 chars", async () => {
   expect(item!.description.length).toBe(280);
 });
 
+test("malformed/unsafe actions are dropped at the read boundary; valid ones survive", async () => {
+  const userKey = `acts-${stamp}`;
+  await query(
+    `INSERT INTO notifications
+       (id, module, title, description, priority, snoozable, audience_scope, audience_id, actions, suppressed)
+     VALUES ($1, 'dsr', 'Has actions', '', 'critical', false, 'user', $2, $3, false)`,
+    [
+      `acts-a-${stamp}`,
+      userKey,
+      // One valid https link + one with a javascript: url (must never reach the client as trusted).
+      JSON.stringify([
+        { label: "Open", kind: "link", method: "GET", url: "https://ok/1" },
+        { label: "Evil", kind: "link", method: "GET", url: "javascript:alert(1)" },
+      ]),
+    ],
+  );
+  const { items } = await retrieveForAnswer(query, { userKey, roles: [], teamKeys: [] }, "actions");
+  const item = items.find((i) => i.title === "Has actions");
+  expect(item).toBeDefined();
+  expect(item!.actions).toEqual([
+    { label: "Open", kind: "link", method: "GET", url: "https://ok/1" },
+  ]);
+});
+
 test("a block of criticals does not crowd out normals; stats report the true distribution", async () => {
   const userKey = `mix-${stamp}`;
   const principal: Principal = { userKey, roles: [], teamKeys: [] };
