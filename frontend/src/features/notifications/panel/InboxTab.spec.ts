@@ -156,13 +156,36 @@ describe("InboxTab", () => {
     expect(wrapper.get('[data-test="chip-count-high"]').text()).toBe("3");
   });
 
-  it("expands the disclosure and lazily fetches the summary on first open", async () => {
+  it("fetches the summary on open, and REFETCHES (force) on every reopen so it can't go stale", async () => {
     const wrapper = mount(InboxTab);
+    const btn = wrapper.find('button[aria-controls="ai-summary-detail"]');
     expect(wrapper.find("#ai-summary-detail").exists()).toBe(false); // collapsed
-    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
-    expect(wrapper.find("#ai-summary-detail").exists()).toBe(true); // expands
-    expect(summaryState.fetchSummary).toHaveBeenCalledTimes(1); // lazy fetch on open
-    expect(wrapper.get('[data-test="ai-glow"]').classes()).toContain("is-blooming"); // bloom fired
+
+    await btn.trigger("click"); // open
+    expect(wrapper.find("#ai-summary-detail").exists()).toBe(true);
+    expect(summaryState.fetchSummary).toHaveBeenCalledTimes(1);
+    expect(summaryState.fetchSummary).toHaveBeenLastCalledWith(true); // force → reflects current set
+    expect(wrapper.get('[data-test="ai-glow"]').classes()).toContain("is-blooming");
+
+    await btn.trigger("click"); // close
+    await btn.trigger("click"); // reopen → refetch
+    expect(summaryState.fetchSummary).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes the open summary (debounced) when the unread set changes", async () => {
+    vi.useFakeTimers();
+    try {
+      const feed = useFeedStore();
+      const wrapper = mount(InboxTab);
+      await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click"); // open (1 call)
+      summaryState.fetchSummary.mockClear();
+
+      feed.counts = { unread: 25, unreadByPriority: { critical: 0, high: 25, normal: 0, low: 0 } };
+      await vi.advanceTimersByTimeAsync(1000); // debounce window
+      expect(summaryState.fetchSummary).toHaveBeenCalledWith(true);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does NOT drop the 'Sample' badge — it's real now (label only)", () => {

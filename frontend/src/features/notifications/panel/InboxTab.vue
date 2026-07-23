@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onUnmounted, ref, watch } from "vue";
 import { ChevronDown, Inbox, SearchX, Sparkles, WifiOff } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Button from "@/components/ui/Button.vue";
@@ -25,9 +25,23 @@ const bloomCount = ref(0);
 function toggleSummary(): void {
   aiOpen.value = !aiOpen.value;
   bloomCount.value++;
-  // Lazy fetch: only when opening, and only if not already loaded/loading.
-  if (aiOpen.value && summary.status === "idle") void summary.fetchSummary();
+  // Refetch fresh on every open so the digest reflects the CURRENT unread set (the server's
+  // signature cache returns instantly when nothing changed, so this is cheap).
+  if (aiOpen.value) void summary.fetchSummary(true);
 }
+
+// While the disclosure is open, keep it fresh as the unread set changes (new arrivals, reads).
+// Debounced so a burst of changes collapses into one refresh and can't spam the model.
+let refreshTimer: ReturnType<typeof setTimeout> | undefined;
+watch(
+  () => feed.counts.unread,
+  () => {
+    if (!aiOpen.value) return;
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => void summary.fetchSummary(true), 1000);
+  },
+);
+onUnmounted(() => clearTimeout(refreshTimer));
 
 // Empty vs filtered-empty are different states with different remedies.
 const isEmpty = computed(() => feed.status === "ready" && feed.items.length === 0);
@@ -90,11 +104,14 @@ function onAction(action: NotificationAction, notification: FeedNotification) {
         id="ai-summary-detail"
         class="relative z-10 px-3 pb-2.5 text-[12px] leading-relaxed text-muted"
       >
-        <Skeleton
+        <div
           v-if="summary.status === 'loading'"
           data-test="ai-summary-loading"
-          class="h-4 w-3/4"
-        />
+          class="flex items-center gap-1.5 text-ai motion-safe:animate-pulse"
+        >
+          <Icon :icon="Sparkles" :size="13" />
+          <span class="font-medium">Summarizing your inbox…</span>
+        </div>
         <p v-else-if="summary.status === 'ready'" data-test="ai-summary-text">{{ summary.text }}</p>
         <p
           v-else-if="summary.status === 'error'"

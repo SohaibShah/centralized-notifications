@@ -18,7 +18,8 @@ export const useSummaryStore = defineStore("summary", () => {
   const error = ref<string | null>(null);
 
   async function fetchSummary(force = false): Promise<void> {
-    if (!force && (status.value === "loading" || status.value === "ready")) return;
+    if (status.value === "loading") return; // never double-fire an in-flight request
+    if (!force && status.value === "ready") return; // client cache — bypassed by force (stale set)
     status.value = "loading";
     error.value = null;
     try {
