@@ -172,9 +172,12 @@ test("emits a sources chunk first, carrying refs/ids/actions", async () => {
   const userKey = `src-${stamp}`;
   await persistWithAction(userKey, `src-a-${stamp}`, "Acme DSAR");
   const engine = new AnswerEngine({ query, getSettings: async () => on, provider: helloProvider });
-  const it = engine
-    .answer({ principal: { userKey, roles: [], teamKeys: [] }, question: "acme", history: [] })
-    [Symbol.asyncIterator]();
+  const stream = engine.answer({
+    principal: { userKey, roles: [], teamKeys: [] },
+    question: "acme",
+    history: [],
+  });
+  const it = stream[Symbol.asyncIterator]();
   const first = await it.next();
   expect(first.done).toBe(false);
   const chunk = first.value as AnswerChunk;

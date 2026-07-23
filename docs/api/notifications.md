@@ -470,7 +470,15 @@ Arms are merged in that order (relevance → urgency → recency) and deduped. A
 
 ### Response `200`
 
-`200 OK` with `Content-Type: text/event-stream` — a Server-Sent-Events stream (not JSON). Headers also set `Cache-Control: no-cache, no-transform`, `Connection: keep-alive`, and `X-Accel-Buffering: no` (disables proxy buffering so tokens arrive incrementally). The body is a sequence of SSE frames:
+`200 OK` with `Content-Type: text/event-stream` — a Server-Sent-Events stream (not JSON). Headers also set `Cache-Control: no-cache, no-transform`, `Connection: keep-alive`, and `X-Accel-Buffering: no` (disables proxy buffering so tokens arrive incrementally). The body is a sequence of SSE frames, always in this order — **`sources` → token deltas → `done`** (or an `error` frame in place of `done` on a mid-stream failure):
+
+- **Sources frame** — a **single** named-event frame emitted **first, before any token deltas**. It carries the trusted grounding set (the same audience-scoped notifications the answer is built from) as a JSON array of [`ChatSource`](#chatsource):
+
+  ```
+  event: sources
+  data: [{"ref":"n1","id":"dsr-1234-sla-warning-72h","title":"DSR #1234 is 3 days from SLA breach","priority":"critical","ageMinutes":42,"actions":[{"label":"Open DSR","method":"GET","url":"https://app/dsr/1234","icon":"folder-open"}]}]
+
+  ```
 
 - **Token deltas** — many frames, one per model token chunk:
 
@@ -495,6 +503,23 @@ Arms are merged in that order (relevance → urgency → recency) and deduped. A
   data: {"error":"stream failed"}
 
   ```
+
+#### ChatSource
+
+Each entry in the `sources` frame's array. The [`ChatSource`](../../packages/shared/src/notification.ts) type is the wire contract shared by server and browser (it lives in `@notifications/shared`), so the client can name it without depending on the server library:
+
+| Field        | Type                                        | Notes                                                                                                                                                                                                                                                       |
+| ------------ | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ref`        | string                                      | Stable **per-answer** id (`"n1"`..`"nK"`), assigned over the grounding set in order. This is the tag the model cites inline (`[n#]`) and the key the client maps a citation back to.                                                                        |
+| `id`         | string                                      | The cited notification's contract [`id`](#schema).                                                                                                                                                                                                          |
+| `title`      | string                                      | The notification's title.                                                                                                                                                                                                                                   |
+| `priority`   | `'low' \| 'normal' \| 'high' \| 'critical'` | The notification's priority.                                                                                                                                                                                                                                |
+| `ageMinutes` | number                                      | Minutes since the notification's `created_at`.                                                                                                                                                                                                              |
+| `actions`    | array of [Action](#action)                  | The notification's **real** actions (same `{ label, kind, method, url, icon? }` shape as the notification schema), **re-validated at the read boundary** — malformed/unsafe actions are dropped, so only vetted actions ever reach the client. May be `[]`. |
+
+**Inline citations.** The model is instructed to cite notifications inline using their `[n#]` tag. The client maps a cited `[n#]` back to the matching `ChatSource` from the `sources` frame and renders it as an action-bearing chip. Because the model only **selects** from the trusted, server-sent `sources` (it never emits action URLs itself), it **can never fabricate an action** — the actions rendered are always the vetted ones the server sent.
+
+The `sources` set is exactly the [audience-scoped grounding set](#grounding--retrieval) described above — no extra query, no scoping change. A caller's `sources` therefore only ever contain their **own** audience-scoped notifications, and (like the rest of the chat context) they are **never logged** (PII).
 
 ### Rate limit
 
