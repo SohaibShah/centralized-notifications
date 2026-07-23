@@ -30,6 +30,7 @@ test.describe("AI chat", () => {
         description: "seed for the AI chat e2e",
         priority: "critical",
         snoozable: true,
+        actions: [{ label: "Open", kind: "link", method: "GET", url: "https://example.com/x" }],
         audience: { scope: "global" },
       },
     });
@@ -50,5 +51,11 @@ test.describe("AI chat", () => {
     await expect
       .poll(async () => (await answer.first().innerText()).trim().length, { timeout: 20_000 })
       .toBeGreaterThan(0);
+
+    // The fake provider cites [n1] → a citation chip renders; expanding it reveals the action button.
+    const chip = page.locator('[data-test="chip-toggle"]');
+    await expect(chip.first()).toBeVisible({ timeout: 20_000 });
+    await chip.first().click();
+    await expect(page.locator('[data-test="chip-action"]').first()).toBeVisible();
   });
 });
