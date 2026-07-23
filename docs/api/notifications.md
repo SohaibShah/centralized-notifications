@@ -412,6 +412,114 @@ To produce the summary, the caller's unread notification **titles and descriptio
 
 None on the caller's data — read-only (no read-state or notification writes, no events published). The only state touched is the in-process per-user summary cache and rate-limit window, and — on a cache miss for a non-empty set — one call to the injected `AiProvider`.
 
+## POST /notifications/chat
+
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
+
+Streaming **AI Q/A** grounded in the caller's own notifications: the user asks a natural-language question and the answer is streamed back token-by-token over Server-Sent Events. It is the **second consumer of the host-injected `AiProvider` seam** (after [`GET /notifications/summary`](#get-notificationssummary)) — but where the summary triages the unread set, chat answers a specific question grounded in the caller's audience-scoped notifications, **both read and unread**. The library owns the retrieval, prompt, and gating; the host owns the model transport (in the reference app, a local Ollama model behind an OpenAI-compatible adapter).
+
+**Chat is client-only multi-turn — nothing is persisted server-side.** There is no conversation table and no session state; the client holds the recent turns and replays them in the [`history`](#request-6) field on each request. The engine also **never logs** the question, the client-supplied history, or the matched notification content.
+
+Source of truth: [`packages/server-fastify/src/routes/chat.ts`](../../packages/server-fastify/src/routes/chat.ts) (the route + SSE framing + status mapping), [`packages/core/src/ai/answer.ts`](../../packages/core/src/ai/answer.ts) (`AnswerEngine.answer` — gating, rate limit, retrieval, provider stream), [`packages/core/src/ai/retrieve.ts`](../../packages/core/src/ai/retrieve.ts) (grounding/retrieval), [`packages/core/src/ai/chat-prompt.ts`](../../packages/core/src/ai/chat-prompt.ts) (prompt construction), and [`packages/core/src/ai/errors.ts`](../../packages/core/src/ai/errors.ts) (the error → status contract).
+
+> **Gated by a feature flag.** Chat is only available when the `chatbotEnabled` [setting](../../packages/core/src/types.ts) is on (see the [Admin API](./admin.md) feature flags). With it off the endpoint returns `404`, so a disabled feature is indistinguishable from a route that doesn't exist.
+
+> **Pre-stream errors are normal JSON; mid-stream errors are an SSE frame.** The answer generator's first `.next()` runs the whole gate — flag check, provider check, rate limit, retrieval — **before** any bytes are streamed. The route advances the generator once _before_ hijacking the response, so anything that throws at the gate maps to an ordinary JSON error status (`400`/`401`/`404`/`429`/`501`/`502`) with the HTTP status set accordingly. Only after the first token does the route commit to a `200` SSE stream; a provider failure **after** streaming has started can no longer change the status (headers are already sent) and instead surfaces as an `error` SSE frame (see [Response](#response-200-3)).
+
+### Request
+
+Body (JSON, zod-validated at the boundary):
+
+| Field      | Type                           | Required | Notes                                                                                                                                                                                                                                     |
+| ---------- | ------------------------------ | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `question` | string (1–2000 chars)          | yes      | The natural-language question. Empty or over 2000 chars → `400`.                                                                                                                                                                          |
+| `history`  | array of [ChatTurn](#chatturn) | no       | The client-held recent conversation turns, replayed each request (chat is client-only multi-turn). Defaults to `[]`; **at most 8 items** — more → `400`. Core also re-caps at 8 (`slice(-8)`) so a direct library caller can't exceed it. |
+
+#### ChatTurn
+
+Each entry in `history`:
+
+| Field     | Type                    | Required | Notes                                              |
+| --------- | ----------------------- | -------- | -------------------------------------------------- |
+| `role`    | `'user' \| 'assistant'` | yes      | Who produced the turn.                             |
+| `content` | string (1–4000 chars)   | yes      | The turn's text. Empty or over 4000 chars → `400`. |
+
+```json
+{
+  "question": "Which DSRs are close to their SLA?",
+  "history": [
+    { "role": "user", "content": "What needs my attention today?" },
+    { "role": "assistant", "content": "A DSR is 3 days from its SLA breach." }
+  ]
+}
+```
+
+### Grounding / retrieval
+
+The answer is grounded **only** in the caller's [audience-scoped](#audience-scoping) notifications — the same audience predicate as the feed, enforced **in SQL** as a bound-parameter `WHERE` clause with no join to any identity table. This means **one user can never receive another user's or audience's notifications in an answer**, even via prompt injection: the grounding set is filtered before it ever reaches the model. Suppressed (admin-disabled) rows are also excluded.
+
+The retrieval set is the union of two queries against `notifications`, deduped by `id` and capped at **20** items total:
+
+| Source               | Query                                                                                                                                                                           | Cap |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| Full-text relevance  | Postgres full-text search — `n.search @@ websearch_to_tsquery('english', question)`, ordered by `ts_rank` descending. `websearch_to_tsquery` parameterizes the question safely. | 12  |
+| Recent high-priority | Ordered by `priority_rank ASC, created_at DESC` — so general questions work even with no keyword hit.                                                                           | 8   |
+
+Full-text matches are merged first (most relevant), then recency fills the remainder. Each item is tagged **`[read]`/`[unread]`** and passed to the model with an instruction to answer **only** from the provided notifications, to never invent notifications, and to scope by the question (unread-only, read-only, or both depending on what was asked). Descriptions are truncated to 280 chars in the context.
+
+### Response `200`
+
+`200 OK` with `Content-Type: text/event-stream` — a Server-Sent-Events stream (not JSON). Headers also set `Cache-Control: no-cache, no-transform`, `Connection: keep-alive`, and `X-Accel-Buffering: no` (disables proxy buffering so tokens arrive incrementally). The body is a sequence of SSE frames:
+
+- **Token deltas** — many frames, one per model token chunk:
+
+  ```
+  data: {"delta":"Which "}
+
+  data: {"delta":"DSRs..."}
+
+  ```
+
+- **Terminal frame** — once the model finishes, a single done marker and the stream closes:
+
+  ```
+  data: {"done":true}
+
+  ```
+
+- **Mid-stream error frame** — if the provider fails **after** streaming has started, a single error frame is written and the stream closes. Because the `200` headers were already sent, the **HTTP status stays `200`** — the failure is only visible in-band:
+
+  ```
+  event: error
+  data: {"error":"stream failed"}
+
+  ```
+
+### Rate limit
+
+Model calls are rate-limited **per recipient** to **10 per minute** (a sliding 60-second window, keyed on `principal.userKey`). Exceeding it throws at the gate (before any streaming), so it surfaces as a `429` JSON response, not an SSE frame. Single-instance, in-process — like the summarizer's limiter, not shared across replicas.
+
+### PII
+
+To answer, three things reach the configured AI provider (the intended egress): the caller's **question**, the client-supplied **history**, and the **matched notification content** (titles + descriptions, descriptions truncated to 280 chars). In the reference app the provider is local (Ollama), but a host may inject a cloud model — so treat the chat context as leaving the process boundary. Per the [notifications domain rules](../../.claude/rules/notifications-domain.md), the engine **never logs** the question, the history, the retrieved context, or the model output.
+
+### Errors
+
+All of these are returned as **normal JSON before any streaming** (the generator's first `.next()` runs the gate before the response is hijacked):
+
+| Status | Body                                     | Reason                                                                                                                                                                                                             |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `400`  | `{ "error": "invalid request body" }`    | Body failed zod validation — missing/empty `question`, over 2000 chars, bad `history` shape, or `history` with > 8 items.                                                                                          |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie / the host `auth` adapter resolved no `Principal`.                                                                                                                                         |
+| `404`  | `{ "error": "chat disabled" }`           | The `chatbotEnabled` feature flag is off — chat is turned off for everyone (`AiDisabledError`).                                                                                                                    |
+| `429`  | `{ "error": "rate limited" }`            | The per-recipient rate limit (10 model calls/min) was exceeded (`AiRateLimitError`).                                                                                                                               |
+| `501`  | `{ "error": "ai not configured" }`       | No streaming `AiProvider` was injected — the feature is enabled but the host wired no provider implementing `completeStream` (`AiNotConfiguredError`).                                                             |
+| `502`  | `{ "error": "chat unavailable" }`        | The injected provider failed **before the first token** — timeout, non-2xx, etc. (`AiProviderError`). A failure _after_ the first token is an in-band SSE `error` frame instead (see [Response](#response-200-3)). |
+
+### Side effects
+
+None on the caller's data — read-only (no read-state or notification writes, no events published, nothing persisted about the conversation). The only state touched is the in-process per-user rate-limit window, and — once past the gate — one streaming call to the injected `AiProvider`.
+
 ## Design decisions
 
 These are baked into the contract deliberately (contract checkpoint, see
