@@ -1,4 +1,4 @@
-import { ingest } from "../pipeline/ingest";
+import type { NotificationService } from "@notifications/core";
 import { simulate, type SimulateOptions } from "./simulator";
 
 export interface PublishSummary {
@@ -9,12 +9,14 @@ export interface PublishSummary {
 }
 
 /**
- * Dev trigger: generate a simulated burst (Task 4) and drive it through the real
- * intake pipeline (Task 5) so notifications actually land in the DB before real
- * modules / the frontend exist. With a fixed `seed` the ids repeat, so a second call
- * reports every item as `duplicate` — an end-to-end demonstration of idempotency.
+ * Dev trigger: generate a simulated burst and drive it through the real intake pipeline (the
+ * service) so notifications actually land in the DB. With a fixed `seed` the ids repeat, so a second
+ * call reports every item as `duplicate` — an end-to-end demonstration of idempotency.
  */
-export async function publishSimulated(opts: SimulateOptions = {}): Promise<PublishSummary> {
+export async function publishSimulated(
+  service: NotificationService,
+  opts: SimulateOptions = {},
+): Promise<PublishSummary> {
   const batch = simulate(opts);
   const summary: PublishSummary = {
     total: batch.length,
@@ -23,7 +25,7 @@ export async function publishSimulated(opts: SimulateOptions = {}): Promise<Publ
     invalid: 0,
   };
   for (const notification of batch) {
-    const { status } = await ingest(notification);
+    const { status } = await service.ingest(notification);
     summary[status]++;
   }
   return summary;
