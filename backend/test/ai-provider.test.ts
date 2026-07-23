@@ -12,6 +12,14 @@ describe("createFakeProvider", () => {
     const out = await createFakeProvider().complete(messages);
     expect(out.length).toBeGreaterThan(0);
   });
+
+  it("streams a canned answer in chunks that cites [n1]", async () => {
+    const out: string[] = [];
+    for await (const d of createFakeProvider().completeStream!([])) out.push(d);
+    expect(out.length).toBeGreaterThan(1);
+    expect(out.join("")).toMatch(/notification/i);
+    expect(out.join("")).toContain("[n1]"); // exercises the citation-chip path offline
+  });
 });
 
 describe("createOpenAiProvider", () => {
@@ -43,5 +51,23 @@ describe("createOpenAiProvider", () => {
     );
     const provider = createOpenAiProvider({ baseUrl: "http://x/v1", model: "m" });
     await expect(provider.complete(messages)).rejects.toThrow(/502/);
+  });
+
+  it("completeStream parses SSE delta chunks", async () => {
+    const sse =
+      'data: {"choices":[{"delta":{"content":"Hel"}}]}\n\n' +
+      'data: {"choices":[{"delta":{"content":"lo"}}]}\n\n' +
+      "data: [DONE]\n\n";
+    const body = new ReadableStream<Uint8Array>({
+      start(c) {
+        c.enqueue(new TextEncoder().encode(sse));
+        c.close();
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(async () => ({ ok: true, body })) as unknown as typeof fetch);
+    const provider = createOpenAiProvider({ baseUrl: "http://x/v1", model: "m" });
+    const out: string[] = [];
+    for await (const d of provider.completeStream!([])) out.push(d);
+    expect(out.join("")).toBe("Hello");
   });
 });

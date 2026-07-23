@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { actionSchema, audienceSchema, FEED_SORTS, notificationSchema } from "../src/notification";
+import {
+  actionSchema,
+  audienceSchema,
+  FEED_SORTS,
+  formatRelativeAge,
+  notificationSchema,
+} from "../src/notification";
 
 // A minimal valid notification reused across cases.
 const validGlobal = {
@@ -207,5 +213,16 @@ describe("action kind", () => {
     expect(() =>
       actionSchema.parse({ label: "X", method: "GET", url: "https://app/x", kind: "explode" }),
     ).toThrow();
+  });
+});
+
+describe("formatRelativeAge", () => {
+  it("uses minute resolution under an hour, then hours, then days", () => {
+    expect(formatRelativeAge(0)).toBe("0m");
+    expect(formatRelativeAge(34)).toBe("34m");
+    expect(formatRelativeAge(59)).toBe("59m");
+    expect(formatRelativeAge(60)).toBe("1h");
+    expect(formatRelativeAge(190)).toBe("3h");
+    expect(formatRelativeAge(1500)).toBe("1d");
   });
 });
