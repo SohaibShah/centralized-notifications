@@ -30,10 +30,11 @@
     "test": "vitest run --passWithNoTests"
   },
   "dependencies": {
-    "@notifications/shared": "workspace:*",
     "@lucide/vue": "^1.23.0",
+    "@notifications/shared": "workspace:*",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "marked": "^18.0.7",
     "tailwind-merge": "^3.6.0",
     "zod": "^3.24.1"
   },
