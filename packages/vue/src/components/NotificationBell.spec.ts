@@ -1,23 +1,19 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
-import { mount } from "@vue/test-utils";
+import { describe, expect, it } from "vitest";
 import NotificationBell from "./NotificationBell.vue";
-import { useFeedStore } from "@/stores/feed";
+import { buildTestContext, mountWithProvider } from "@/test/provider-harness";
 
 describe("NotificationBell", () => {
-  beforeEach(() => setActivePinia(createPinia()));
-
   it("shows the unread count as a badge and in the aria-label (from the server counts snapshot)", () => {
-    const feed = useFeedStore();
-    feed.counts = { unread: 2, unreadByPriority: { critical: 1, high: 1, normal: 0, low: 0 } };
-    const wrapper = mount(NotificationBell);
+    const ctx = buildTestContext();
+    ctx.feed.counts = { unread: 2, unreadByPriority: { critical: 1, high: 1, normal: 0, low: 0 } };
+    const wrapper = mountWithProvider(NotificationBell, { context: ctx });
     const trigger = wrapper.get('button[aria-haspopup="dialog"]');
     expect(trigger.attributes("aria-label")).toContain("2 unread");
     expect(trigger.text()).toContain("2");
   });
 
   it("opens the popover on click and sets aria-expanded", async () => {
-    const wrapper = mount(NotificationBell, { attachTo: document.body });
+    const wrapper = mountWithProvider(NotificationBell, { attachTo: document.body });
     const trigger = wrapper.get('button[aria-haspopup="dialog"]');
     expect(trigger.attributes("aria-expanded")).toBe("false");
     await trigger.trigger("click");
@@ -27,7 +23,7 @@ describe("NotificationBell", () => {
   });
 
   it("closes on Escape and returns focus to the bell", async () => {
-    const wrapper = mount(NotificationBell, { attachTo: document.body });
+    const wrapper = mountWithProvider(NotificationBell, { attachTo: document.body });
     const trigger = wrapper.get('button[aria-haspopup="dialog"]');
     await trigger.trigger("click");
     document.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
@@ -38,7 +34,7 @@ describe("NotificationBell", () => {
   });
 
   it("closes when a pointer press lands outside the bell", async () => {
-    const wrapper = mount(NotificationBell, { attachTo: document.body });
+    const wrapper = mountWithProvider(NotificationBell, { attachTo: document.body });
     const trigger = wrapper.get('button[aria-haspopup="dialog"]');
     await trigger.trigger("click");
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
@@ -51,7 +47,7 @@ describe("NotificationBell", () => {
   it("does not steal focus back to the bell when closed by an outside pointer press", async () => {
     const outside = document.createElement("button");
     document.body.appendChild(outside);
-    const wrapper = mount(NotificationBell, { attachTo: document.body });
+    const wrapper = mountWithProvider(NotificationBell, { attachTo: document.body });
     const trigger = wrapper.get('button[aria-haspopup="dialog"]');
     await trigger.trigger("click");
     outside.focus();
@@ -71,7 +67,7 @@ describe("NotificationBell", () => {
     const overlay = document.createElement("div");
     overlay.setAttribute("data-notification-overlay", "");
     document.body.appendChild(overlay);
-    const wrapper = mount(NotificationBell, { attachTo: document.body });
+    const wrapper = mountWithProvider(NotificationBell, { attachTo: document.body });
     const trigger = wrapper.get('button[aria-haspopup="dialog"]');
     await trigger.trigger("click");
     expect(wrapper.find('[role="dialog"]').exists()).toBe(true);
@@ -85,8 +81,9 @@ describe("NotificationBell", () => {
   });
 
   it("reflects a live unread arrival while the popover is closed", async () => {
-    const feed = useFeedStore();
-    const wrapper = mount(NotificationBell);
+    const ctx = buildTestContext();
+    const feed = ctx.feed;
+    const wrapper = mountWithProvider(NotificationBell, { context: ctx });
     const trigger = wrapper.get('button[aria-haspopup="dialog"]');
     expect(trigger.attributes("aria-expanded")).toBe("false");
     expect(trigger.text()).not.toContain("1");

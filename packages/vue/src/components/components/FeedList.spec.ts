@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
+import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
-import type { FeedGroup } from "@/stores/feed";
+import type { FeedGroup } from "@/state/feed";
 import FeedList from "./FeedList.vue";
 import { feedItem } from "@/test-support/feedItem";
 
@@ -19,8 +18,6 @@ const groups: FeedGroup[] = [
 ];
 
 describe("FeedList", () => {
-  beforeEach(() => setActivePinia(createPinia()));
-
   it("shows a Mark all read control on the needs-action header and emits markAll", async () => {
     const wrapper = mount(FeedList, {
       props: { groups, unread: 2, hasMore: false, loadingMore: false },

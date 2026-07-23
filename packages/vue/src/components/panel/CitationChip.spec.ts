@@ -2,8 +2,8 @@ import { describe, expect, it, vi } from "vitest";
 import { mount } from "@vue/test-utils";
 
 const { runActionSpy } = vi.hoisted(() => ({ runActionSpy: vi.fn() }));
-vi.mock("@/composables/useNotificationActions", () => ({
-  useNotificationActions: () => ({ runAction: runActionSpy }),
+vi.mock("@/provider/context", () => ({
+  useActions: () => ({ runAction: runActionSpy }),
 }));
 
 const CitationChip = (await import("./CitationChip.vue")).default;

@@ -1,5 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
-import { createPinia, setActivePinia } from "pinia";
+import { describe, expect, it } from "vitest";
 import { mount } from "@vue/test-utils";
 import type { FeedNotification } from "@notifications/shared";
 import NotificationCardRenderer from "./NotificationCardRenderer.vue";
@@ -21,8 +20,6 @@ function withActions(over: Partial<FeedNotification> & { id: string }): FeedNoti
 }
 
 describe("NotificationCardRenderer", () => {
-  beforeEach(() => setActivePinia(createPinia()));
-
   it("shows no action bar for a card without actions, even after a click (still marks read)", async () => {
     const wrapper = mount(NotificationCardRenderer, {
       props: { notification: feedItem({ id: "a" }) },

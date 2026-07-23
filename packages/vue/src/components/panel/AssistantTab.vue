@@ -1,16 +1,16 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { SendHorizontal, Sparkles } from "@lucide/vue";
-import Icon from "@/components/ui/Icon.vue";
-import { useChatStore } from "@/stores/chat";
-import { useSettingsStore } from "@/stores/settings";
+import Icon from "@/ui/Icon.vue";
+import { useChat } from "@/provider/context";
+import { useSettings } from "@/provider/context";
 import CitationChip from "./CitationChip.vue";
 
 // Real streaming Q/A over the user's notifications. The thread + streaming live in the chat store;
 // this component owns only the draft input. Gated on the chatbotEnabled flag (the server enforces
 // the same flag independently — this is UI affordance, not the security boundary).
-const chat = useChatStore();
-const settings = useSettingsStore();
+const chat = useChat();
+const settings = useSettings();
 const draft = ref("");
 
 function onSubmit(): void {

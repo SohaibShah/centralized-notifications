@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { Bell } from "@lucide/vue";
-import Icon from "@/components/ui/Icon.vue";
-import { useFeedStore } from "@/stores/feed";
-import { useNotificationPanelStore } from "@/stores/notificationPanel";
+import Icon from "@/ui/Icon.vue";
+import { useFeed } from "@/provider/context";
+import { usePanel } from "@/provider/context";
 import NotificationPopover from "./NotificationPopover.vue";
 
-const feed = useFeedStore();
-const panel = useNotificationPanelStore();
+const feed = useFeed();
+const panel = usePanel();
 const root = ref<HTMLElement | null>(null);
 const bellButton = ref<HTMLButtonElement | null>(null);
 

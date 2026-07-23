@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
 import { X } from "@lucide/vue";
-import Icon from "@/components/ui/Icon.vue";
-import { AUTO_DISMISS_MS, useToastStore, type ToastItem } from "@/stores/toast";
+import Icon from "@/ui/Icon.vue";
+import { AUTO_DISMISS_MS, type ToastItem } from "@/state/toast";
 import { priorityDotClass } from "@/design/tokens";
+import { useToast } from "@/provider/context";
 
 const props = defineProps<{ toast: ToastItem }>();
 const emit = defineEmits<{ dismiss: []; view: [] }>();
-const toasts = useToastStore();
+const toasts = useToast();
 
 // The auto-dismiss timer pauses while the toast is hovered OR keyboard-focused, and only
 // resumes once BOTH are clear — ref-counted via two booleans, not one flag, so moving the

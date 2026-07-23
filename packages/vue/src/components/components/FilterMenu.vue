@@ -6,9 +6,9 @@ import {
   type FeedSort,
   type NotificationPriority,
 } from "@notifications/shared";
-import Icon from "@/components/ui/Icon.vue";
+import Icon from "@/ui/Icon.vue";
 import { priorityDotClass, priorityLabel, priorityRank } from "@/design/tokens";
-import { useFeedStore } from "@/stores/feed";
+import { useFeed } from "@/provider/context";
 
 const sortOptions: { value: FeedSort; label: string }[] = [
   { value: "newest", label: "Newest" },
@@ -21,7 +21,7 @@ const sortOptions: { value: FeedSort; label: string }[] = [
 // FilterMenu"). Facets are priority and the modules present in the loaded feed; the
 // search box narrows the option list. State lives in the feed store, so applied
 // filters also surface as removable pills in the filter bar.
-const feed = useFeedStore();
+const feed = useFeed();
 
 const open = ref(false);
 const search = ref("");

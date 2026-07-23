@@ -1,15 +1,15 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from "vue";
 import { Search, Sparkles, X } from "@lucide/vue";
-import Icon from "@/components/ui/Icon.vue";
-import { useFeedStore } from "@/stores/feed";
+import Icon from "@/ui/Icon.vue";
+import { useFeed } from "@/provider/context";
 import FilterMenu from "./components/FilterMenu.vue";
 import InboxTab from "./panel/InboxTab.vue";
 import AssistantTab from "./panel/AssistantTab.vue";
 
 defineEmits<{ close: [] }>();
 
-const feed = useFeedStore();
+const feed = useFeed();
 const tab = ref<"inbox" | "assistant">("inbox");
 const inboxTabButton = ref<HTMLButtonElement | null>(null);
 const searchOpen = ref(false);

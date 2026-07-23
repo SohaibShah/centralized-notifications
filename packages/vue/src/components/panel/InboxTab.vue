@@ -2,20 +2,20 @@
 import { computed, onUnmounted, ref, watch } from "vue";
 import { ChevronDown, Inbox, SearchX, Sparkles, WifiOff } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
-import Button from "@/components/ui/Button.vue";
-import Chip from "@/components/ui/Chip.vue";
-import Icon from "@/components/ui/Icon.vue";
-import Skeleton from "@/components/ui/Skeleton.vue";
-import StatePanel from "@/components/ui/StatePanel.vue";
-import { useFeedStore } from "@/stores/feed";
-import { useSettingsStore } from "@/stores/settings";
-import { useSummaryStore } from "@/stores/summary";
-import { useNotificationActions } from "@/composables/useNotificationActions";
+import Button from "@/ui/Button.vue";
+import Chip from "@/ui/Chip.vue";
+import Icon from "@/ui/Icon.vue";
+import Skeleton from "@/ui/Skeleton.vue";
+import StatePanel from "@/ui/StatePanel.vue";
+import { useFeed } from "@/provider/context";
+import { useSettings } from "@/provider/context";
+import { useSummary } from "@/provider/context";
+import { useActions } from "@/provider/context";
 import FeedList from "../components/FeedList.vue";
 
-const feed = useFeedStore();
-const settings = useSettingsStore();
-const summary = useSummaryStore();
+const feed = useFeed();
+const settings = useSettings();
+const summary = useSummary();
 const aiOpen = ref(false);
 
 // One-shot "bloom" on the AI summary glow on each click. Bumping the counter re-keys the glow
@@ -52,7 +52,7 @@ const isFilteredEmpty = computed(
 
 // The action path is shared with the AI chat via useNotificationActions ("link" opens the url;
 // "dispatch" is the server-side proxy stub; either marks the notification read).
-const { runAction } = useNotificationActions();
+const { runAction } = useActions();
 function onAction(action: NotificationAction, notification: FeedNotification) {
   runAction(action, { id: notification.id });
 }

@@ -3,12 +3,12 @@ import { ref } from "vue";
 import type { ChatSource } from "@notifications/shared";
 import { formatRelativeAge } from "@notifications/shared";
 import { actionIcon } from "@/design/icons";
-import Icon from "@/components/ui/Icon.vue";
-import { useNotificationActions } from "@/composables/useNotificationActions";
+import Icon from "@/ui/Icon.vue";
+import { useActions } from "@/provider/context";
 
 const props = defineProps<{ source: ChatSource }>();
 const open = ref(false);
-const { runAction } = useNotificationActions();
+const { runAction } = useActions();
 
 // Priority → dot color, mirroring the notification card's convention.
 const dotClass: Record<ChatSource["priority"], string> = {

@@ -1,13 +1,13 @@
 <script setup lang="ts">
 import { onMounted, onBeforeUnmount } from "vue";
-import { useToastStore } from "@/stores/toast";
-import { useNotificationPanelStore } from "@/stores/notificationPanel";
-import { useFeedStore } from "@/stores/feed";
+import { useToast } from "@/provider/context";
+import { usePanel } from "@/provider/context";
+import { useFeed } from "@/provider/context";
 import CriticalToast from "./CriticalToast.vue";
 
-const toasts = useToastStore();
-const panel = useNotificationPanelStore();
-const feed = useFeedStore();
+const toasts = useToast();
+const panel = usePanel();
+const feed = useFeed();
 let off: (() => void) | null = null;
 
 onMounted(() => {

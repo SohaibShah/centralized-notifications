@@ -14,12 +14,12 @@ const { chatState, settingsState, sendSpy } = vi.hoisted(() => ({
   sendSpy: vi.fn(),
 }));
 
-vi.mock("@/stores/chat", () => ({ useChatStore: () => chatState }));
-vi.mock("@/stores/settings", () => ({ useSettingsStore: () => settingsState }));
-// CitationChip (rendered for known refs) pulls in the shared action composable → feed store; stub it
-// so this component test needs no Pinia.
-vi.mock("@/composables/useNotificationActions", () => ({
-  useNotificationActions: () => ({ runAction: vi.fn() }),
+// AssistantTab reads useChat/useSettings; CitationChip (rendered for known refs) reads useActions.
+// Mock the provider accessors directly so this component test needs no real context.
+vi.mock("@/provider/context", () => ({
+  useChat: () => chatState,
+  useSettings: () => settingsState,
+  useActions: () => ({ runAction: vi.fn() }),
 }));
 
 // Wire the spy into the reactive store's send after the mocks are defined.

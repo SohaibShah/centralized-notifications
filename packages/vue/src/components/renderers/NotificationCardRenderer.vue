@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { ChevronDown, Circle, CircleCheck } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
-import Icon from "@/components/ui/Icon.vue";
+import Icon from "@/ui/Icon.vue";
 import { actionIcon } from "@/design/icons";
 import { priorityLabel, priorityTextClass } from "@/design/tokens";
 import { exactTime, relativeTime } from "@/lib/time";
