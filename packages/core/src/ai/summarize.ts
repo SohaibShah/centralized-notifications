@@ -98,7 +98,11 @@ export class SummaryEngine {
     const { context, ids } = await buildSummaryContext(this.deps.query, principal, CAP);
     if (context.items.length === 0) return { summary: "You're all caught up.", basedOn: 0 };
 
-    const signature = createHash("sha256").update(ids.join("|")).digest("hex");
+    // Signature includes totalUnread so a change *outside* the top-N cap (which wouldn't alter `ids`)
+    // still invalidates — the prompt embeds the total, so a stale total shouldn't be served.
+    const signature = createHash("sha256")
+      .update(`${context.totalUnread}|${ids.join("|")}`)
+      .digest("hex");
     const cached = this.cache.get(principal.userKey);
     if (cached && cached.signature === signature) {
       return { summary: cached.summary, basedOn: cached.basedOn };
@@ -112,9 +116,12 @@ export class SummaryEngine {
         temperature: 0.3,
       });
     } catch (err) {
-      throw new AiProviderError((err as Error).message);
+      throw new AiProviderError(err instanceof Error ? err.message : String(err));
     }
-    const result = { summary: text.trim(), basedOn: context.items.length };
+    const summary = text.trim();
+    // A 200-with-empty-content provider must not silently cache a blank digest.
+    if (!summary) throw new AiProviderError("provider returned an empty completion");
+    const result = { summary, basedOn: context.items.length };
     this.cache.set(principal.userKey, { signature, ...result });
     return result;
   }

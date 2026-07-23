@@ -74,6 +74,18 @@ test("with unread → provider result; unchanged set is served from cache (no 2n
   expect(provider.complete).toHaveBeenCalledTimes(1); // cache hit
 });
 
+test("an empty/whitespace completion → AiProviderError (not cached as a blank summary)", async () => {
+  const userKey = `blank-${stamp}`;
+  await seed(userKey, `blank-a-${stamp}`);
+  const provider = { complete: vi.fn(async () => "   ") } satisfies AiProvider;
+  const engine = new SummaryEngine({ query, getSettings: async () => on, provider });
+  const principal = { userKey, roles: [], teamKeys: [] };
+  await expect(engine.summarize(principal)).rejects.toBeInstanceOf(AiProviderError);
+  // Not cached: a second call still hits the (now non-blank) provider rather than a stored blank.
+  provider.complete.mockResolvedValueOnce("recovered");
+  expect(await engine.summarize(principal)).toEqual({ summary: "recovered", basedOn: 1 });
+});
+
 test("a throwing provider → AiProviderError", async () => {
   const userKey = `err-${stamp}`;
   await seed(userKey, `err-a-${stamp}`);
