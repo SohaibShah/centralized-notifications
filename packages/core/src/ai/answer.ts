@@ -1,3 +1,4 @@
+import type { NotificationAction, NotificationPriority } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { AiProvider, Principal, Settings } from "../types";
 import { AiDisabledError, AiNotConfiguredError, AiProviderError, AiRateLimitError } from "./errors";
@@ -5,6 +6,20 @@ import { buildChatMessages, type ChatTurn } from "./chat-prompt";
 import { retrieveForAnswer } from "./retrieve";
 
 export type { ChatTurn };
+
+/** A notification the answer may cite, with a stable per-answer ref and its real actions. */
+export interface ChatSource {
+  ref: string; // "n1".."nK" within this answer
+  id: string;
+  title: string;
+  priority: NotificationPriority;
+  ageMinutes: number;
+  actions: NotificationAction[];
+}
+
+/** The stream the chat endpoint turns into SSE: the trusted grounding set first, then token deltas. */
+export type AnswerChunk =
+  { type: "sources"; sources: ChatSource[] } | { type: "delta"; text: string };
 
 const RATE_LIMIT = 10; // chat turns per recipient per minute
 
@@ -27,16 +42,36 @@ export class AnswerEngine {
     principal: Principal;
     question: string;
     history: ChatTurn[];
-  }): AsyncIterable<string> {
+  }): AsyncIterable<AnswerChunk> {
     if (!(await this.deps.getSettings()).chatbotEnabled) throw new AiDisabledError();
     const provider = this.deps.provider;
     if (!provider?.completeStream) throw new AiNotConfiguredError();
     this.checkRate(args.principal.userKey);
 
     const context = await retrieveForAnswer(this.deps.query, args.principal, args.question);
-    const messages = buildChatMessages(context, args.history, args.question);
+    const sources: ChatSource[] = context.items.map((it, i) => ({
+      ref: `n${i + 1}`,
+      id: it.id,
+      title: it.title,
+      priority: it.priority,
+      ageMinutes: it.ageMinutes,
+      actions: it.actions,
+    }));
+    yield { type: "sources", sources };
+
+    const messages = buildChatMessages(
+      context,
+      sources.map((s) => ({ ref: s.ref, id: s.id })),
+      args.history,
+      args.question,
+    );
     try {
-      yield* provider.completeStream(messages, { temperature: 0.2, maxTokens: 500 });
+      for await (const text of provider.completeStream(messages, {
+        temperature: 0.2,
+        maxTokens: 500,
+      })) {
+        yield { type: "delta", text };
+      }
     } catch (err) {
       throw new AiProviderError(err instanceof Error ? err.message : String(err));
     }

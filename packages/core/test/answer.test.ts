@@ -6,7 +6,7 @@ import {
   AiProviderError,
   AiRateLimitError,
 } from "../src/ai/errors";
-import { AnswerEngine } from "../src/ai/answer";
+import { AnswerEngine, type AnswerChunk } from "../src/ai/answer";
 import { createDb } from "../src/db";
 import { persist } from "../src/pipeline/persist";
 import type { AiMessage, AiProvider, Principal, Settings } from "../src/types";
@@ -39,10 +39,31 @@ async function seed(userScope: string, id: string, title = id): Promise<void> {
   await persist(query, n, false);
 }
 
-async function collect(it: AsyncIterable<string>): Promise<string> {
+async function persistWithAction(userScope: string, id: string, title: string): Promise<void> {
+  const n: Notification = {
+    id,
+    module: "dsr",
+    title,
+    description: "",
+    priority: "high",
+    snoozable: false,
+    audience: { scope: "user", id: userScope },
+    actions: [{ label: "Open", kind: "link", method: "GET", url: "https://x/1" }],
+  };
+  await persist(query, n, false);
+}
+
+async function collect(it: AsyncIterable<AnswerChunk>): Promise<string> {
   let s = "";
-  for await (const d of it) s += d;
+  for await (const c of it) if (c.type === "delta") s += c.text;
   return s;
+}
+
+async function sourcesOf(
+  it: AsyncIterable<AnswerChunk>,
+): Promise<AnswerChunk & { type: "sources" }> {
+  for await (const c of it) if (c.type === "sources") return c;
+  throw new Error("no sources chunk");
 }
 
 const helloProvider: AiProvider = {
@@ -140,6 +161,32 @@ test("audience isolation — one user's grounding never includes another's notif
   const echoed = await collect(engine.answer({ principal: a, question: secretTitle, history: [] }));
   expect(echoed).not.toContain(secretTitle);
   expect(echoed).toContain("A visible note");
+
+  // The sources chunk itself must also be scoped to A — B's title never appears in it.
+  const src = await sourcesOf(engine.answer({ principal: a, question: secretTitle, history: [] }));
+  expect(src.sources.some((s) => s.title === secretTitle)).toBe(false);
+  expect(src.sources.some((s) => s.title === "A visible note")).toBe(true);
+});
+
+test("emits a sources chunk first, carrying refs/ids/actions", async () => {
+  const userKey = `src-${stamp}`;
+  await persistWithAction(userKey, `src-a-${stamp}`, "Acme DSAR");
+  const engine = new AnswerEngine({ query, getSettings: async () => on, provider: helloProvider });
+  const it = engine
+    .answer({ principal: { userKey, roles: [], teamKeys: [] }, question: "acme", history: [] })
+    [Symbol.asyncIterator]();
+  const first = await it.next();
+  expect(first.done).toBe(false);
+  const chunk = first.value as AnswerChunk;
+  expect(chunk.type).toBe("sources");
+  const src = (chunk as AnswerChunk & { type: "sources" }).sources.find(
+    (s) => s.title === "Acme DSAR",
+  );
+  expect(src).toBeDefined();
+  expect(src!.ref).toMatch(/^n\d+$/);
+  expect(src!.actions).toEqual([
+    { label: "Open", kind: "link", method: "GET", url: "https://x/1" },
+  ]);
 });
 
 test("a completeStream that throws → AiProviderError", async () => {
