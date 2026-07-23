@@ -1,9 +1,18 @@
 import { expect, test } from "vitest";
 import { buildChatMessages } from "../src/ai/chat-prompt";
+import type { ChatContext } from "../src/ai/retrieve";
 
-test("system carries grounding + read/unread tagging; context, history, and question are included", () => {
-  const msgs = buildChatMessages(
-    [
+const stats = (over: Partial<ChatContext["stats"]> = {}): ChatContext["stats"] => ({
+  total: 0,
+  unread: 0,
+  byPriority: { critical: 0, high: 0, normal: 0, low: 0 },
+  ...over,
+});
+
+test("system carries grounding + read/unread tagging + a scope guardrail; context, history, and question are included", () => {
+  const context: ChatContext = {
+    stats: stats({ total: 2, unread: 1, byPriority: { critical: 1, high: 0, normal: 0, low: 1 } }),
+    items: [
       {
         title: "Acme DSAR",
         description: "overdue",
@@ -23,30 +32,39 @@ test("system carries grounding + read/unread tagging; context, history, and ques
         hasActions: false,
       },
     ],
+  };
+  const msgs = buildChatMessages(
+    context,
     [
       { role: "user", content: "hi" },
       { role: "assistant", content: "hello" },
     ],
     "any unread DSARs?",
   );
-  const system = msgs[0]!.content.toLowerCase();
+  const system = msgs[0]!.content;
+  const lower = system.toLowerCase();
   expect(msgs[0]!.role).toBe("system");
-  expect(system).toContain("only"); // answer ONLY from provided notifications
-  expect(system).toContain("unread");
-  expect(msgs[0]!.content).toContain("[unread]");
-  expect(msgs[0]!.content).toContain("Acme DSAR");
-  expect(msgs[0]!.content).toContain("[read]");
+  expect(lower).toContain("only"); // answer ONLY from provided notifications
+  expect(lower).toContain("unread");
+  expect(lower).toContain("do not write code"); // scope guardrail
+  expect(system).toContain("[unread]");
+  expect(system).toContain("Acme DSAR");
+  expect(system).toContain("[read]");
+  // true distribution line
+  expect(system).toContain("2 notification(s) in total");
+  expect(system).toContain("1 critical");
   // history + question appended in order, last message is the question
   expect(msgs.some((m) => m.role === "assistant" && m.content === "hello")).toBe(true);
   expect(msgs.at(-1)).toEqual({ role: "user", content: "any unread DSARs?" });
 });
 
 test("history is capped to the most recent 8 turns", () => {
+  const context: ChatContext = { stats: stats(), items: [] };
   const history = Array.from({ length: 20 }, (_, i) => ({
     role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
     content: `turn-${i}`,
   }));
-  const msgs = buildChatMessages([], history, "now?");
+  const msgs = buildChatMessages(context, history, "now?");
   const historyMsgs = msgs.filter((m) => m.role !== "system" && m.content !== "now?");
   expect(historyMsgs).toHaveLength(8);
   // kept the MOST RECENT turns (turn-12 .. turn-19), dropped the oldest
@@ -55,7 +73,7 @@ test("history is capped to the most recent 8 turns", () => {
 });
 
 test("empty context still produces a well-formed system message", () => {
-  const msgs = buildChatMessages([], [], "anything?");
+  const msgs = buildChatMessages({ stats: stats(), items: [] }, [], "anything?");
   expect(msgs[0]!.role).toBe("system");
   expect(msgs[0]!.content.toLowerCase()).toContain("no notifications");
   expect(msgs.at(-1)).toEqual({ role: "user", content: "anything?" });

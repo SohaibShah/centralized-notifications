@@ -458,14 +458,15 @@ Each entry in `history`:
 
 The answer is grounded **only** in the caller's [audience-scoped](#audience-scoping) notifications — the same audience predicate as the feed, enforced **in SQL** as a bound-parameter `WHERE` clause with no join to any identity table. This means **one user can never receive another user's or audience's notifications in an answer**, even via prompt injection: the grounding set is filtered before it ever reaches the model. Suppressed (admin-disabled) rows are also excluded.
 
-The retrieval set is the union of two queries against `notifications`, deduped by `id` and capped at **20** items total:
+The item list is the union of three queries against `notifications`, deduped by `id` and capped at **20** items total:
 
-| Source               | Query                                                                                                                                                                           | Cap |
-| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
-| Full-text relevance  | Postgres full-text search — `n.search @@ websearch_to_tsquery('english', question)`, ordered by `ts_rank` descending. `websearch_to_tsquery` parameterizes the question safely. | 12  |
-| Recent high-priority | Ordered by `priority_rank ASC, created_at DESC` — so general questions work even with no keyword hit.                                                                           | 8   |
+| Source              | Query                                                                                                                                                                           | Cap |
+| ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --- |
+| Full-text relevance | Postgres full-text search — `n.search @@ websearch_to_tsquery('english', question)`, ordered by `ts_rank` descending. `websearch_to_tsquery` parameterizes the question safely. | 12  |
+| Most urgent         | Ordered by `priority_rank ASC, created_at DESC` — guarantees the highest-severity items are present for "what's most urgent?".                                                  | 6   |
+| Most recent         | Ordered by `created_at DESC`, **any priority** — guarantees a representative recent sample so a block of criticals can't crowd out every normal/low item.                       | 8   |
 
-Full-text matches are merged first (most relevant), then recency fills the remainder. Each item is tagged **`[read]`/`[unread]`** and passed to the model with an instruction to answer **only** from the provided notifications, to never invent notifications, and to scope by the question (unread-only, read-only, or both depending on what was asked). Descriptions are truncated to 280 chars in the context.
+Arms are merged in that order (relevance → urgency → recency) and deduped. Alongside the sampled list, the model is given the **true whole-set distribution** — total count, per-priority counts, and unread count over the caller's entire audience-scoped set — so questions about totals or priority mix are answered from the real numbers even though the list itself is a capped sample. Each item is tagged **`[read]`/`[unread]`**; the system prompt instructs the model to answer **only** from the provided notifications, never invent them, scope by the question (unread-only, read-only, or both), and **decline anything that isn't about the user's notifications** (e.g. writing code, general-knowledge questions). Descriptions are truncated to 280 chars in the context.
 
 ### Response `200`
 

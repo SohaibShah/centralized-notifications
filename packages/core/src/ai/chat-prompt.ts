@@ -1,5 +1,6 @@
+import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import type { AiMessage } from "../types";
-import type { ChatContextItem } from "./retrieve";
+import type { ChatContext, ChatContextItem, ChatContextStats } from "./retrieve";
 
 export type ChatTurn = { role: "user" | "assistant"; content: string };
 
@@ -9,11 +10,21 @@ export type ChatTurn = { role: "user" | "assistant"; content: string };
 const MAX_HISTORY_TURNS = 8;
 
 const INSTRUCTIONS = [
-  "You are an assistant that answers a user's questions about THEIR notifications.",
+  "You are an assistant that helps a user with THEIR notifications, and nothing else.",
   "Answer ONLY from the notifications provided below — if the answer isn't in them, say you don't have that information. Never invent notifications.",
+  "You do not write code, answer general-knowledge questions, do unrelated math, translate text, or roleplay. If asked to do anything that isn't about the user's notifications, briefly decline and offer to help with their notifications instead.",
+  "The counts line gives the true totals across ALL the user's notifications; the list below it is a relevant sample and may not contain every item — use the counts for questions about totals or priority mix.",
   "Each notification is tagged [read] or [unread]. Scope your answer to the question: if the user asks about unread items use only [unread]; if about read items use only [read]; otherwise consider both.",
   "Be concise and reference items by their titles.",
 ].join(" ");
+
+function statsLine(stats: ChatContextStats): string {
+  const buckets = NOTIFICATION_PRIORITIES.filter((p) => stats.byPriority[p] > 0)
+    .map((p) => `${stats.byPriority[p]} ${p}`)
+    .join(", ");
+  if (stats.total === 0) return "The user currently has no notifications.";
+  return `The user has ${stats.total} notification(s) in total (${buckets}); ${stats.unread} unread.`;
+}
 
 function line(i: ChatContextItem): string {
   const age =
@@ -24,19 +35,21 @@ function line(i: ChatContextItem): string {
   return `- [${i.read ? "read" : "unread"}] [${i.priority}] (${i.module}${cat}, ${age} old${i.hasActions ? ", has actions" : ""}): ${i.title} — ${i.description}`;
 }
 
-/** Build chat messages: one system message (instructions + the retrieved notifications), then the
- *  most recent prior turns (capped at MAX_HISTORY_TURNS), then the new question. Core owns this
- *  prompt. */
+/** Build chat messages: one system message (instructions + true distribution + a sampled list of the
+ *  retrieved notifications), then the most recent prior turns (capped at MAX_HISTORY_TURNS), then the
+ *  new question. Core owns this prompt. */
 export function buildChatMessages(
-  context: ChatContextItem[],
+  context: ChatContext,
   history: ChatTurn[],
   question: string,
 ): AiMessage[] {
-  const contextBlock = context.length
-    ? `Notifications you may reference:\n${context.map(line).join("\n")}`
-    : "The user currently has no notifications you can reference.";
+  const { items, stats } = context;
+  const listing = items.length
+    ? `Notifications you may reference (a sample — see the counts above for the full totals):\n${items.map(line).join("\n")}`
+    : "There are no notifications to reference.";
+  const system = `${INSTRUCTIONS}\n\n${statsLine(stats)}\n\n${listing}`;
   return [
-    { role: "system", content: `${INSTRUCTIONS}\n\n${contextBlock}` },
+    { role: "system", content: system },
     ...history.slice(-MAX_HISTORY_TURNS).map((t) => ({ role: t.role, content: t.content })),
     { role: "user", content: question },
   ];

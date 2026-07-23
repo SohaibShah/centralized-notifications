@@ -1,4 +1,4 @@
-import { afterAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import type { Notification } from "@notifications/shared";
 import { createDb } from "../src/db";
 import { persist } from "../src/pipeline/persist";
@@ -9,6 +9,13 @@ import { testPool } from "./harness";
 const pool = testPool();
 const { query } = createDb(pool);
 afterAll(() => pool.end());
+
+// The stats assertions below count the whole audience-scoped set; global-scoped notifications seeded
+// by sibling files are visible to every principal and can't be id-isolated, so clear them once for a
+// deterministic count (same rationale as summarize.test.ts).
+beforeAll(async () => {
+  await query(`DELETE FROM notifications WHERE audience_scope = 'global'`);
+});
 
 const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
@@ -62,7 +69,7 @@ test("FTS hit + recency union, audience-scoped, with read flags", async () => {
     title: `Secret ${keyword} for someone else`,
   });
 
-  const items = await retrieveForAnswer(query, principal, keyword);
+  const { items } = await retrieveForAnswer(query, principal, keyword);
   const a = items.find((i) => i.title.includes(keyword));
   const b = items.find((i) => i.title === "Unrelated urgent thing");
 
@@ -129,7 +136,7 @@ test("team/role scoping — a principal never retrieves another team's or role's
 
   // Principal is in team A and role X only.
   const principal: Principal = { userKey: `grp-user-${stamp}`, roles: [roleX], teamKeys: [teamA] };
-  const titles = (await retrieveForAnswer(query, principal, kw)).map((i) => i.title);
+  const titles = (await retrieveForAnswer(query, principal, kw)).items.map((i) => i.title);
 
   expect(titles).toContain(`Team A ${kw}`); // own team → visible
   expect(titles).not.toContain(`Team B ${kw}`); // other team → excluded
@@ -146,8 +153,34 @@ test("description is truncated to 280 chars", async () => {
     description: long,
     priority: "critical",
   });
-  const items = await retrieveForAnswer(query, { userKey, roles: [], teamKeys: [] }, "anything");
+  const { items } = await retrieveForAnswer(
+    query,
+    { userKey, roles: [], teamKeys: [] },
+    "anything",
+  );
   const item = items.find((i) => i.title === "Long one");
   expect(item).toBeDefined();
   expect(item!.description.length).toBe(280);
+});
+
+test("a block of criticals does not crowd out normals; stats report the true distribution", async () => {
+  const userKey = `mix-${stamp}`;
+  const principal: Principal = { userKey, roles: [], teamKeys: [] };
+  for (let i = 0; i < 7; i++) {
+    await seed({ id: `mix-crit-${i}-${stamp}`, userScope: userKey, priority: "critical" });
+  }
+  for (let i = 0; i < 6; i++) {
+    await seed({ id: `mix-norm-${i}-${stamp}`, userScope: userKey, priority: "normal" });
+  }
+
+  // A generic question with no keyword hits — the recency arm must still surface normals.
+  const { items, stats } = await retrieveForAnswer(query, principal, "what do I have");
+
+  expect(stats.total).toBe(13);
+  expect(stats.byPriority.critical).toBe(7);
+  expect(stats.byPriority.normal).toBe(6);
+  expect(stats.unread).toBe(13);
+  // The model must SEE at least one normal-priority item, not just the block of criticals.
+  expect(items.some((i) => i.priority === "normal")).toBe(true);
+  expect(items.some((i) => i.priority === "critical")).toBe(true);
 });

@@ -1,4 +1,5 @@
 import type { NotificationPriority } from "@notifications/shared";
+import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { Principal } from "../types";
 import { audienceWhere } from "../audience/match";
@@ -14,6 +15,19 @@ export interface ChatContextItem {
   hasActions: boolean;
 }
 
+/** True distribution of the caller's whole audience-scoped set, so the model can answer questions
+ *  about totals/priority mix even when the item list is a capped sample. */
+export interface ChatContextStats {
+  total: number;
+  unread: number;
+  byPriority: Record<NotificationPriority, number>;
+}
+
+export interface ChatContext {
+  items: ChatContextItem[];
+  stats: ChatContextStats;
+}
+
 interface Row {
   id: string;
   title: string;
@@ -26,7 +40,12 @@ interface Row {
   read: boolean;
 }
 
+// Three complementary arms, merged in this order and deduped. FTS answers "about X"; urgency ensures
+// the most severe items are present ("what's most urgent"); recency ensures a representative recent
+// sample of ANY priority is present ("what's new") — without it, a large block of criticals would
+// crowd out every normal-priority item and the model would think everything is critical.
 const FTS_LIMIT = 12;
+const URGENCY_LIMIT = 6;
 const RECENCY_LIMIT = 8;
 const TOTAL_CAP = 20;
 
@@ -47,17 +66,45 @@ const COLS = `n.id, n.title, n.description, n.priority, n.module, n.category, n.
               (r.user_key IS NOT NULL) AS read`;
 const JOIN = `LEFT JOIN notification_reads r ON r.notification_id = n.id AND r.user_key = $1`;
 
+/** The caller's whole-set distribution (read + unread, non-suppressed, audience-scoped). */
+async function retrieveStats(query: QueryFn, principal: Principal): Promise<ChatContextStats> {
+  const params: unknown[] = [principal.userKey];
+  const audience = audienceWhere(principal, params);
+  const { rows } = await query<{ priority: NotificationPriority; total: number; unread: number }>(
+    `SELECT n.priority,
+            count(*)::int AS total,
+            count(*) FILTER (WHERE r.user_key IS NULL)::int AS unread
+       FROM notifications n ${JOIN}
+      WHERE n.suppressed = false AND ${audience}
+      GROUP BY n.priority`,
+    params,
+  );
+  const byPriority = Object.fromEntries(NOTIFICATION_PRIORITIES.map((p) => [p, 0])) as Record<
+    NotificationPriority,
+    number
+  >;
+  let total = 0;
+  let unread = 0;
+  for (const r of rows) {
+    byPriority[r.priority] = r.total;
+    total += r.total;
+    unread += r.unread;
+  }
+  return { total, unread, byPriority };
+}
+
 /**
- * Grounding for a chat answer: audience-scoped full-text matches on the question (top 12) unioned
- * with the most recent high-priority notifications (top 8), read AND unread, deduped, capped at 20.
- * No identity-table join — audience is a bound-param predicate. `websearch_to_tsquery` turns the
- * natural-language question into a tsquery safely (parameterized).
+ * Grounding for a chat answer: the caller's audience-scoped notifications (read AND unread), as a
+ * capped sample built from three arms — full-text matches on the question, the most urgent items, and
+ * the most recent items — plus the true whole-set distribution. No identity-table join; audience is a
+ * bound-param predicate. `websearch_to_tsquery` turns the natural-language question into a tsquery
+ * safely (parameterized).
  */
 export async function retrieveForAnswer(
   query: QueryFn,
   principal: Principal,
   question: string,
-): Promise<ChatContextItem[]> {
+): Promise<ChatContext> {
   const nowMs = Date.now();
 
   // 1) Full-text matches, ranked.
@@ -73,26 +120,40 @@ export async function retrieveForAnswer(
     ftsParams,
   );
 
-  // 2) Recent high-priority (so general questions work even without a keyword hit).
+  // 2) Most urgent (so "what's most urgent?" always surfaces the top-priority items).
+  const urgParams: unknown[] = [principal.userKey];
+  const urgAudience = audienceWhere(principal, urgParams);
+  const urgent = await query<Row>(
+    `SELECT ${COLS}
+       FROM notifications n ${JOIN}
+      WHERE n.suppressed = false AND ${urgAudience}
+      ORDER BY n.priority_rank ASC, n.created_at DESC
+      LIMIT ${URGENCY_LIMIT}`,
+    urgParams,
+  );
+
+  // 3) Most recent, ANY priority (so normal/low items aren't crowded out by a block of criticals).
   const recParams: unknown[] = [principal.userKey];
   const recAudience = audienceWhere(principal, recParams);
   const recent = await query<Row>(
     `SELECT ${COLS}
        FROM notifications n ${JOIN}
       WHERE n.suppressed = false AND ${recAudience}
-      ORDER BY n.priority_rank ASC, n.created_at DESC
+      ORDER BY n.created_at DESC
       LIMIT ${RECENCY_LIMIT}`,
     recParams,
   );
 
-  // Merge FTS first (most relevant), then recency, deduped by id, capped.
+  // Merge FTS (most relevant) → urgency → recency, deduped by id, capped.
   const seen = new Set<string>();
-  const merged: ChatContextItem[] = [];
-  for (const r of [...fts.rows, ...recent.rows]) {
+  const items: ChatContextItem[] = [];
+  for (const r of [...fts.rows, ...urgent.rows, ...recent.rows]) {
     if (seen.has(r.id)) continue;
     seen.add(r.id);
-    merged.push(toItem(r, nowMs));
-    if (merged.length >= TOTAL_CAP) break;
+    items.push(toItem(r, nowMs));
+    if (items.length >= TOTAL_CAP) break;
   }
-  return merged;
+
+  const stats = await retrieveStats(query, principal);
+  return { items, stats };
 }
