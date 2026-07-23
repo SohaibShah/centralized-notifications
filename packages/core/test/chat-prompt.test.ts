@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { buildChatMessages } from "../src/ai/chat-prompt";
-import type { ChatContext } from "../src/ai/retrieve";
+import type { ChatContext, ChatContextItem } from "../src/ai/retrieve";
 
 const stats = (over: Partial<ChatContext["stats"]> = {}): ChatContext["stats"] => ({
   total: 0,
@@ -9,32 +9,42 @@ const stats = (over: Partial<ChatContext["stats"]> = {}): ChatContext["stats"] =
   ...over,
 });
 
-test("system carries grounding + read/unread tagging + a scope guardrail; context, history, and question are included", () => {
+test("system carries grounding + read/unread tagging + a scope guardrail + [n#] tags + cite instruction", () => {
+  const items: ChatContextItem[] = [
+    {
+      id: "a1",
+      title: "Acme DSAR",
+      description: "overdue",
+      priority: "critical",
+      module: "dsr",
+      ageMinutes: 4000,
+      read: false,
+      hasActions: true,
+      actions: [],
+    },
+    {
+      id: "a2",
+      title: "Old finding",
+      description: "done",
+      priority: "low",
+      module: "assessments",
+      ageMinutes: 9000,
+      read: true,
+      hasActions: false,
+      actions: [],
+    },
+  ];
   const context: ChatContext = {
     stats: stats({ total: 2, unread: 1, byPriority: { critical: 1, high: 0, normal: 0, low: 1 } }),
-    items: [
-      {
-        title: "Acme DSAR",
-        description: "overdue",
-        priority: "critical",
-        module: "dsr",
-        ageMinutes: 4000,
-        read: false,
-        hasActions: true,
-      },
-      {
-        title: "Old finding",
-        description: "done",
-        priority: "low",
-        module: "assessments",
-        ageMinutes: 9000,
-        read: true,
-        hasActions: false,
-      },
-    ],
+    items,
   };
+  const refs = [
+    { ref: "n1", id: "a1" },
+    { ref: "n2", id: "a2" },
+  ];
   const msgs = buildChatMessages(
     context,
+    refs,
     [
       { role: "user", content: "hi" },
       { role: "assistant", content: "hello" },
@@ -47,6 +57,8 @@ test("system carries grounding + read/unread tagging + a scope guardrail; contex
   expect(lower).toContain("only"); // answer ONLY from provided notifications
   expect(lower).toContain("unread");
   expect(lower).toContain("do not write code"); // scope guardrail
+  expect(lower).toContain("include its exact tag"); // cite instruction
+  expect(system).toContain("[n1]"); // the ref tag on the first item's line
   expect(system).toContain("[unread]");
   expect(system).toContain("Acme DSAR");
   expect(system).toContain("[read]");
@@ -64,7 +76,7 @@ test("history is capped to the most recent 8 turns", () => {
     role: (i % 2 === 0 ? "user" : "assistant") as "user" | "assistant",
     content: `turn-${i}`,
   }));
-  const msgs = buildChatMessages(context, history, "now?");
+  const msgs = buildChatMessages(context, [], history, "now?");
   const historyMsgs = msgs.filter((m) => m.role !== "system" && m.content !== "now?");
   expect(historyMsgs).toHaveLength(8);
   // kept the MOST RECENT turns (turn-12 .. turn-19), dropped the oldest
@@ -73,7 +85,7 @@ test("history is capped to the most recent 8 turns", () => {
 });
 
 test("empty context still produces a well-formed system message", () => {
-  const msgs = buildChatMessages({ stats: stats(), items: [] }, [], "anything?");
+  const msgs = buildChatMessages({ stats: stats(), items: [] }, [], [], "anything?");
   expect(msgs[0]!.role).toBe("system");
   expect(msgs[0]!.content.toLowerCase()).toContain("no notifications");
   expect(msgs.at(-1)).toEqual({ role: "user", content: "anything?" });
