@@ -1,5 +1,10 @@
 import { z } from "zod";
-import type { FeedNotification, FeedSort, NotificationPage } from "@notifications/shared";
+import type {
+  FeedNotification,
+  FeedSort,
+  NotificationAction,
+  NotificationPage,
+} from "@notifications/shared";
 import { actionSchema, FEED_SORTS } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { Principal } from "../types";
@@ -71,6 +76,17 @@ function cursorFor(s: FeedSort, row: FeedRow): Cursor {
     : base;
 }
 
+/** Parse a persisted actions array, dropping any entry that no longer matches the contract (e.g. a
+ *  dispatch action stored before `path` existed) so one bad row can never crash a feed read. */
+export function parseActions(raw: unknown[]): NotificationAction[] {
+  const out: NotificationAction[] = [];
+  for (const a of raw) {
+    const parsed = actionSchema.safeParse(a);
+    if (parsed.success) out.push(parsed.data);
+  }
+  return out;
+}
+
 function toFeedNotification(row: FeedRow): FeedNotification {
   return {
     id: row.id,
@@ -84,8 +100,9 @@ function toFeedNotification(row: FeedRow): FeedNotification {
       row.audience_scope === "global"
         ? { scope: "global" }
         : { scope: row.audience_scope, id: row.audience_id ?? undefined },
-    // Re-parse each stored action through the schema so its defaults apply (notably `kind`).
-    ...(row.actions != null ? { actions: row.actions.map((a) => actionSchema.parse(a)) } : {}),
+    // Re-parse each stored action through the schema so its defaults apply (notably `kind`); drop
+    // any entry that no longer matches the contract instead of throwing (see `parseActions`).
+    ...(row.actions != null ? { actions: parseActions(row.actions) } : {}),
     ...(row.metadata != null ? { metadata: row.metadata } : {}),
     ...(row.source_ts != null ? { timestamp: row.source_ts.toISOString() } : {}),
     createdAt: row.created_iso,
