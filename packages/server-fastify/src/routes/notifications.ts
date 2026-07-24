@@ -1,7 +1,13 @@
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import { FEED_SORTS } from "@notifications/shared";
-import { InvalidCursorError, NotFoundError, type NotificationService } from "@notifications/core";
+import {
+  ActionsDisabledError,
+  InvalidCursorError,
+  ModuleUnavailableError,
+  NotFoundError,
+  type NotificationService,
+} from "@notifications/core";
 
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 25;
@@ -14,6 +20,12 @@ const listQuerySchema = z.object({
 
 const readParamsSchema = z.object({ id: z.string().min(1).max(200) });
 const bulkReadSchema = z.object({ ids: z.array(z.string().min(1).max(200)).min(1).max(500) });
+
+const dispatchParamsSchema = z.object({
+  id: z.string().min(1).max(200),
+  ref: z.string().regex(/^\d+$/),
+});
+const dispatchBodySchema = z.object({ idempotencyKey: z.string().min(1).max(200) });
 
 /** The audience-scoped read + read-state routes, gated by `requirePrincipal`. */
 export function notificationReadRoutes(
@@ -75,4 +87,33 @@ export function notificationReadRoutes(
     await service.markReadBulk({ principal, ids: parsed.data.ids });
     return reply.code(204).send();
   });
+
+  app.post(
+    "/notifications/:id/actions/:ref/dispatch",
+    { preHandler: requirePrincipal },
+    async (req, reply) => {
+      const principal = req.principal;
+      if (!principal) return reply.code(401).send({ error: "authentication required" });
+      const p = dispatchParamsSchema.safeParse(req.params);
+      const b = dispatchBodySchema.safeParse(req.body);
+      if (!p.success || !b.success) return reply.code(400).send({ error: "invalid request" });
+      try {
+        const result = await service.dispatchAction({
+          principal,
+          notificationId: p.data.id,
+          actionRef: p.data.ref,
+          idempotencyKey: b.data.idempotencyKey,
+        });
+        return reply.code(200).send(result);
+      } catch (err) {
+        if (err instanceof ActionsDisabledError)
+          return reply.code(403).send({ error: "actions disabled" });
+        if (err instanceof ModuleUnavailableError)
+          return reply.code(409).send({ error: "module unavailable" });
+        if (err instanceof NotFoundError)
+          return reply.code(404).send({ error: "notification or action not found" });
+        throw err;
+      }
+    },
+  );
 }
