@@ -13,6 +13,7 @@ describe("isSimulatorEnabled", () => {
     DATABASE_URL: "postgres://x",
     SESSION_SECRET: "a".repeat(64),
     INTERNAL_INTAKE_TOKEN: "0123456789abcdef",
+    MODULE_DISPATCH_TOKEN: "abcdef0123456789",
   };
   it("is false in production, true otherwise", () => {
     expect(isSimulatorEnabled(loadEnv({ ...base, NODE_ENV: "production" }))).toBe(false);
