@@ -41,20 +41,35 @@ export const audienceSchema = z
     path: ["id"],
   });
 
+export const ACTION_DISPATCH_METHODS = ["GET", "POST"] as const;
+
+const MAX_METADATA_BYTES = 4096;
+
+// A relative path only: one leading slash (not protocol-relative `//`), no scheme, no `..` segment.
+// This is the egress-safety guarantee — the module host comes from the registry, never the payload.
+const dispatchPathSchema = z
+  .string()
+  .min(1)
+  .max(2048)
+  .refine((p) => p.startsWith("/") && !p.startsWith("//"), {
+    message: "path must start with a single /",
+  })
+  .refine((p) => !/^[a-z][a-z0-9+.-]*:/i.test(p), { message: "path must not contain a scheme" })
+  .refine((p) => !p.split("/").includes(".."), { message: "path must not contain .." });
+
 /**
- * A module-owned callback surfaced as a button on the notification card.
- * `url` is restricted to http(s) — it is rendered as a clickable/fetchable
- * target, so javascript:/data:/file: schemes must never pass the boundary.
- * `icon` is an identifier from the design-system icon set (e.g. "check",
- * "external-link"), not a URL/image. Extensible later (e.g. variant, confirm).
+ * A module-owned callback surfaced as a button on the notification card. Discriminated on `kind`:
+ * "link" opens `url` client-side (http(s) only — javascript:/data:/file: schemes must never pass
+ * the boundary); "dispatch" round-trips through the server to the module's `path` (relative only,
+ * see `dispatchPathSchema`). `icon` is an identifier from the design-system icon set (e.g. "check",
+ * "external-link"), not a URL/image. Legacy persisted actions with no `kind` are treated as `link`
+ * (see the `z.preprocess` below) — the old flat schema defaulted `kind` to "link".
  */
-export const actionSchema = z.object({
+const linkActionSchema = z.object({
   label: z.string().min(1).max(100),
-  // `kind` is the intent discriminator the UI branches on (NOT the HTTP method): "link" opens the
-  // url in a new tab; "dispatch" runs a server-side action call (stubbed for now). Defaults to
-  // "link" for back-compat. A future "navigate" value would route in-app.
-  kind: z.enum(ACTION_KINDS).default("link"),
-  method: z.enum(ACTION_METHODS),
+  kind: z.literal("link"),
+  // `method`/`url` retained for links (opened client-side); method is tolerated but unused for links.
+  method: z.enum(ACTION_METHODS).optional(),
   url: z
     .string()
     .url()
@@ -62,6 +77,32 @@ export const actionSchema = z.object({
     .refine((u) => /^https?:\/\//i.test(u), { message: "url must use http(s)" }),
   icon: z.string().min(1).max(100).optional(),
 });
+
+const dispatchActionSchema = z.object({
+  label: z.string().min(1).max(100),
+  kind: z.literal("dispatch"),
+  method: z.enum(ACTION_DISPATCH_METHODS),
+  path: dispatchPathSchema,
+  // Opaque, module-defined at publish time; the hub never interprets it. Size-bounded like every
+  // other free field so a buggy/hostile publisher can't send an abusive payload.
+  metadata: z
+    .unknown()
+    .optional()
+    .refine((m) => m === undefined || JSON.stringify(m).length <= MAX_METADATA_BYTES, {
+      message: `metadata must be <= ${MAX_METADATA_BYTES} bytes serialized`,
+    }),
+  icon: z.string().min(1).max(100).optional(),
+});
+
+// Legacy persisted/published actions may omit `kind` (the old schema defaulted it to "link"). Inject
+// it so the discriminated union can parse them as links — keeps feed reads back-compatible.
+export const actionSchema = z.preprocess(
+  (v) =>
+    v && typeof v === "object" && !Array.isArray(v) && !("kind" in v)
+      ? { ...(v as object), kind: "link" }
+      : v,
+  z.discriminatedUnion("kind", [linkActionSchema, dispatchActionSchema]),
+);
 
 export const notificationSchema = z.object({
   // Caller-supplied dedupe / idempotency key. `.trim()` guard rejects blank
@@ -90,6 +131,21 @@ export const notificationSchema = z.object({
 export type Audience = z.infer<typeof audienceSchema>;
 export type NotificationAction = z.infer<typeof actionSchema>;
 export type Notification = z.infer<typeof notificationSchema>;
+
+/**
+ * The response shape a module returns from a `dispatch` action's server-side round-trip
+ * (see `ACTION_DISPATCH_METHODS`). `ok` reports success/failure; `message` is a short
+ * user-facing status; `resolve` tells the feed whether to mark the source notification
+ * resolved; `actions` lets the module hand back a fresh action set (e.g. an "Undo" button)
+ * to replace the original — bounded the same way `notificationSchema.actions` is.
+ */
+export const moduleActionResponseSchema = z.object({
+  ok: z.boolean(),
+  message: z.string().max(500).optional(),
+  resolve: z.boolean().optional(),
+  actions: z.array(actionSchema).max(10).optional(),
+});
+export type ModuleActionResponse = z.infer<typeof moduleActionResponseSchema>;
 
 export type NotificationPriority = (typeof NOTIFICATION_PRIORITIES)[number];
 

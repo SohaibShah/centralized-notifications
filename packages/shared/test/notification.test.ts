@@ -200,10 +200,12 @@ describe("action kind", () => {
   });
 
   it("accepts an explicit dispatch kind", () => {
+    // dispatch actions carry a relative `path`, not a `url` — see notification.spec.ts for the
+    // full discriminated-union coverage (link vs dispatch shape, path egress rules, metadata size).
     const parsed = actionSchema.parse({
       label: "Approve",
       method: "POST",
-      url: "https://app/a",
+      path: "/a",
       kind: "dispatch",
     });
     expect(parsed.kind).toBe("dispatch");
