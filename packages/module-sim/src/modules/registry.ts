@@ -12,7 +12,15 @@ const modules: Record<string, SimModule> = {
   [assessments.key]: assessments,
 };
 
-/** Looks up a simulated module by key; `undefined` for an unregistered/unknown module. */
+/** Looks up a simulated module by key; `undefined` for an unregistered/unknown module.
+ * `key` reaches here as caller/request input (route params, `/emit`'s `custom.module`), so a
+ * plain `modules[key]` property lookup would resolve inherited `Object.prototype` keys like
+ * `"__proto__"`/`"constructor"`/`"toString"` as truthy hits instead of 404ing/erroring as an
+ * unknown module — `hasOwn` restricts the lookup to the module's own registered keys. */
 export function lookupModule(key: string): SimModule | undefined {
-  return modules[key];
+  return Object.hasOwn(modules, key) ? modules[key] : undefined;
 }
+
+/** All simulated modules, for callers (the emit generator, Task 12) that iterate every module
+ * rather than looking one up by key. */
+export const ALL_MODULES: readonly SimModule[] = Object.values(modules);
