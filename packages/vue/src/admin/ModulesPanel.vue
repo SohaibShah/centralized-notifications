@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { Boxes } from "@lucide/vue";
 import type { NotificationPriority } from "@notifications/shared";
-import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
+import { moduleBaseUrlSchema, NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import Button from "../ui/Button.vue";
 import Chip from "../ui/Chip.vue";
 import Spinner from "../ui/Spinner.vue";
@@ -23,6 +23,11 @@ const sort = ref<Sort>("critical");
 // Draft base-URL text per module key, seeded from the loaded value and reset on save/revert —
 // keeps the input editable without mutating `m.baseUrl` until the save actually lands.
 const baseUrlDrafts = ref<Record<string, string>>({});
+// Per-module in-flight + outcome state for the Save button, keyed the same way as the drafts —
+// the optimistic set/revert in `saveBaseUrl` was previously silent; these back the spinner and
+// the post-save "Saved" / "Couldn't save" feedback below.
+const baseUrlSaving = ref<Record<string, boolean>>({});
+const baseUrlResult = ref<Record<string, "saved" | "error" | undefined>>({});
 
 async function load(): Promise<void> {
   status.value = "loading";
@@ -36,20 +41,9 @@ async function load(): Promise<void> {
 }
 onMounted(load);
 
-// Mirrors the backend rule (packages/server-fastify/src/routes/admin.ts): non-empty http(s) URL.
-function isValidHttpUrl(v: string): boolean {
-  if (!/^https?:\/\//i.test(v)) return false;
-  try {
-    new URL(v);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 function baseUrlInvalid(m: AdminModule): boolean {
   const v = (baseUrlDrafts.value[m.key] ?? "").trim();
-  return v !== "" && !isValidHttpUrl(v);
+  return v !== "" && !moduleBaseUrlSchema.safeParse(v).success;
 }
 
 function baseUrlDirty(m: AdminModule): boolean {
@@ -57,16 +51,22 @@ function baseUrlDirty(m: AdminModule): boolean {
 }
 
 async function saveBaseUrl(m: AdminModule): Promise<void> {
-  if (baseUrlInvalid(m) || !baseUrlDirty(m)) return;
+  if (baseUrlInvalid(m) || !baseUrlDirty(m) || baseUrlSaving.value[m.key]) return;
   const raw = (baseUrlDrafts.value[m.key] ?? "").trim();
   const next = raw === "" ? null : raw;
   const prev = m.baseUrl;
   m.baseUrl = next; // optimistic, mirrors toggle()'s pattern
+  baseUrlSaving.value[m.key] = true;
+  baseUrlResult.value[m.key] = undefined;
   try {
     await admin.patchModule(m.key, { baseUrl: next });
+    baseUrlResult.value[m.key] = "saved";
   } catch {
-    m.baseUrl = prev; // revert
+    m.baseUrl = prev; // revert — but now the "Couldn't save" alert says why, instead of reverting silently
     baseUrlDrafts.value[m.key] = prev ?? "";
+    baseUrlResult.value[m.key] = "error";
+  } finally {
+    baseUrlSaving.value[m.key] = false;
   }
 }
 
@@ -204,6 +204,9 @@ async function toggle(m: AdminModule): Promise<void> {
           </div>
         </div>
 
+        <!-- Deliberate single-inline-field deviation from the shared <FormRenderer> convention
+             (json-form-conventions): this is a per-row table editor, not a multi-field form —
+             flagged here for a mentor sanity-check, not rewritten into FormRenderer. -->
         <div class="mt-2 flex flex-wrap items-center gap-2 pl-0">
           <label
             :for="`base-url-${m.key}`"
@@ -223,10 +226,11 @@ async function toggle(m: AdminModule): Promise<void> {
           <Button
             variant="secondary"
             size="sm"
-            :disabled="!baseUrlDirty(m) || baseUrlInvalid(m)"
+            :disabled="!baseUrlDirty(m) || baseUrlInvalid(m) || baseUrlSaving[m.key]"
             :data-test="`base-url-save-${m.key}`"
             @click="saveBaseUrl(m)"
           >
+            <Spinner v-if="baseUrlSaving[m.key]" :size="12" />
             Save
           </Button>
           <span
@@ -236,6 +240,21 @@ async function toggle(m: AdminModule): Promise<void> {
             class="text-[11px] text-danger"
           >
             Enter a valid http(s) URL, or leave blank to clear it.
+          </span>
+          <span
+            v-else-if="baseUrlResult[m.key] === 'error' && !baseUrlDirty(m)"
+            role="alert"
+            :data-test="`base-url-result-${m.key}`"
+            class="text-[11px] text-danger"
+          >
+            Couldn't save — try again.
+          </span>
+          <span
+            v-else-if="baseUrlResult[m.key] === 'saved' && !baseUrlDirty(m)"
+            :data-test="`base-url-result-${m.key}`"
+            class="text-[11px] text-success-strong"
+          >
+            Saved
           </span>
         </div>
       </div>
