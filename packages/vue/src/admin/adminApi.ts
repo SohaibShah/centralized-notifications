@@ -9,6 +9,8 @@ export interface AdminModule {
   total: number;
   suppressed: number;
   byPriority: Record<NotificationPriority, number>;
+  /** The module's API root — where action callbacks are sent. Null when unset. */
+  baseUrl: string | null;
 }
 
 export interface CustomSpec {
@@ -48,7 +50,7 @@ export function createAdminApi(transport: Transport) {
   const fetchModules = () => transport.get<AdminModule[]>("/admin/modules");
   return {
     fetchModules,
-    patchModule: (key: string, body: { enabled: boolean }) =>
+    patchModule: (key: string, body: { enabled?: boolean; baseUrl?: string | null }) =>
       transport.patch<void>(`/admin/modules/${encodeURIComponent(key)}`, body),
     /** POST /admin/simulate — the non-prod dev/QA generator endpoint. */
     simulate: (spec: SimulateSpec) => transport.post<SimulateResult>("/admin/simulate", spec),
