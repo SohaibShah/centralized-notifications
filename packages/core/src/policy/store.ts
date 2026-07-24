@@ -93,8 +93,9 @@ export class PolicyStore {
       high: string;
       normal: string;
       low: string;
+      base_url: string | null;
     }>(
-      `SELECT m.key, m.enabled,
+      `SELECT m.key, m.enabled, m.base_url,
               to_char(m.last_seen_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.USZ') AS last_seen_iso,
               count(n.id) AS total,
               count(n.id) FILTER (WHERE n.suppressed) AS suppressed,
@@ -104,7 +105,7 @@ export class PolicyStore {
               count(n.id) FILTER (WHERE n.priority = 'low') AS low
          FROM modules m
          LEFT JOIN notifications n ON n.module = m.key
-        GROUP BY m.key, m.enabled, m.last_seen_at
+        GROUP BY m.key, m.enabled, m.last_seen_at, m.base_url
         ORDER BY m.last_seen_at DESC`,
     );
     return rows.map((r) => ({
@@ -120,6 +121,7 @@ export class PolicyStore {
         normal: Number(r.normal),
         low: Number(r.low),
       },
+      baseUrl: r.base_url,
     }));
   }
 
@@ -127,6 +129,22 @@ export class PolicyStore {
    *  on an unknown key.) */
   async setModuleEnabled(id: string, enabled: boolean): Promise<void> {
     await this.query("UPDATE modules SET enabled = $2 WHERE key = $1", [id, enabled]);
+    this.invalidate();
+  }
+
+  /** Read a module's registered API base URL (null = not dispatchable). Reads fresh, uncached — the
+   *  action dispatcher calls this per-dispatch, not via the disabled/settings cache. */
+  async getModuleBaseUrl(id: string): Promise<string | null> {
+    const res = await this.query<{ base_url: string | null }>(
+      "SELECT base_url FROM modules WHERE key = $1",
+      [id],
+    );
+    return res.rows[0]?.base_url ?? null;
+  }
+
+  /** Set (or clear) a module's registered API base URL. No-op for an unknown key. */
+  async setModuleBaseUrl(id: string, baseUrl: string | null): Promise<void> {
+    await this.query("UPDATE modules SET base_url = $2 WHERE key = $1", [id, baseUrl]);
     this.invalidate();
   }
 

@@ -24,6 +24,9 @@ export interface ModulePolicyView {
   total: number;
   suppressed: number;
   byPriority: Record<"critical" | "high" | "normal" | "low", number>;
+  /** The module's registered API base URL (registry data, admin-editable). Null = not dispatchable —
+   *  the action dispatcher rejects dispatch actions for this module until an admin sets one. */
+  baseUrl: string | null;
 }
 
 /** Runtime-toggleable notification-domain settings (feature flags + retention). Library-owned state. */

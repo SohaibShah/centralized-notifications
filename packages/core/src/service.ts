@@ -47,6 +47,7 @@ export interface NotificationService {
 
   listModules(): Promise<ModulePolicyView[]>;
   setModuleEnabled(id: string, enabled: boolean): Promise<void>;
+  setModuleBaseUrl(id: string, baseUrl: string | null): Promise<void>;
   getSettings(): Promise<Settings>;
   updateSettings(patch: Partial<Settings>): Promise<void>;
 
@@ -114,6 +115,7 @@ export function createNotificationService(opts: {
     markUnread: (args) => markUnread(query, args),
     listModules: () => policy.listModules(),
     setModuleEnabled: (id, enabled) => policy.setModuleEnabled(id, enabled),
+    setModuleBaseUrl: (id, baseUrl) => policy.setModuleBaseUrl(id, baseUrl),
     getSettings: () => policy.getSettings(),
     updateSettings: (patch) => policy.updateSettings(patch),
     summarize: (args) => summaryEngine.summarize(args.principal),
