@@ -46,9 +46,10 @@ None.
 
 Same handler registered for both HTTP methods (see
 [`registerActionRoutes`](../../packages/module-sim/src/routes/actions.ts)) — a dispatch
-action's own `method` (`GET` or `POST`) picks which one the hub actually calls; e.g.
-assessments' `snooze` action is `GET` (no body, so its fields are sent as query string),
-while everything else is `POST`.
+action's own `method` (`GET` or `POST`) picks which one the hub actually calls. All four
+modules' actions use `POST`, because the hub's dispatcher only attaches the request body
+(carrying `notificationId`) on `POST`; a `GET` dispatch would arrive with no
+`notificationId` and be rejected. The `GET` route is still registered for completeness.
 
 **Auth:** shared dispatch token (service-to-service), **not** a user session.
 
@@ -140,7 +141,7 @@ generated notification action actually uses, and what a fresh (non-repeat) call 
 | `dsr`               | `reject`    | POST   | `{ ok: true, message: "DSR rejected", resolve: true }`   | yes                                             |
 | `access-governance` | `revoke`    | POST   | `{ ok: true, message: "Access revoked", resolve: true }` | yes                                             |
 | `data-mapping`      | `rescan`    | POST   | `{ ok: true, message: "Rescan queued" }`                 | no (a new scan is queued, not a final decision) |
-| `assessments`       | `snooze`    | GET    | `{ ok: true, message: "Snoozed 7 days" }`                | no (notification reappears later)               |
+| `assessments`       | `snooze`    | POST   | `{ ok: true, message: "Snoozed 7 days" }`                | no (notification reappears later)               |
 
 Any other `:name` under a known module, or any `:module` outside this table, is a `404`
 (see [Errors](#errors) above).

@@ -5,11 +5,11 @@ const catalog: ActionCatalogEntry[] = [
   {
     name: "snooze",
     label: "Snooze 7 days",
-    method: "GET",
+    method: "POST",
     makeAction: (): NotificationAction => ({
       label: "Snooze 7 days",
       kind: "dispatch",
-      method: "GET",
+      method: "POST",
       path: "/actions/snooze",
       metadata: { days: 7 },
     }),

@@ -126,10 +126,10 @@ describe("POST|GET /:module/actions/:name", () => {
     expect(rescan.json().resolve).toBeUndefined();
 
     const snooze = await app.inject({
-      method: "GET",
+      method: "POST",
       url: "/assessments/actions/snooze",
       headers,
-      query: { notificationId: "n1" },
+      payload: { notificationId: "n1" },
     });
     expect(snooze.json()).toMatchObject({ ok: true });
     expect(snooze.json().resolve).toBeUndefined();
