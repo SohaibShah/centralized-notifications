@@ -3,6 +3,7 @@ import type {
   FeedNotification,
   FeedSort,
   Notification,
+  NotificationAction,
   NotificationCounts,
   NotificationPage,
   NotificationPriority,
@@ -253,6 +254,15 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     items.value = items.value.map((n) => (n.id === id ? { ...n, read } : n));
   }
 
+  /**
+   * Replace one notification's action set in place (e.g. a dispatch response hands back a fresh
+   * set, such as swapping "Approve" for "Undo"). `items` is a `shallowRef`, so both the array and
+   * the changed item are replaced with new references to make the mutation visible.
+   */
+  function setActions(id: string, actions: NotificationAction[]): void {
+    items.value = items.value.map((n) => (n.id === id ? { ...n, actions } : n));
+  }
+
   /** Drop a notification the server no longer has (e.g. deleted out from under an open feed). */
   function remove(id: string): void {
     unstick(id);
@@ -456,6 +466,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     disconnect,
     markRead,
     markUnread,
+    setActions,
     flushSessionReads,
     markAllReadInScope,
     onLiveCritical,

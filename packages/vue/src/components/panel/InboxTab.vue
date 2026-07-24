@@ -54,7 +54,10 @@ const isFilteredEmpty = computed(
 // "dispatch" is the server-side proxy stub; either marks the notification read).
 const { runAction } = useActions();
 function onAction(action: NotificationAction, notification: FeedNotification) {
-  runAction(action, { id: notification.id });
+  // Temporary bridge: derive `ref` from the action's position in the card's own array (the emitted
+  // `action` is the same object reference as in `notification.actions`, so `indexOf` is correct).
+  // Task 17 will make the card emit the index explicitly instead.
+  runAction(action, { id: notification.id, ref: notification.actions?.indexOf(action) ?? 0 });
 }
 </script>
 

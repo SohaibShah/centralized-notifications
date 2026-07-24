@@ -29,15 +29,17 @@ export function buildTestContext(over: Partial<NotificationsContext> = {}): Noti
   const transport = over.transport ?? stubTransport();
   const connectSse = () => ({ close: () => {} });
   const feed = over.feed ?? createFeedState({ transport, connectSse });
+  const settings = over.settings ?? createSettingsState({ transport });
   return {
     feed,
     chat: over.chat ?? createChatState({ baseUrl: "" }),
     summary: over.summary ?? createSummaryState({ transport }),
-    settings: over.settings ?? createSettingsState({ transport }),
+    settings,
     toast: over.toast ?? createToastState(),
     panel: over.panel ?? createPanelState(),
-    // Wire actions to whatever `feed` is in play (real or overridden) so runAction hits the same slice.
-    actions: over.actions ?? createNotificationActions({ feed }),
+    // Wire actions to whatever `feed`/`settings` are in play (real or overridden) so runAction
+    // hits the same slices.
+    actions: over.actions ?? createNotificationActions({ feed, transport, settings }),
     user: over.user ?? ref(null),
     transport,
     baseUrl: over.baseUrl ?? "",
