@@ -45,6 +45,11 @@ export const ACTION_DISPATCH_METHODS = ["GET", "POST"] as const;
 
 const MAX_METADATA_BYTES = 4096;
 
+// UTF-8 byte length, not UTF-16 code-unit length — the size bound is in bytes, so non-ASCII
+// (emoji/CJK/accents) must count its real serialized size. `TextEncoder` works in both the
+// browser (@notifications/vue) and Node; `Buffer.byteLength` would break the frontend build.
+const byteLen = (s: string): number => new TextEncoder().encode(s).length;
+
 // A relative path only: one leading slash (not protocol-relative `//`), no scheme, no `..` segment.
 // This is the egress-safety guarantee — the module host comes from the registry, never the payload.
 const dispatchPathSchema = z
@@ -83,13 +88,32 @@ const dispatchActionSchema = z.object({
   kind: z.literal("dispatch"),
   method: z.enum(ACTION_DISPATCH_METHODS),
   path: dispatchPathSchema,
-  // Opaque, module-defined at publish time; the hub never interprets it. Size-bounded like every
-  // other free field so a buggy/hostile publisher can't send an abusive payload.
+  // Opaque, module-defined at publish time; the hub never interprets it. Size-bounded (UTF-8
+  // bytes) like every other free field so a buggy/hostile publisher can't send an abusive
+  // payload. `JSON.stringify` can THROW (BigInt, circular ref, RangeError on pathological depth)
+  // and zod does NOT catch exceptions from a predicate — so this is a throw-safe superRefine:
+  // any un-serializable/oversized metadata becomes a validation ISSUE, never a thrown error.
+  // This boundary is fed untrusted publish payloads via notificationSchema.safeParse (see
+  // packages/core/src/pipeline/validate.ts, documented to never throw). superRefine keeps this
+  // a ZodEffects on the FIELD (not the object) so the discriminated union still accepts it.
   metadata: z
     .unknown()
     .optional()
-    .refine((m) => m === undefined || JSON.stringify(m).length <= MAX_METADATA_BYTES, {
-      message: `metadata must be <= ${MAX_METADATA_BYTES} bytes serialized`,
+    .superRefine((m, ctx) => {
+      if (m === undefined) return;
+      try {
+        if (byteLen(JSON.stringify(m)) > MAX_METADATA_BYTES) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `metadata must be JSON-serializable and <= ${MAX_METADATA_BYTES} bytes`,
+          });
+        }
+      } catch {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: "metadata must be JSON-serializable and size-bounded",
+        });
+      }
     }),
   icon: z.string().min(1).max(100).optional(),
 });
