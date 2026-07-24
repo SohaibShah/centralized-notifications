@@ -43,6 +43,17 @@ export const audienceSchema = z
 
 export const ACTION_DISPATCH_METHODS = ["GET", "POST"] as const;
 
+/**
+ * A module's registered base URL (its API root, where action callbacks are sent) — http(s) only,
+ * same convention as `linkActionSchema.url` below. Shared so the admin PATCH route and the
+ * admin UI's inline editor validate identically instead of drifting.
+ */
+export const moduleBaseUrlSchema = z
+  .string()
+  .url()
+  .max(2048)
+  .refine((u) => /^https?:\/\//i.test(u), { message: "baseUrl must use http(s)" });
+
 const MAX_METADATA_BYTES = 4096;
 
 // UTF-8 byte length, not UTF-16 code-unit length — the size bound is in bytes, so non-ASCII

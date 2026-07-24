@@ -1,13 +1,9 @@
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import type { NotificationService } from "@notifications/core";
+import { moduleBaseUrlSchema } from "@notifications/shared";
 
 const moduleParamsSchema = z.object({ key: z.string().min(1).max(100) });
-const moduleBaseUrlSchema = z
-  .string()
-  .url()
-  .max(2048)
-  .refine((u) => /^https?:\/\//i.test(u), { message: "baseUrl must use http(s)" });
 const modulePatchSchema = z
   .object({
     enabled: z.boolean().optional(),
