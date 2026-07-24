@@ -27,7 +27,15 @@ const settings = useSettings();
 const { isPending, resultFor } = useActions();
 
 const item = computed(() => props.notification);
-const hasActions = computed(() => (item.value.actions?.length ?? 0) > 0);
+// Link actions always render; `dispatch` actions render only when `actionsEnabled` is on (see the
+// same gate on the button below). Counting raw `actions.length` here would make a card whose ONLY
+// actions are `dispatch`-kind show an expand caret that reveals an empty row once gated off.
+const visibleActionCount = computed(
+  () =>
+    item.value.actions?.filter((a) => a.kind !== "dispatch" || settings.flags.actionsEnabled)
+      .length ?? 0,
+);
+const hasActions = computed(() => visibleActionCount.value > 0);
 // A long body gets an expand affordance even with no actions (single-line truncate hides it).
 const isLongBody = computed(
   () => (item.value.description?.length ?? 0) > 140 || (item.value.title?.length ?? 0) > 60,
@@ -174,8 +182,8 @@ function toggleRead() {
         <span
           v-if="action.kind === 'dispatch' && resultFor(item.id, i)"
           data-test="action-result"
-          class="text-[11px]"
-          :class="resultFor(item.id, i)?.ok ? 'text-success' : 'text-danger'"
+          class="text-[12px]"
+          :class="resultFor(item.id, i)?.ok ? 'text-success-strong' : 'text-danger'"
         >
           {{ resultFor(item.id, i)?.message }}
         </span>

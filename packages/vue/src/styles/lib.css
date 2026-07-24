@@ -33,6 +33,7 @@
   --color-warning: var(--nt-color-warning);
   --color-warning-strong: var(--nt-color-warning-strong);
   --color-success: var(--nt-color-success);
+  --color-success-strong: var(--nt-color-success-strong);
   --color-ai-1: var(--nt-color-ai-1);
   --color-ai-2: var(--nt-color-ai-2);
   --color-ai-3: var(--nt-color-ai-3);
@@ -68,6 +69,7 @@
   --nt-color-warning: oklch(0.72 0.14 68);
   --nt-color-warning-strong: oklch(0.53 0.13 68);
   --nt-color-success: oklch(0.55 0.1 150);
+  --nt-color-success-strong: oklch(0.44 0.1 150);
 
   --nt-color-ai-1: oklch(0.55 0.1 160);
   --nt-color-ai-2: oklch(0.65 0.11 185);
@@ -98,6 +100,7 @@
   --color-warning: var(--nt-color-warning);
   --color-warning-strong: var(--nt-color-warning-strong);
   --color-success: var(--nt-color-success);
+  --color-success-strong: var(--nt-color-success-strong);
   --color-ai-1: var(--nt-color-ai-1);
   --color-ai-2: var(--nt-color-ai-2);
   --color-ai-3: var(--nt-color-ai-3);

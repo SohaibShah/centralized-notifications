@@ -32,6 +32,9 @@
      token above is tuned for dots/fills and fails WCAG AA as small text (~2.4:1). */
   --color-warning-strong: oklch(0.53 0.13 68);
   --color-success: oklch(0.55 0.1 150);
+  /* A darker green (~4.5:1+ on the ivory bg) for `success` TEXT — the light `success` token above
+     is tuned for dots/fills and fails WCAG AA as small text, same reasoning as `warning-strong`. */
+  --color-success-strong: oklch(0.44 0.1 150);
 
   /* AI-scoped identity — "vivid but cohesive" cool gradient (approved). OKLCH conversions of
      #2f8060 / #17a596 / #3a72c8; verify in-browser and nudge if they drift from the hex. */

@@ -210,6 +210,22 @@ describe("NotificationCardRenderer", () => {
       expect(actions.some((a) => a.text().includes("Approve"))).toBe(false);
     });
 
+    it("shows no expand caret (and no empty expand row) when the only actions are dispatch and actionsEnabled is off", async () => {
+      const notification = withDispatch({ id: "a" }); // dispatch is its ONLY action
+      const ctx = buildTestContext();
+      ctx.settings.flags.actionsEnabled = false;
+      const wrapper = mount(NotificationCardRenderer, {
+        props: { notification },
+        global: { provide: { [NOTIFICATIONS_KEY]: ctx } },
+      });
+      expect(wrapper.find('[data-test="expand-caret"]').exists()).toBe(false);
+      const title = wrapper.get("h3 button");
+      expect(title.attributes("aria-expanded")).toBeUndefined();
+      await title.trigger("click"); // not expandable — just marks read, nothing to reveal
+      expect(wrapper.find('[data-test="action"]').exists()).toBe(false);
+      expect(wrapper.emitted("open")).toHaveLength(1);
+    });
+
     it("emits action with the action, the notification, and its index in the actions array", async () => {
       const notification = feedItem({
         id: "a",
@@ -269,7 +285,7 @@ describe("NotificationCardRenderer", () => {
       await wrapper.vm.$nextTick();
       const result = wrapper.get('[data-test="action-result"]');
       expect(result.text()).toBe("Approved");
-      expect(result.classes()).toContain("text-success");
+      expect(result.classes()).toContain("text-success-strong");
     });
   });
 });
