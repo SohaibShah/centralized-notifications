@@ -6,6 +6,7 @@ const base = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres",
   SESSION_SECRET: "a".repeat(64),
   INTERNAL_INTAKE_TOKEN: "x".repeat(32),
+  MODULE_DISPATCH_TOKEN: "y".repeat(32),
 } satisfies NodeJS.ProcessEnv;
 
 describe("buildAiProvider", () => {

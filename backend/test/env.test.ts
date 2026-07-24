@@ -5,6 +5,7 @@ const base = {
   DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/postgres",
   SESSION_SECRET: "a".repeat(64),
   INTERNAL_INTAKE_TOKEN: "x".repeat(32),
+  MODULE_DISPATCH_TOKEN: "y".repeat(32),
 } satisfies NodeJS.ProcessEnv;
 
 describe("loadEnv", () => {
@@ -39,6 +40,14 @@ describe("loadEnv", () => {
     expect(() => loadEnv(withoutToken)).toThrow(/INTERNAL_INTAKE_TOKEN/);
     expect(() => loadEnv({ ...base, INTERNAL_INTAKE_TOKEN: "short" })).toThrow(
       /INTERNAL_INTAKE_TOKEN/,
+    );
+  });
+
+  it("throws when MODULE_DISPATCH_TOKEN is missing or too short", () => {
+    const { MODULE_DISPATCH_TOKEN: _omit, ...withoutToken } = base;
+    expect(() => loadEnv(withoutToken)).toThrow(/MODULE_DISPATCH_TOKEN/);
+    expect(() => loadEnv({ ...base, MODULE_DISPATCH_TOKEN: "short" })).toThrow(
+      /MODULE_DISPATCH_TOKEN/,
     );
   });
 });
