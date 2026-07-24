@@ -21,10 +21,6 @@ const envSchema = z.object({
   // outbound instead of inbound). Generate with `openssl rand -hex 24`.
   MODULE_DISPATCH_TOKEN: z.string().min(16, "MODULE_DISPATCH_TOKEN must be at least 16 characters"),
   PORT: z.coerce.number().int().positive().default(3000),
-  // Runaway ceiling for the dev/QA generator's burst mode (backend/src/http/admin/simulate.ts).
-  // Not a product limit — stress testing is a goal — just a guard so one request can't loop
-  // unbounded and hang. Only consulted when the (non-prod) simulate route is registered.
-  SIMULATE_MAX_BURST: z.coerce.number().int().positive().default(10000),
   // AI summarizer provider. Real Ollama by default; `fake` selects the deterministic test-lane
   // provider. No secret is required for local Ollama; AI_API_KEY is only for a cloud/scaled
   // endpoint and is never logged or returned to the browser.
