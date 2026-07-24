@@ -1,6 +1,8 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { registerActionRoutes } from "./routes/actions";
+import { registerCatalogRoute } from "./routes/catalog";
 import { registerEmitRoute } from "./routes/emit";
+import { registerPageRoute } from "./routes/page";
 
 export interface AppConfig {
   hubUrl: string;
@@ -23,8 +25,8 @@ declare module "fastify" {
 
 /**
  * Builds the module-sim Fastify app. `GET /health` plus the dispatched-action endpoint
- * (`POST|GET /:module/actions/:name`, Task 11) and the emit-to-hub API (`POST /emit`, Task
- * 12); a later task adds the control-center page as a further route registration here.
+ * (`POST|GET /:module/actions/:name`, Task 11), the emit-to-hub API (`POST /emit`, Task 12),
+ * the `/catalog` read model, and the control-center page at `GET /` (Task 13).
  */
 export function buildApp(config: AppConfig, deps: AppDeps = {}): FastifyInstance {
   const app = Fastify();
@@ -37,6 +39,8 @@ export function buildApp(config: AppConfig, deps: AppDeps = {}): FastifyInstance
 
   registerActionRoutes(app, config);
   registerEmitRoute(app, config, deps.fetchImpl ?? fetch);
+  registerCatalogRoute(app);
+  registerPageRoute(app);
 
   return app;
 }

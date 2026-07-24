@@ -19,7 +19,10 @@ Source of truth: [`src/app.ts`](../../packages/module-sim/src/app.ts) (route reg
 [`src/routes/actions.ts`](../../packages/module-sim/src/routes/actions.ts) (the dispatch
 endpoint), [`src/routes/emit.ts`](../../packages/module-sim/src/routes/emit.ts) and
 [`src/generate.ts`](../../packages/module-sim/src/generate.ts) (the emit-to-hub endpoint and
-its notification generation), [`src/modules/registry.ts`](../../packages/module-sim/src/modules/registry.ts)
+its notification generation), [`src/routes/catalog.ts`](../../packages/module-sim/src/routes/catalog.ts)
+(the read model for the control-center page), [`src/routes/page.ts`](../../packages/module-sim/src/routes/page.ts)
+and [`src/page.ts`](../../packages/module-sim/src/page.ts) (the control-center page itself),
+[`src/modules/registry.ts`](../../packages/module-sim/src/modules/registry.ts)
 and the four files under [`src/modules/`](../../packages/module-sim/src/modules/) (per-module
 action catalogs and handlers), [`src/config.ts`](../../packages/module-sim/src/config.ts)
 (env validation).
@@ -153,6 +156,118 @@ persists the notifications
 and fans them out live over SSE to connected clients — that's the hub's own concern,
 documented on its own page; `/emit`'s job ends once the hub responds `2xx`. Nothing is
 persisted by module-sim itself.
+
+## GET /catalog
+
+**Auth:** none — same trust model as the rest of module-sim (dev tool only, refuses to
+start in production).
+
+The read model behind the control-center page's ([`GET /`](#get-)) "Custom" panel, so that
+panel only ever offers actions that really exist on a module instead of hand-maintaining a
+second, duplicate action list in client-side JS.
+
+### Request
+
+No body, no params.
+
+### Response `200`
+
+```json
+{
+  "modules": [
+    {
+      "key": "dsr",
+      "actions": [
+        { "name": "approve", "label": "Approve DSR", "method": "POST" },
+        { "name": "reject", "label": "Reject DSR", "method": "POST" }
+      ]
+    },
+    {
+      "key": "access-governance",
+      "actions": [{ "name": "revoke", "label": "Revoke access", "method": "POST" }]
+    },
+    {
+      "key": "data-mapping",
+      "actions": [{ "name": "rescan", "label": "Trigger rescan", "method": "POST" }]
+    },
+    {
+      "key": "assessments",
+      "actions": [{ "name": "snooze", "label": "Snooze reminder", "method": "POST" }]
+    }
+  ],
+  "presets": [
+    "critical-dsr",
+    "high-access-approval",
+    "normal-data-mapping-scan",
+    "low-assessment-reminder"
+  ]
+}
+```
+
+`modules` is built from `ALL_MODULES`
+([`src/modules/registry.ts`](../../packages/module-sim/src/modules/registry.ts)) — the same
+four modules and the same action names/labels/methods documented in the
+[Action reference](#action-reference) table below. `presets` is `PRESET_IDS`, exported from
+[`src/generate.ts`](../../packages/module-sim/src/generate.ts) — the same four ids
+documented under `POST /emit`'s ["preset" section](#post-emit) above.
+
+Each catalog entry's `makeAction` function is deliberately **not** included in this
+response: it isn't JSON-serializable (it's a function), and including it would leak
+dispatch-metadata generation logic the UI has no use for. Only the three JSON-safe fields
+(`name`, `label`, `method`) are projected per action.
+
+### Errors
+
+None — this route cannot fail short of the process itself being down.
+
+### Side effects
+
+None (read-only).
+
+## GET /
+
+**Auth:** none.
+
+Serves the **module-sim Control Center** — a single self-contained static HTML page
+(inline `<style>`/`<script>`, no Vue, no Tailwind, no build step, no external CDN calls)
+that is this project's human-facing dev tool for generating test notifications. It
+replaces the old admin generator, which is being removed separately (Task 14).
+
+### Request
+
+No body, no params.
+
+### Response `200`
+
+`Content-Type: text/html; charset=utf-8`. The body is a fixed HTML string — it is **not**
+read from disk at request time, but inlined into the compiled JS at build time (see
+[`src/page.ts`](../../packages/module-sim/src/page.ts)'s doc comment for why: it sidesteps
+whether a `public/` directory survives the `tsup` bundle next to `dist/index.js`, so the
+route behaves identically under `tsx src/index.ts` (dev) and `node dist/index.js` (build),
+regardless of process cwd).
+
+The page has three panels, each posting same-origin to this same service's
+[`POST /emit`](#post-emit) (documented above) with the mode it corresponds to:
+
+| Panel  | Behavior                                                                                                                                                                                                                           |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Custom | Fetches [`GET /catalog`](#get-catalog) on page load to populate a module dropdown and, per selected module, a checkbox list of that module's actions. Submits `{ mode: "custom", module, title, description, priority, actions }`. |
+| Preset | Fetches [`GET /catalog`](#get-catalog) for the list of preset ids. Submits `{ mode: "preset", preset }`.                                                                                                                           |
+| Burst  | A count input capped client-side at `MAX_BURST` (currently `50` — the same constant `POST /emit` enforces server-side). Submits `{ mode: "burst", count }`.                                                                        |
+
+Each panel shows the `/emit` response (`{ "published": N }`) or error inline in its own
+status region — no page reload, no shared state between panels.
+
+### Errors
+
+None from this route itself — a failed submission is an error surfaced by `/emit`
+(documented above) and rendered inline by the page's own JS, not a failure of `GET /`.
+
+### Side effects
+
+None from serving the page itself. Submitting one of its panels has the same side effects
+as [`POST /emit`](#side-effects-1) (already documented above), since that's all the page's
+JS actually calls.
 
 ## POST /:module/actions/:name
 
