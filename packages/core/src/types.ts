@@ -1,3 +1,5 @@
+import type { NotificationAction } from "@notifications/shared";
+
 /**
  * WHO is asking, as the audience filter needs them. The library's identity contract — the host's
  * auth adapter produces this; core never derives it from an owned users table. `userKey` matches
@@ -62,6 +64,31 @@ export interface AiProvider {
   ): AsyncIterable<string>;
 }
 
+/**
+ * Host-injected outbound transport for `dispatch` actions. Core composes the absolute `url` from the
+ * module's registry `base_url` + the action's relative `path`, chooses the `method`, and builds the
+ * `body` ({notificationId, actionRef, metadata, actor}); the host impl performs the actual outbound
+ * call and returns the parsed JSON body + HTTP status. Core then validates the body. Keeping the
+ * concrete HTTP client out of core is what lets `packages/core` stay identity/env-free.
+ */
+export interface ActionDispatcher {
+  dispatch(input: {
+    url: string;
+    method: "GET" | "POST";
+    body: unknown;
+  }): Promise<{ status: number; body: unknown }>;
+}
+
+/** The relayed outcome of a dispatch action — the hub never interprets it beyond validating shape.
+ *  `resolve` mirrors the module's request to mark the source notification read; `actions` lets the
+ *  module hand back a replacement action set (e.g. an "Undo"). */
+export interface ActionDispatchResult {
+  ok: boolean;
+  message?: string;
+  resolve?: boolean;
+  actions?: NotificationAction[];
+}
+
 /** What a host injects when constructing the service. `modules` is the host-owned catalog; only
  *  runtime state (enabled/disabled, last_seen) lives in the library's DB. */
 export interface NotificationServiceConfig {
@@ -70,4 +97,7 @@ export interface NotificationServiceConfig {
   adminRole?: string;
   /** Optional AI transport. When absent, AI features (summarize) report "not configured". */
   ai?: { provider: AiProvider };
+  /** Optional outbound transport for `dispatch` actions. When absent, dispatch actions report
+   *  "module unavailable" (there is no way to reach the module). */
+  actionDispatcher?: ActionDispatcher;
 }

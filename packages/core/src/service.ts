@@ -10,7 +10,14 @@ import { list } from "./read/feed";
 import { markRead, markReadBulk, markUnread } from "./read/read-state";
 import { SummaryEngine } from "./ai/summarize";
 import { AnswerEngine, type AnswerChunk, type ChatTurn } from "./ai/answer";
-import type { ModulePolicyView, NotificationServiceConfig, Principal, Settings } from "./types";
+import { dispatchAction } from "./action/dispatch";
+import type {
+  ActionDispatchResult,
+  ModulePolicyView,
+  NotificationServiceConfig,
+  Principal,
+  Settings,
+} from "./types";
 
 /** `list` was given a cursor that doesn't decode or was issued for a different sort. */
 export class InvalidCursorError extends Error {
@@ -44,6 +51,18 @@ export interface NotificationService {
   markRead(args: { principal: Principal; id: string }): Promise<void>;
   markReadBulk(args: { principal: Principal; ids: string[] }): Promise<void>;
   markUnread(args: { principal: Principal; id: string }): Promise<void>;
+
+  /** Forward a user's `dispatch` action to its owning module and relay the module's response. Throws
+   *  ActionsDisabledError (feature off), ModuleUnavailableError (no dispatcher / module disabled /
+   *  no base_url), or NotFoundError (notification not visible / bad actionRef / not a dispatch
+   *  action). Idempotent on `idempotencyKey`: a replay returns the recorded result without
+   *  re-dispatching. */
+  dispatchAction(args: {
+    principal: Principal;
+    notificationId: string;
+    actionRef: string;
+    idempotencyKey: string;
+  }): Promise<ActionDispatchResult>;
 
   listModules(): Promise<ModulePolicyView[]>;
   setModuleEnabled(id: string, enabled: boolean): Promise<void>;
@@ -113,6 +132,8 @@ export function createNotificationService(opts: {
     },
     markReadBulk: (args) => markReadBulk(query, args),
     markUnread: (args) => markUnread(query, args),
+    dispatchAction: (args) =>
+      dispatchAction({ query, policy, dispatcher: opts.config.actionDispatcher }, args),
     listModules: () => policy.listModules(),
     setModuleEnabled: (id, enabled) => policy.setModuleEnabled(id, enabled),
     setModuleBaseUrl: (id, baseUrl) => policy.setModuleBaseUrl(id, baseUrl),

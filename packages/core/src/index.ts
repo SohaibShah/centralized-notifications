@@ -8,6 +8,7 @@ export {
   NotFoundError,
   type NotificationService,
 } from "./service";
+export { ActionsDisabledError, ModuleUnavailableError } from "./action/dispatch";
 export type { IngestResult, IngestStatus } from "./pipeline/boundary";
 export {
   AiDisabledError,
@@ -21,6 +22,8 @@ export type {
   ModulePolicyView,
   Settings,
   NotificationServiceConfig,
+  ActionDispatcher,
+  ActionDispatchResult,
   AiMessage,
   AiProvider,
 } from "./types";
