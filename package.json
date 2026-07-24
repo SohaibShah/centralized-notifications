@@ -9,7 +9,7 @@
   },
   "scripts": {
     "predev": "pnpm --filter @notifications/vue build:css",
-    "dev": "concurrently -n vue-css,backend,frontend -c yellow,blue,green \"pnpm --filter @notifications/vue dev:css\" \"pnpm --filter @notifications/backend dev\" \"pnpm --filter @notifications/frontend dev\"",
+    "dev": "concurrently -n vue-css,backend,module-sim,frontend -c yellow,blue,magenta,green \"pnpm --filter @notifications/vue dev:css\" \"pnpm --filter @notifications/backend dev\" \"pnpm --filter @notifications/module-sim dev\" \"pnpm --filter @notifications/frontend dev\"",
     "build": "pnpm -r build",
     "lint": "eslint .",
     "format": "prettier --check .",

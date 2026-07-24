@@ -188,6 +188,9 @@ importers:
       '@notifications/shared':
         specifier: workspace:*
         version: link:../shared
+      dotenv:
+        specifier: ^17.4.2
+        version: 17.4.2
       fastify:
         specifier: ^5.2.1
         version: 5.9.0

@@ -1,3 +1,4 @@
+import "./load-env";
 import { buildApp } from "./app";
 import { loadConfig } from "./config";
 
