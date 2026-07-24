@@ -178,8 +178,8 @@ No body, no params.
     {
       "key": "dsr",
       "actions": [
-        { "name": "approve", "label": "Approve DSR", "method": "POST" },
-        { "name": "reject", "label": "Reject DSR", "method": "POST" }
+        { "name": "approve", "label": "Approve", "method": "POST" },
+        { "name": "reject", "label": "Reject", "method": "POST" }
       ]
     },
     {
@@ -188,11 +188,11 @@ No body, no params.
     },
     {
       "key": "data-mapping",
-      "actions": [{ "name": "rescan", "label": "Trigger rescan", "method": "POST" }]
+      "actions": [{ "name": "rescan", "label": "Rescan", "method": "POST" }]
     },
     {
       "key": "assessments",
-      "actions": [{ "name": "snooze", "label": "Snooze reminder", "method": "POST" }]
+      "actions": [{ "name": "snooze", "label": "Snooze 7 days", "method": "POST" }]
     }
   ],
   "presets": [

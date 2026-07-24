@@ -9,6 +9,6 @@ import { CONTROL_CENTER_HTML } from "../page";
  */
 export function registerPageRoute(app: FastifyInstance): void {
   app.get("/", async (_req, reply) => {
-    reply.header("content-type", "text/html; charset=utf-8").send(CONTROL_CENTER_HTML);
+    reply.type("text/html; charset=utf-8").send(CONTROL_CENTER_HTML);
   });
 }

@@ -7,6 +7,12 @@
  * the process's cwd. Self-contained by design (inline `<style>`/`<script>`, no external
  * network/CDN calls other than same-origin `fetch("/catalog")` / `fetch("/emit")`) per the
  * task brief — no Vue, no Tailwind, no build step for the page itself.
+ *
+ * The three panels below are hand-rolled `<form>`s rather than the project-wide JSON-driven
+ * `<FormRenderer>` (see `json-form-conventions`) — a deliberate, scoped exception: module-sim
+ * is explicitly a Vue-free, build-step-free Fastify dev tool (that's the whole point of this
+ * file), so pulling in `<FormRenderer>` would mean giving this package a Vue runtime it's
+ * designed not to have. This does not set a precedent for `frontend/`.
  */
 import { MAX_BURST } from "./routes/emit";
 
@@ -412,6 +418,10 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
 
     if (actions.length === 0) {
       showResult(resultNode, "error", "Select at least one action.");
+      return;
+    }
+    if (actions.length > 5) {
+      showResult(resultNode, "error", "Select at most 5 actions.");
       return;
     }
 
