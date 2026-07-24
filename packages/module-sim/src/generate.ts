@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import {
   AUDIENCE_SCOPES,
   notificationSchema,
@@ -92,8 +93,10 @@ function catalogByName(mod: SimModule): Map<string, ActionCatalogEntry> {
  * name isn't in the module's catalog — burst/preset templates are internal and should only ever
  * name real actions (see `MODULE_TEMPLATES`/`PRESETS` below), so an unresolvable name here means
  * a template was edited with a typo, not a shape to silently degrade: without this guard a typo'd
- * template would ship a schema-valid but non-actionable notification instead of failing loudly. */
-function pickActions(mod: SimModule, names: string[]): NotificationAction[] {
+ * template would ship a schema-valid but non-actionable notification instead of failing loudly.
+ * Exported only so the throw-on-typo behavior can be exercised directly in tests — the built-in
+ * templates are all valid, so no `generateBurst`/`generatePreset` call ever reaches the throw. */
+export function pickActions(mod: SimModule, names: string[]): NotificationAction[] {
   const byName = catalogByName(mod);
   return names.map((name) => {
     const entry = byName.get(name);
@@ -155,9 +158,15 @@ function validate(candidate: Notification): Notification {
 
 /**
  * Generates `count` actionable notifications spread across the four registered modules.
- * Deterministic given `seed` (mulberry32, same PRNG as the old backend simulator); random
- * (time-seeded) otherwise. Every item carries at least one `kind: "dispatch"` action drawn
- * from its module's real catalog.
+ * `seed` controls CONTENT variety only (which module/template/audience each item gets) —
+ * deterministic given a seed (mulberry32, the same PRNG as the old backend simulator),
+ * varied otherwise. It deliberately does NOT control the notification `id`: the hub dedupes
+ * purely on `id` (`ON CONFLICT (id) DO NOTHING`), so if identity were seed-derived, two
+ * un-seeded bursts fired within the same millisecond — this is a rapid-fire load-gen tool —
+ * would mint colliding ids and the hub would silently drop the second batch while `/emit`
+ * still reported it as published. So every id folds in real per-call entropy
+ * (`crypto.randomUUID()`), guaranteeing uniqueness regardless of seed, timing, or concurrency.
+ * Every item carries at least one `kind: "dispatch"` action drawn from its module's real catalog.
  */
 export function generateBurst(count: number, seed?: number): Notification[] {
   const rng = mulberry32((seed ?? Date.now()) >>> 0);
@@ -176,8 +185,9 @@ export function generateBurst(count: number, seed?: number): Notification[] {
     const scope = AUDIENCE_SCOPES[i % AUDIENCE_SCOPES.length]!;
 
     const notification: Notification = {
-      // `i` guarantees uniqueness within the burst (it doubles as the dedupe key).
-      id: `${mod.key}-${i}-${shortId(rng)}`,
+      // `randomUUID()` is real per-call entropy, NOT the seeded rng — see the function-level
+      // note above on why identity must be decoupled from the seed (the hub dedupes on id).
+      id: `${mod.key}-${i}-${randomUUID()}`,
       module: mod.key,
       title: template.title,
       description: template.describe(rng),
@@ -259,7 +269,9 @@ export function generatePreset(id: PresetId): Notification[] {
   if (!mod) throw new Error(`preset "${id}" references unknown module "${def.module}"`);
 
   const notification: Notification = {
-    id: `preset-${id}-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`,
+    // Real per-call entropy (see generateBurst's note): a preset is deterministic in CONTENT
+    // but must get a fresh id each emit so repeated one-clicks aren't deduped away by the hub.
+    id: `preset-${id}-${randomUUID()}`,
     module: def.module,
     title: def.title,
     description: def.description,
@@ -300,7 +312,7 @@ export function buildCustom(input: CustomInput): Notification {
   });
 
   const notification: Notification = {
-    id: `custom-${Date.now().toString(36)}-${Math.floor(Math.random() * 1e9).toString(36)}`,
+    id: `custom-${randomUUID()}`,
     module: input.module,
     title: input.title,
     description: input.description,
