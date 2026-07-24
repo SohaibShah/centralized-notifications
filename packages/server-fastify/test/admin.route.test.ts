@@ -98,6 +98,78 @@ test("PATCH an unknown module → 404", async () => {
   expect(res.statusCode).toBe(404);
 });
 
+test("PATCH /admin/modules/:key sets baseUrl", async () => {
+  const res = await app.inject({
+    method: "PATCH",
+    url: "/admin/modules/dsr",
+    headers: admin,
+    payload: { baseUrl: "http://localhost:4000/dsr" },
+  });
+  expect(res.statusCode).toBe(204);
+  const mods = await svc.listModules();
+  expect(mods.find((m) => m.id === "dsr")?.baseUrl).toBe("http://localhost:4000/dsr");
+});
+
+test("rejects a baseUrl that is not http(s) or null", async () => {
+  const res = await app.inject({
+    method: "PATCH",
+    url: "/admin/modules/dsr",
+    headers: admin,
+    payload: { baseUrl: "javascript:alert(1)" },
+  });
+  expect(res.statusCode).toBe(400);
+});
+
+test("PATCH /admin/modules/:key with empty body → 400", async () => {
+  const res = await app.inject({
+    method: "PATCH",
+    url: "/admin/modules/dsr",
+    headers: admin,
+    payload: {},
+  });
+  expect(res.statusCode).toBe(400);
+});
+
+test("PATCH /admin/modules/:key clears baseUrl with null", async () => {
+  const res = await app.inject({
+    method: "PATCH",
+    url: "/admin/modules/dsr",
+    headers: admin,
+    payload: { baseUrl: null },
+  });
+  expect(res.statusCode).toBe(204);
+  const mods = await svc.listModules();
+  expect(mods.find((m) => m.id === "dsr")?.baseUrl).toBeNull();
+});
+
+test("GET /admin/modules includes each module's baseUrl", async () => {
+  // Set one via the PATCH added above, then confirm the list read surfaces it.
+  await app.inject({
+    method: "PATCH",
+    url: "/admin/modules/dsr",
+    headers: admin,
+    payload: { baseUrl: "https://dsr.internal.example.com" },
+  });
+  const set = (
+    await app.inject({ method: "GET", url: "/admin/modules", headers: admin })
+  ).json() as { key: string; baseUrl: string | null }[];
+  const dsr = set.find((m) => m.key === "dsr");
+  expect(dsr).toBeDefined();
+  expect(dsr?.baseUrl).toBe("https://dsr.internal.example.com");
+
+  // And it reads back as null once cleared.
+  await app.inject({
+    method: "PATCH",
+    url: "/admin/modules/dsr",
+    headers: admin,
+    payload: { baseUrl: null },
+  });
+  const cleared = (
+    await app.inject({ method: "GET", url: "/admin/modules", headers: admin })
+  ).json() as { key: string; baseUrl: string | null }[];
+  expect(cleared.find((m) => m.key === "dsr")?.baseUrl).toBeNull();
+});
+
 test("settings round-trip: PATCH /admin/settings reflects in GET /settings/features", async () => {
   const patch = await app.inject({
     method: "PATCH",

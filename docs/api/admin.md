@@ -61,6 +61,7 @@ An array of module summaries:
 | `key`                 | string            | The module's identifier, as sent in the notification's `module` field.                              |
 | `label`               | string            | Display label, from the seed catalog (e.g. `"Data Mapping"`). **Not editable** — see `PATCH` below. |
 | `enabled`             | boolean           | Whether the module is currently allowed to deliver notifications.                                   |
+| `baseUrl`             | string \| null    | The module's registered API base URL (admin-editable via `PATCH`). `null` = not dispatchable.       |
 | `lastSeenAt`          | string (ISO 8601) | Timestamp of the module's most recent publish.                                                      |
 | `total`               | number            | Count of **all** notifications ever recorded for this module (suppressed or not).                   |
 | `suppressed`          | number            | Of `total`, how many were recorded but not delivered (published while the module was disabled).     |
@@ -75,6 +76,7 @@ An array of module summaries:
     "key": "dsr",
     "label": "Dsr",
     "enabled": true,
+    "baseUrl": "https://dsr.internal.example.com",
     "lastSeenAt": "2026-07-10T09:15:22.481Z",
     "total": 42,
     "suppressed": 3,
@@ -98,8 +100,8 @@ None — read-only.
 
 **Auth:** required, admin only ([`requireAdmin`](../../backend/src/auth/guards.ts) — `401`/`403` as above).
 
-Enables/disables a module. This is the only mutable field — labels come from the seed catalog
-and are **not** editable.
+Enables/disables a module and/or sets its registered API base URL. Labels come from the seed
+catalog and are **not** editable.
 
 ### Request
 
@@ -109,17 +111,28 @@ Path parameter:
 | ----- | -------------------- | -------- | ------------------------ |
 | `key` | string (1–100 chars) | yes      | The module's identifier. |
 
-Body — only `enabled` is accepted, and it is **required**:
+Body — any subset of the two fields below; at least one is required:
 
-| Field     | Type    | Required | Notes                      |
-| --------- | ------- | -------- | -------------------------- |
-| `enabled` | boolean | yes      | Enable/disable the module. |
+| Field     | Type           | Required | Notes                                                                                                                                                                                                                                                                                 |
+| --------- | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled` | boolean        | no*      | Enable/disable the module.                                                                                                                                                                                                                                                            |
+| `baseUrl` | string \| null | no*      | The module's registered API base URL, used by the (upcoming) action dispatcher. Must be a non-empty `http(s)://` URL (case-insensitive scheme, max 2048 chars), or explicit `null` to clear it. Anything else — a `javascript:` URL, a malformed string, etc. — is rejected as `400`. |
 
-A body without `enabled` (including an empty body, or one carrying only a now-unsupported
-`label`) is rejected as `400`.
+\* An empty body (neither field present) is rejected as `400`. Both fields may be sent together
+in the same request; each present field is applied independently.
+
+A module with `baseUrl: null` (the default) is **not dispatchable** — the action dispatcher
+rejects dispatch actions for it until an admin sets a `baseUrl`.
+
+The current value is readable via [`GET /admin/modules`](#get-adminmodules), which includes
+each module's `baseUrl` in its response.
 
 ```json
 { "enabled": false }
+```
+
+```json
+{ "baseUrl": "https://dsr.internal.example.com" }
 ```
 
 ### Response `204`
@@ -128,20 +141,22 @@ A body without `enabled` (including an empty body, or one carrying only a now-un
 
 ### Errors
 
-| Status | Body                                     | Reason                                                         |
-| ------ | ---------------------------------------- | -------------------------------------------------------------- |
-| `400`  | `{ "error": "invalid module key" }`      | `key` path parameter is empty or over 100 chars.               |
-| `400`  | `{ "error": "invalid request body" }`    | Body fails validation — `enabled` is missing or not a boolean. |
-| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                       |
-| `403`  | `{ "error": "admin role required" }`     | Logged in, but not an admin.                                   |
-| `404`  | `{ "error": "module not found" }`        | No module with that `key` exists in the seeded catalog.        |
+| Status | Body                                     | Reason                                                                                                                                                               |
+| ------ | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid module key" }`      | `key` path parameter is empty or over 100 chars.                                                                                                                     |
+| `400`  | `{ "error": "invalid request body" }`    | Body fails validation — neither `enabled` nor `baseUrl` present, `enabled` is not a boolean, or `baseUrl` isn't a valid `http(s)` URL (or `null`) within 2048 chars. |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                                                                                             |
+| `403`  | `{ "error": "admin role required" }`     | Logged in, but not an admin.                                                                                                                                         |
+| `404`  | `{ "error": "module not found" }`        | No module with that `key` exists in the seeded catalog.                                                                                                              |
 
 ### Side effects
 
-Updates the `modules` row's `enabled` column. **Invalidates the in-memory policy
-cache** (the service's [`PolicyStore`](../../packages/core/src/policy/store.ts) invalidates its cache on any write) — a disable/enable
-takes effect starting with the module's **next ingest**, not retroactively on already-persisted
-notifications.
+Updates the `modules` row's `enabled` and/or `base_url` columns, depending on which fields were
+present in the body. **Invalidates the in-memory policy cache** (the service's
+[`PolicyStore`](../../packages/core/src/policy/store.ts) invalidates its cache on any write) — an
+`enabled` change takes effect starting with the module's **next ingest**; a `baseUrl` change
+takes effect on the dispatcher's next dispatch attempt. Neither is retroactive on
+already-persisted notifications.
 
 ## GET /admin/settings
 
