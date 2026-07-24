@@ -27,7 +27,7 @@ describe("CitationChip", () => {
     const btn = wrapper.find('[data-test="chip-action"]');
     expect(btn.exists()).toBe(true);
     await btn.trigger("click");
-    expect(runActionSpy).toHaveBeenCalledWith(source.actions[0], { id: "a1" });
+    expect(runActionSpy).toHaveBeenCalledWith(source.actions[0], { id: "a1", ref: 0 });
   });
 
   it("an action-less source expands but shows no buttons", async () => {

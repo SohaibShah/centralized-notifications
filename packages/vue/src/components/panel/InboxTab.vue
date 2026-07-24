@@ -53,11 +53,12 @@ const isFilteredEmpty = computed(
 // The action path is shared with the AI chat via useNotificationActions ("link" opens the url;
 // "dispatch" is the server-side proxy stub; either marks the notification read).
 const { runAction } = useActions();
-function onAction(action: NotificationAction, notification: FeedNotification) {
-  // Temporary bridge: derive `ref` from the action's position in the card's own array (the emitted
-  // `action` is the same object reference as in `notification.actions`, so `indexOf` is correct).
-  // Task 17 will make the card emit the index explicitly instead.
-  runAction(action, { id: notification.id, ref: notification.actions?.indexOf(action) ?? 0 });
+async function onAction(
+  action: NotificationAction,
+  notification: FeedNotification,
+  index: number,
+): Promise<void> {
+  await runAction(action, { id: notification.id, ref: index });
 }
 </script>
 

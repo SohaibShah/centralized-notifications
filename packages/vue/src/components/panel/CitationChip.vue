@@ -41,12 +41,12 @@ const dotClass: Record<ChatSource["priority"], string> = {
       >
       <span v-if="props.source.actions.length" class="flex flex-wrap gap-2">
         <button
-          v-for="action in props.source.actions"
-          :key="action.label + action.url"
+          v-for="(action, i) in props.source.actions"
+          :key="action.label + '-' + i"
           type="button"
           data-test="chip-action"
           class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 font-medium text-text hover:bg-sunken"
-          @click="runAction(action, { id: props.source.id })"
+          @click="runAction(action, { id: props.source.id, ref: i })"
         >
           <Icon v-if="actionIcon(action.icon)" :icon="actionIcon(action.icon)!" :size="13" />
           {{ action.label }}

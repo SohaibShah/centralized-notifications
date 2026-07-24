@@ -26,7 +26,7 @@ export const featuresForm: FormSchema = {
       name: "actionsEnabled",
       label: "Actions",
       type: "switch",
-      hint: "Allow module action buttons on notification cards (coming soon).",
+      hint: "Allow module action buttons on notification cards.",
     },
   ],
   submitLabel: "Save changes",

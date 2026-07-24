@@ -91,16 +91,14 @@ describe("InboxTab", () => {
     expect(ctx.transport.post).toHaveBeenCalledWith("/notifications/a/read");
   });
 
-  it("does not open a tab for a dispatch action but still marks read", async () => {
+  it("does not open a tab for a dispatch action, and dispatches to its own index-keyed endpoint", async () => {
     const ctx = makeCtx();
     const feed = ctx.feed;
     feed.items = [
       feedItem({
         id: "a",
         read: false,
-        actions: [
-          { label: "Approve", kind: "dispatch", method: "GET", url: "https://example.com/a" },
-        ],
+        actions: [{ label: "Approve", kind: "dispatch", method: "POST", path: "/a" }],
       }),
     ];
     feed.status = "ready";
@@ -110,7 +108,12 @@ describe("InboxTab", () => {
     const btn = wrapper.findAll("button").find((b) => b.text().trim() === "Approve");
     await btn!.trigger("click");
     expect(openSpy).not.toHaveBeenCalled();
-    expect(ctx.transport.post).toHaveBeenCalledWith("/notifications/a/read");
+    // The emitted action index (0, its position in this notification's own actions array) is what
+    // keys the dispatch round-trip — NOT a hardcoded "/read" path.
+    expect(ctx.transport.post).toHaveBeenCalledWith(
+      "/notifications/a/actions/0/dispatch",
+      expect.objectContaining({ idempotencyKey: expect.any(String) }),
+    );
   });
 
   it("treats a legacy action with no kind as a link (still opens a tab)", async () => {
