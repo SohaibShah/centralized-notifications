@@ -1,4 +1,4 @@
-import type { FastifyInstance, preHandlerHookHandler } from "fastify";
+import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import { FEED_SORTS } from "@notifications/shared";
 import {
@@ -90,7 +90,20 @@ export function notificationReadRoutes(
 
   app.post(
     "/notifications/:id/actions/:ref/dispatch",
-    { preHandler: requirePrincipal },
+    {
+      preHandler: requirePrincipal,
+      // Per-principal (falls back to per-IP pre-auth/for anonymous-key hosts) limit so a scripted
+      // client can't flood a module or pile up `action_dispatches` rows. No-op unless the host has
+      // registered @fastify/rate-limit (see backend/src/server.ts, `global: false` — only routes
+      // that opt in are limited); mirrors the shape of `/auth/login`'s limit in backend/src/auth/routes.ts.
+      config: {
+        rateLimit: {
+          max: 20,
+          timeWindow: "1 minute",
+          keyGenerator: (req: FastifyRequest) => req.principal?.userKey ?? req.ip,
+        },
+      },
+    },
     async (req, reply) => {
       const principal = req.principal;
       if (!principal) return reply.code(401).send({ error: "authentication required" });
