@@ -17,7 +17,13 @@ const REF_DB = "notifications_parity_ref";
 const urlFor = (db: string) => ADMIN_URL.replace(/\/[^/?]+(\?|$)/, `/${db}$1`);
 
 const migrationsDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../migrations");
-const SHARED_TABLES = ["notifications", "notification_reads", "modules", "global_settings"];
+const SHARED_TABLES = [
+  "notifications",
+  "notification_reads",
+  "modules",
+  "global_settings",
+  "action_dispatches",
+];
 
 let libPool: pg.Pool;
 let refPool: pg.Pool;
