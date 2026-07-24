@@ -45,5 +45,11 @@ export default defineConfig({
     url: "http://localhost:5173",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
+    // NODE_ENV=test relaxes the login route's per-IP rate limit (backend/src/auth/routes.ts:
+    // max 10/min in dev, 1000/min in test) — this suite logs in well over a dozen times across
+    // its spec files, which trips the dev limit and makes whichever spec runs last see a spurious
+    // "Couldn't sign in" failure. Applied via `env` (not a command-line prefix) so it covers the
+    // whole chained command (migrate && seed && dev), not just the last segment.
+    env: { NODE_ENV: "test" },
   },
 });
