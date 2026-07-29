@@ -138,6 +138,70 @@ describe("notification actions", () => {
     expect(markReadSpy).not.toHaveBeenCalled();
   });
 
+  it("dispatch: a successful terminal action locks the notification and blocks its sibling actions", async () => {
+    postMock.mockResolvedValueOnce({
+      ok: true,
+      message: "Approved",
+      resolve: true,
+    } satisfies ModuleActionResponse);
+    const { runAction, isLocked } = createNotificationActions({
+      feed,
+      transport,
+      settings: fakeSettings(true),
+    });
+    const approve: NotificationAction = {
+      label: "Approve",
+      kind: "dispatch",
+      method: "POST",
+      path: "/actions/approve",
+    };
+    const reject: NotificationAction = {
+      label: "Reject",
+      kind: "dispatch",
+      method: "POST",
+      path: "/actions/reject",
+    };
+    await runAction(approve, { id: "n7", ref: 0 });
+    expect(isLocked("n7")).toBe(true);
+    // The sibling action (a different ref on the same notification) must be a no-op now.
+    await runAction(reject, { id: "n7", ref: 1 });
+    expect(postMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("dispatch: a failed action does NOT lock the notification (retry / other action stays open)", async () => {
+    postMock.mockResolvedValueOnce({
+      ok: false,
+      message: "Already resolved",
+    } satisfies ModuleActionResponse);
+    const { runAction, isLocked } = createNotificationActions({
+      feed,
+      transport,
+      settings: fakeSettings(true),
+    });
+    await runAction(
+      { label: "Approve", kind: "dispatch", method: "POST", path: "/actions/approve" },
+      { id: "n8", ref: 0 },
+    );
+    expect(isLocked("n8")).toBe(false);
+  });
+
+  it("dispatch: a replacement action set re-opens the notification (new actions are clickable)", async () => {
+    postMock.mockResolvedValueOnce({
+      ok: true,
+      actions: [{ label: "Undo", kind: "dispatch", method: "POST", path: "/actions/undo" }],
+    } satisfies ModuleActionResponse);
+    const { runAction, isLocked } = createNotificationActions({
+      feed,
+      transport,
+      settings: fakeSettings(true),
+    });
+    await runAction(
+      { label: "Approve", kind: "dispatch", method: "POST", path: "/actions/approve" },
+      { id: "n9", ref: 0 },
+    );
+    expect(isLocked("n9")).toBe(false);
+  });
+
   it("dispatch: a second call while pending is ignored (double-fire guard)", async () => {
     let resolvePost!: (v: ModuleActionResponse) => void;
     postMock.mockReturnValueOnce(

@@ -24,7 +24,7 @@ const emit = defineEmits<{
 }>();
 
 const settings = useSettings();
-const { isPending, resultFor } = useActions();
+const { isPending, isLocked, resultFor } = useActions();
 
 const item = computed(() => props.notification);
 // Link actions always render; `dispatch` actions render only when `actionsEnabled` is on (see the
@@ -171,7 +171,7 @@ function toggleRead() {
           type="button"
           data-test="action"
           class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken disabled:pointer-events-none disabled:opacity-50"
-          :disabled="action.kind === 'dispatch' && isPending(item.id, i)"
+          :disabled="action.kind === 'dispatch' && isLocked(item.id)"
           :aria-busy="action.kind === 'dispatch' && isPending(item.id, i) ? 'true' : undefined"
           @click.stop="emit('action', action, item, i)"
         >

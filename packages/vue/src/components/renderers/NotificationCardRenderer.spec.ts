@@ -287,5 +287,37 @@ describe("NotificationCardRenderer", () => {
       expect(result.text()).toBe("Approved");
       expect(result.classes()).toContain("text-success-strong");
     });
+
+    it("locks the sibling dispatch button once one action resolves (can't act twice)", async () => {
+      const notification = feedItem({
+        id: "a",
+        actions: [
+          dispatchAction, // Approve
+          { label: "Reject", kind: "dispatch", method: "POST", path: "/reject" },
+        ],
+      });
+      const okTransport = {
+        get: async () => ({}),
+        post: async () => ({ ok: true, message: "Approved", resolve: true }),
+        patch: async () => ({}),
+        del: async () => ({}),
+      } as unknown as Transport;
+      const ctx = buildTestContext({ transport: okTransport });
+      const wrapper = mount(NotificationCardRenderer, {
+        props: { notification },
+        global: { provide: { [NOTIFICATIONS_KEY]: ctx } },
+      });
+      await wrapper.get("h3 button").trigger("click"); // expand
+      const before = wrapper.findAll('[data-test="action"]');
+      expect(before).toHaveLength(2);
+      expect(before.every((b) => b.attributes("disabled") === undefined)).toBe(true);
+
+      await ctx.actions.runAction(dispatchAction, { id: "a", ref: 0 });
+      await wrapper.vm.$nextTick();
+
+      // Both the acted action AND its sibling are now disabled — the notification is settled.
+      const after = wrapper.findAll('[data-test="action"]');
+      expect(after.every((b) => b.attributes("disabled") !== undefined)).toBe(true);
+    });
   });
 });

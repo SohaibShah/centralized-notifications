@@ -120,8 +120,10 @@ test.describe("action dispatch", () => {
 
     // Inline result surfaces on the card immediately.
     await expect(cardArticle.locator('[data-test="action-result"]')).toHaveText("DSR approved");
-    // The button re-enables (not stuck pending) once the round-trip settles.
-    await expect(approveButton).toBeEnabled();
+    // Once the round-trip settles the notification, its action buttons lock (you can't act twice),
+    // but they must not be stuck in the pending/busy state.
+    await expect(approveButton).toBeDisabled();
+    await expect(approveButton).not.toHaveAttribute("aria-busy", "true");
 
     // resolve:true marks it read — sticky-read keeps it in "Needs action" (shown read) for this
     // session, so confirm the durable read state via the toggle rather than an immediate group jump.
