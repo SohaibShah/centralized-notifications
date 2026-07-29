@@ -26,7 +26,7 @@ const settings = createSettingsState({ transport });
 const summary = createSummaryState({ transport });
 const feed = createFeedState({ transport, connectSse });
 const chat = createChatState({ baseUrl });
-const actions = createNotificationActions({ feed });
+const actions = createNotificationActions({ feed, transport, settings });
 const panel = createPanelState();
 
 const ctx: NotificationsContext = {

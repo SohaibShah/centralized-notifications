@@ -8,13 +8,12 @@ import { getSessionUser } from "./auth/guards";
 import { registerSession } from "./auth/session";
 import { getEnv, type Env } from "./config/env";
 import { maintenanceRoutes } from "./http/admin/maintenance";
-import { simulateRoutes } from "./http/admin/simulate";
 import { createReferenceService } from "./reference/service";
 import { toPrincipal } from "./reference/principal-adapter";
 
 /**
- * The dev/QA notification generator + DB maintenance are non-production tools: their routes are
- * registered only outside production, so they are genuinely absent — not merely hidden — in prod.
+ * DB maintenance is a non-production tool: its routes are registered only outside production,
+ * so they are genuinely absent — not merely hidden — in prod.
  *
  * OPERATIONAL REQUIREMENT: `NODE_ENV` defaults to "development" (see config/env.ts), so this gate
  * fails OPEN — a production deployment MUST set `NODE_ENV=production` explicitly.
@@ -64,7 +63,6 @@ export async function buildServer(): Promise<FastifyInstance> {
   });
 
   if (isSimulatorEnabled()) {
-    await app.register(async (instance) => simulateRoutes(instance, service));
     await app.register(async (instance) => maintenanceRoutes(instance, service));
   }
 

@@ -3,6 +3,13 @@ import { mount } from "@vue/test-utils";
 import type { FeedGroup } from "../../state/feed";
 import FeedList from "./FeedList.vue";
 import { feedItem } from "../../test-support/feedItem";
+import { NOTIFICATIONS_KEY } from "../../provider/context";
+import { buildTestContext } from "../../test/provider-harness";
+
+// FeedList renders NotificationCardRenderer for every item, which reads settings/actions from the
+// notifications context — every mount here needs the context provided, even though these tests
+// don't exercise dispatch actions themselves.
+const global = { provide: { [NOTIFICATIONS_KEY]: buildTestContext() } };
 
 const groups: FeedGroup[] = [
   {
@@ -20,6 +27,7 @@ const groups: FeedGroup[] = [
 describe("FeedList", () => {
   it("shows a Mark all read control on the needs-action header and emits markAll", async () => {
     const wrapper = mount(FeedList, {
+      global,
       props: { groups, unread: 2, hasMore: false, loadingMore: false },
     });
     const btn = wrapper.get('[data-test="mark-all"]');
@@ -36,6 +44,7 @@ describe("FeedList", () => {
       },
     ];
     const wrapper = mount(FeedList, {
+      global,
       props: { groups: withRead, unread: 1, hasMore: false, loadingMore: false },
     });
     expect(wrapper.get('[data-test="needs-action-count"]').text()).toContain("1 unread");
@@ -51,6 +60,7 @@ describe("FeedList", () => {
       },
     ];
     const wrapper = mount(FeedList, {
+      global,
       props: { groups: allRead, unread: 0, hasMore: false, loadingMore: false },
     });
     expect(wrapper.find('[data-test="needs-action-count"]').exists()).toBe(false);
@@ -59,6 +69,7 @@ describe("FeedList", () => {
 
   it("shows the earlier group expanded by default and the toggle collapses it", async () => {
     const wrapper = mount(FeedList, {
+      global,
       props: { groups, unread: 2, hasMore: false, loadingMore: false },
     });
     const toggle = wrapper.get('[data-test="show-earlier"]');
@@ -71,6 +82,7 @@ describe("FeedList", () => {
 
   it("omits the earlier toggle when there is no earlier group", () => {
     const wrapper = mount(FeedList, {
+      global,
       props: { groups: [groups[0]!], unread: 2, hasMore: false, loadingMore: false },
     });
     expect(wrapper.find('[data-test="show-earlier"]').exists()).toBe(false);
@@ -78,6 +90,7 @@ describe("FeedList", () => {
 
   it("renders earlier items with the full card and re-emits unread", async () => {
     const wrapper = mount(FeedList, {
+      global,
       props: { groups, unread: 2, hasMore: false, loadingMore: false },
     });
     const list = wrapper.get('[data-test="earlier-list"]'); // expanded by default

@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { Boxes } from "@lucide/vue";
 import type { NotificationPriority } from "@notifications/shared";
-import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
+import { moduleBaseUrlSchema, NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import Button from "../ui/Button.vue";
 import Chip from "../ui/Chip.vue";
 import Spinner from "../ui/Spinner.vue";
@@ -20,16 +20,55 @@ const status = ref<"loading" | "ready" | "error">("loading");
 const priorityFilter = ref<NotificationPriority | null>(null);
 const sort = ref<Sort>("critical");
 
+// Draft base-URL text per module key, seeded from the loaded value and reset on save/revert —
+// keeps the input editable without mutating `m.baseUrl` until the save actually lands.
+const baseUrlDrafts = ref<Record<string, string>>({});
+// Per-module in-flight + outcome state for the Save button, keyed the same way as the drafts —
+// the optimistic set/revert in `saveBaseUrl` was previously silent; these back the spinner and
+// the post-save "Saved" / "Couldn't save" feedback below.
+const baseUrlSaving = ref<Record<string, boolean>>({});
+const baseUrlResult = ref<Record<string, "saved" | "error" | undefined>>({});
+
 async function load(): Promise<void> {
   status.value = "loading";
   try {
     modules.value = await admin.fetchModules();
+    for (const m of modules.value) baseUrlDrafts.value[m.key] = m.baseUrl ?? "";
     status.value = "ready";
   } catch {
     status.value = "error";
   }
 }
 onMounted(load);
+
+function baseUrlInvalid(m: AdminModule): boolean {
+  const v = (baseUrlDrafts.value[m.key] ?? "").trim();
+  return v !== "" && !moduleBaseUrlSchema.safeParse(v).success;
+}
+
+function baseUrlDirty(m: AdminModule): boolean {
+  return (baseUrlDrafts.value[m.key] ?? "").trim() !== (m.baseUrl ?? "");
+}
+
+async function saveBaseUrl(m: AdminModule): Promise<void> {
+  if (baseUrlInvalid(m) || !baseUrlDirty(m) || baseUrlSaving.value[m.key]) return;
+  const raw = (baseUrlDrafts.value[m.key] ?? "").trim();
+  const next = raw === "" ? null : raw;
+  const prev = m.baseUrl;
+  m.baseUrl = next; // optimistic, mirrors toggle()'s pattern
+  baseUrlSaving.value[m.key] = true;
+  baseUrlResult.value[m.key] = undefined;
+  try {
+    await admin.patchModule(m.key, { baseUrl: next });
+    baseUrlResult.value[m.key] = "saved";
+  } catch {
+    m.baseUrl = prev; // revert — but now the "Couldn't save" alert says why, instead of reverting silently
+    baseUrlDrafts.value[m.key] = prev ?? "";
+    baseUrlResult.value[m.key] = "error";
+  } finally {
+    baseUrlSaving.value[m.key] = false;
+  }
+}
 
 const visible = computed(() => {
   let list = modules.value;
@@ -65,7 +104,8 @@ async function toggle(m: AdminModule): Promise<void> {
     <h2 class="font-display text-[16px] font-medium text-text">Modules</h2>
     <p class="mt-0.5 text-[12px] text-muted">
       The modules that can send notifications. Disable one to stop it reaching anyone — existing
-      items stay; new ones are recorded but suppressed.
+      items stay; new ones are recorded but suppressed. Each module's base URL is its API root —
+      where action callbacks are sent.
     </p>
 
     <div v-if="status === 'loading'" class="flex justify-center py-10"><Spinner :size="18" /></div>
@@ -122,48 +162,100 @@ async function toggle(m: AdminModule): Promise<void> {
         <span class="w-10 text-right">On</span>
       </div>
 
-      <div
-        v-for="m in visible"
-        :key="m.key"
-        class="flex items-center gap-3 border-b border-line py-2.5"
-      >
-        <div class="min-w-0 flex-1">
-          <span class="truncate text-[13px] font-semibold text-text">{{ m.label }}</span>
-          <div class="mt-0.5 font-mono text-[10px] text-faint">
-            {{ m.key }} · {{ relativeTime(m.lastSeenAt) }}
+      <div v-for="m in visible" :key="m.key" class="border-b border-line py-2.5">
+        <div class="flex items-center gap-3">
+          <div class="min-w-0 flex-1">
+            <span class="truncate text-[13px] font-semibold text-text">{{ m.label }}</span>
+            <div class="mt-0.5 font-mono text-[10px] text-faint">
+              {{ m.key }} · {{ relativeTime(m.lastSeenAt) }}
+            </div>
+          </div>
+          <div class="w-44 font-mono text-[10px] tabular-nums text-muted">
+            <span v-if="m.byPriority.critical" class="mr-2 text-danger"
+              >{{ m.byPriority.critical }} crit</span
+            >
+            <span v-if="m.byPriority.high" class="mr-2 text-warning"
+              >{{ m.byPriority.high }} high</span
+            >
+            <span>{{ m.byPriority.normal + m.byPriority.low }} other</span>
+            <span v-if="m.suppressed > 0" class="ml-2 text-warning"
+              >· {{ m.suppressed }} suppressed</span
+            >
+          </div>
+          <div class="w-12 text-right font-mono text-[12px] font-semibold tabular-nums text-text">
+            {{ m.total }}
+          </div>
+          <div class="w-10 text-right">
+            <button
+              type="button"
+              role="switch"
+              :aria-checked="m.enabled"
+              :aria-label="`${m.enabled ? 'Disable' : 'Enable'} ${m.label}`"
+              :data-test="`toggle-${m.key}`"
+              class="relative inline-block h-[18px] w-[32px] rounded-full transition-colors duration-100"
+              :class="m.enabled ? 'bg-accent' : 'bg-line-strong'"
+              @click="toggle(m)"
+            >
+              <span
+                class="absolute top-0.5 size-[14px] rounded-full bg-surface transition-all duration-100"
+                :class="m.enabled ? 'right-0.5' : 'left-0.5'"
+              />
+            </button>
           </div>
         </div>
-        <div class="w-44 font-mono text-[10px] tabular-nums text-muted">
-          <span v-if="m.byPriority.critical" class="mr-2 text-danger"
-            >{{ m.byPriority.critical }} crit</span
+
+        <!-- Deliberate single-inline-field deviation from the shared <FormRenderer> convention
+             (json-form-conventions): this is a per-row table editor, not a multi-field form —
+             flagged here for a mentor sanity-check, not rewritten into FormRenderer. -->
+        <div class="mt-2 flex flex-wrap items-center gap-2 pl-0">
+          <label
+            :for="`base-url-${m.key}`"
+            class="font-mono text-[9px] uppercase tracking-wide text-faint"
           >
-          <span v-if="m.byPriority.high" class="mr-2 text-warning"
-            >{{ m.byPriority.high }} high</span
+            Base URL
+          </label>
+          <input
+            :id="`base-url-${m.key}`"
+            v-model="baseUrlDrafts[m.key]"
+            type="text"
+            placeholder="https://example.com/api"
+            :data-test="`base-url-${m.key}`"
+            class="h-7 w-64 rounded-md border border-line-strong bg-surface px-2 text-[12px] text-text"
+            :class="{ 'border-danger': baseUrlInvalid(m) }"
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            :disabled="!baseUrlDirty(m) || baseUrlInvalid(m) || baseUrlSaving[m.key]"
+            :data-test="`base-url-save-${m.key}`"
+            @click="saveBaseUrl(m)"
           >
-          <span>{{ m.byPriority.normal + m.byPriority.low }} other</span>
-          <span v-if="m.suppressed > 0" class="ml-2 text-warning"
-            >· {{ m.suppressed }} suppressed</span
+            <Spinner v-if="baseUrlSaving[m.key]" :size="12" />
+            Save
+          </Button>
+          <span
+            v-if="baseUrlInvalid(m)"
+            role="alert"
+            :data-test="`base-url-hint-${m.key}`"
+            class="text-[11px] text-danger"
           >
-        </div>
-        <div class="w-12 text-right font-mono text-[12px] font-semibold tabular-nums text-text">
-          {{ m.total }}
-        </div>
-        <div class="w-10 text-right">
-          <button
-            type="button"
-            role="switch"
-            :aria-checked="m.enabled"
-            :aria-label="`${m.enabled ? 'Disable' : 'Enable'} ${m.label}`"
-            :data-test="`toggle-${m.key}`"
-            class="relative inline-block h-[18px] w-[32px] rounded-full transition-colors duration-100"
-            :class="m.enabled ? 'bg-accent' : 'bg-line-strong'"
-            @click="toggle(m)"
+            Enter a valid http(s) URL, or leave blank to clear it.
+          </span>
+          <span
+            v-else-if="baseUrlResult[m.key] === 'error' && !baseUrlDirty(m)"
+            role="alert"
+            :data-test="`base-url-result-${m.key}`"
+            class="text-[11px] text-danger"
           >
-            <span
-              class="absolute top-0.5 size-[14px] rounded-full bg-surface transition-all duration-100"
-              :class="m.enabled ? 'right-0.5' : 'left-0.5'"
-            />
-          </button>
+            Couldn't save — try again.
+          </span>
+          <span
+            v-else-if="baseUrlResult[m.key] === 'saved' && !baseUrlDirty(m)"
+            :data-test="`base-url-result-${m.key}`"
+            class="text-[11px] text-success-strong"
+          >
+            Saved
+          </span>
         </div>
       </div>
     </template>

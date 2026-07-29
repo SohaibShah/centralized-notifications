@@ -53,8 +53,12 @@ const isFilteredEmpty = computed(
 // The action path is shared with the AI chat via useNotificationActions ("link" opens the url;
 // "dispatch" is the server-side proxy stub; either marks the notification read).
 const { runAction } = useActions();
-function onAction(action: NotificationAction, notification: FeedNotification) {
-  runAction(action, { id: notification.id });
+async function onAction(
+  action: NotificationAction,
+  notification: FeedNotification,
+  index: number,
+): Promise<void> {
+  await runAction(action, { id: notification.id, ref: index });
 }
 </script>
 

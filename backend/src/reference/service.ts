@@ -8,6 +8,7 @@ import { getPool } from "../db/pool";
 import { REFERENCE_CATALOG } from "./catalog";
 import { createFakeProvider } from "./ai/fake-provider";
 import { createOpenAiProvider } from "./ai/openai-provider";
+import { createHttpActionDispatcher } from "./http-dispatcher";
 
 /** Real Ollama provider by default; the fake only when AI_PROVIDER=fake (test lane). So `pnpm dev`
  *  always gives a live model; the automated suites opt into the deterministic fake. */
@@ -27,6 +28,11 @@ export function buildAiProvider(env: Env = getEnv()): AiProvider {
 export function createReferenceService(): NotificationService {
   return createNotificationService({
     pool: getPool(),
-    config: { modules: REFERENCE_CATALOG, adminRole: "admin", ai: { provider: buildAiProvider() } },
+    config: {
+      modules: REFERENCE_CATALOG,
+      adminRole: "admin",
+      ai: { provider: buildAiProvider() },
+      actionDispatcher: createHttpActionDispatcher({ token: getEnv().MODULE_DISPATCH_TOKEN }),
+    },
   });
 }

@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { FeedNotification, Notification, NotificationCounts } from "@notifications/shared";
+import type {
+  FeedNotification,
+  Notification,
+  NotificationAction,
+  NotificationCounts,
+} from "@notifications/shared";
 import { feedItem } from "../test-support/feedItem";
 import { ApiError } from "../transport/cookie-transport";
 import { createFeedState } from "./feed";
@@ -190,6 +195,22 @@ describe("feed store", () => {
     // Still unread after a flush (not left stuck as read).
     expect(feed.items.find((n) => n.id === "a")?.read).toBe(false);
     expect(feed.groups.map((g) => g.key)).toEqual(["needs-action"]);
+  });
+
+  it("setActions() replaces one notification's action set (new item + array refs)", async () => {
+    const feed = makeFeed();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a" }), feedItem({ id: "b" })]));
+    await feed.load();
+    const before = feed.items;
+    const newActions: NotificationAction[] = [
+      { label: "Undo", kind: "link", method: "GET", url: "https://x/undo" },
+    ];
+
+    feed.setActions("a", newActions);
+
+    expect(feed.items).not.toBe(before); // shallowRef reassigned — reactivity fires
+    expect(feed.items.find((n) => n.id === "a")?.actions).toEqual(newActions);
+    expect(feed.items.find((n) => n.id === "b")?.actions).toBeUndefined(); // untouched
   });
 
   it("markRead() drops a stale notification (404 = deleted server-side) instead of reverting", async () => {

@@ -62,13 +62,13 @@ abusive payloads. Overall request body size is additionally capped at the HTTP i
 
 Each entry in `actions`:
 
-| Field    | Type                                              | Required | Notes                                                                                                                                                                                                                                                                                                                                  |
-| -------- | ------------------------------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `label`  | string (1–100 chars)                              | yes      | Button text.                                                                                                                                                                                                                                                                                                                           |
-| `kind`   | `'link' \| 'dispatch'`                            | no       | **Client-behavior discriminator** (default `"link"`). This — **not** `method` — decides what the button does: `link` opens `url` in a new tab; `dispatch` is reserved for a future server-side action-dispatch proxy and is currently **stubbed in the UI**. A `navigate` value (route in-app) is anticipated but not yet implemented. |
-| `method` | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE'` | yes      | HTTP method associated with the action. **Superseded by `kind` for client behavior** — the UI branches on `kind`, not on `method`.                                                                                                                                                                                                     |
-| `url`    | string (http(s) URL, ≤ 2048 chars)                | yes      | Target the action calls. **Restricted to `http`/`https`** — `javascript:`, `data:`, `file:`, and `ftp:` are rejected as an XSS/SSRF safeguard, since the URL is rendered as a clickable/fetchable target.                                                                                                                              |
-| `icon`   | string (1–100 chars)                              | no       | An icon **name** from the design-system icon set (e.g. `"check"`, `"external-link"`), **not** a URL or image. Extensible later (e.g. variant, confirm).                                                                                                                                                                                |
+| Field    | Type                                              | Required | Notes                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------- | ------------------------------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `label`  | string (1–100 chars)                              | yes      | Button text.                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| `kind`   | `'link' \| 'dispatch'`                            | no       | **Client-behavior discriminator** (default `"link"`). This — **not** `method` — decides what the button does: `link` opens `url` in a new tab; `dispatch` is forwarded through the server to the owning module via [`POST /notifications/:id/actions/:ref/dispatch`](#post-notificationsidactionsrefdispatch), documented in its own section below. A `navigate` value (route in-app) is anticipated but not yet implemented. |
+| `method` | `'GET' \| 'POST' \| 'PUT' \| 'PATCH' \| 'DELETE'` | yes      | HTTP method associated with the action. **Superseded by `kind` for client behavior** — the UI branches on `kind`, not on `method`.                                                                                                                                                                                                                                                                                            |
+| `url`    | string (http(s) URL, ≤ 2048 chars)                | yes      | Target the action calls. **Restricted to `http`/`https`** — `javascript:`, `data:`, `file:`, and `ftp:` are rejected as an XSS/SSRF safeguard, since the URL is rendered as a clickable/fetchable target.                                                                                                                                                                                                                     |
+| `icon`   | string (1–100 chars)                              | no       | An icon **name** from the design-system icon set (e.g. `"check"`, `"external-link"`), **not** a URL or image. Extensible later (e.g. variant, confirm).                                                                                                                                                                                                                                                                       |
 
 ### Audience
 
@@ -173,6 +173,8 @@ Each item is the full [notification contract](#schema) above **plus** two server
 | ----------- | ----------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `createdAt` | string (ISO 8601) | Server **receive** time (`notifications.created_at`), distinct from the module's own optional [`timestamp`](#schema). The feed's ordering key under `newest`/`oldest`, and the tie-breaker within a level under the priority sorts (see [`sort`](#request)). |
 | `read`      | boolean           | Whether **the requesting user** has read this notification (`LEFT JOIN` against `notification_reads`). Per-user: the same notification can be `read: true` for one user and `false` for another.                                                             |
+
+**`actions` is re-validated at the read boundary, not just trusted from storage.** Same tolerant approach as [`ChatSource.actions`](#chatsource): [`packages/core/src/read/feed.ts`](../../packages/core/src/read/feed.ts)'s `parseActions` helper runs each persisted (jsonb) action entry through `actionSchema.safeParse` and **drops** any entry that no longer matches the current [`Action`](#action) schema (e.g. an older stored `dispatch` action from before `path` became required), instead of throwing. So a `FeedNotification.actions` array in the `GET /notifications` response can contain **fewer** entries than were originally persisted if any are invalid under the current schema — the endpoint never `500`s because of a stale/invalid stored action.
 
 Read state lives in its own table — `notification_reads(user_key, notification_id, read_at, PRIMARY KEY(user_key, notification_id))` (see [`packages/core/migrations/002_notification_reads.sql`](../../packages/core/migrations/002_notification_reads.sql)). It is keyed on the opaque **`user_key`** (the host's user identifier — username in the reference app), so there is **no** foreign key to any identity table; only `notification_id` cascades `ON DELETE`. A row exists **iff** that user has read that notification; absence of a row means unread. The write endpoint that marks a notification read is [`POST /notifications/:id/read`](#post-notificationsidread), documented below.
 
@@ -297,6 +299,78 @@ Path parameter:
 ### Side effects
 
 At most one delete from `notification_reads` (`(user_key, notification_id)`, keyed by the authenticated user) — zero rows if the user had not read it. No events published.
+
+## POST /notifications/:id/actions/:ref/dispatch
+
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
+
+Forwards a user's click on a [`dispatch`-kind](#action) action button to the action's **owning module**, and relays the module's response back to the caller — the server-side round-trip for actions whose `kind` is `"dispatch"` (as opposed to `link`, which the client opens directly). The hub never interprets the module's response beyond validating its shape; it only relays it.
+
+Source of truth: [`packages/server-fastify/src/routes/notifications.ts`](../../packages/server-fastify/src/routes/notifications.ts) (the route), [`packages/core/src/action/dispatch.ts`](../../packages/core/src/action/dispatch.ts) (`dispatchAction` — gating, visibility, idempotency, relay), and [`packages/core/src/service.ts`](../../packages/core/src/service.ts) (the `NotificationService.dispatchAction` doc-comment).
+
+### Request
+
+Path parameters:
+
+| Param | Type                      | Required | Notes                                                                                                                                                                                                                         |
+| ----- | ------------------------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`  | string (1–200 chars)      | yes      | The notification's contract [`id`](#schema).                                                                                                                                                                                  |
+| `ref` | string matching `/^\d+$/` | yes      | The target action's **index** into that notification's `actions` array (as a string, e.g. `"0"`). Must refer to an action whose `kind` is `"dispatch"` (a `link` action at that index is rejected — see [Errors](#errors-6)). |
+
+Body:
+
+| Field            | Type                 | Required | Notes                                                                                                     |
+| ---------------- | -------------------- | -------- | --------------------------------------------------------------------------------------------------------- |
+| `idempotencyKey` | string (1–200 chars) | yes      | Caller-supplied per-attempt key. **Not** the notification's `id` — see [Idempotency](#idempotency) below. |
+
+A missing/invalid path param or body → `400 { "error": "invalid request" }` (params and body are validated together; either failing produces the same response).
+
+### Response `200`
+
+The raw [`ActionDispatchResult`](../../packages/core/src/types.ts) — the module's relayed response, not wrapped:
+
+```json
+{ "ok": true, "message": "Approved", "resolve": true }
+```
+
+| Field     | Type                       | Notes                                                                                                                                                                                                                                                                                                                                                                                            |
+| --------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `ok`      | boolean                    | Whether the module reported the action as successful. `false` on a module-reported failure, a non-2xx module response, a response that fails [`moduleActionResponseSchema`](../../packages/shared/src/notification.ts), or a thrown/timed-out dispatcher call (all collapse to `{ "ok": false, "message": "Action failed" }`, never a `500` — the module's own failure detail is never relayed). |
+| `message` | string                     | Short user-facing status text from the module. Omitted if the module didn't send one.                                                                                                                                                                                                                                                                                                            |
+| `resolve` | boolean                    | Present and `true` only when the module asked to mark the source notification resolved (see [Side effects](#side-effects-6)). Only ever honored when `ok` is `true`.                                                                                                                                                                                                                             |
+| `actions` | array of [Action](#action) | Optional replacement action set the module hands back (e.g. an "Undo" button) to replace the notification's original `actions`. Bounded the same way (`max 10`) as the publish contract.                                                                                                                                                                                                         |
+
+### Idempotency
+
+Replaying the **same** `(userKey, notificationId, actionRef, idempotencyKey)` tuple returns the **previously recorded result without re-dispatching to the module** — the guard against Redis Streams' / client at-least-once retries duplicating a dispatch (e.g. double-charging an approval). A **different** `idempotencyKey` on the same notification/action is an independent attempt (a genuine second click gets a fresh dispatch). Backed by a durable `action_dispatches` table (`UNIQUE (user_key, notification_id, action_ref, idempotency_key)`) — see [`packages/core/migrations/006_action_dispatches.sql`](../../packages/core/migrations/006_action_dispatches.sql).
+
+### Rate limit
+
+The route declares a route-level `config.rateLimit`: `max: 20`, `timeWindow: "1 minute"`, keyed by `req.principal?.userKey` (falling back to `req.ip` if there's somehow no principal — shouldn't normally happen, since the route already requires one via `requirePrincipal`). Exceeding it returns a `429` from `@fastify/rate-limit`'s default error response (a body shape like `{ "statusCode": 429, "error": "Too Many Requests", "message": "Rate limit exceeded, retry in ..." }`, but that's the plugin's default, not a contract this route defines itself).
+
+**This limit is opt-in per host.** Fastify ignores unknown keys in a route's `config`, so `config.rateLimit` only has any effect if the host application has registered the [`@fastify/rate-limit`](https://github.com/fastify/fastify-rate-limit) plugin — a third-party host mounting `@notifications/server-fastify` without registering that plugin gets **no rate limiting on this route at all**, silently. The reference app registers it with `{ global: false }` in [`backend/src/server.ts`](../../backend/src/server.ts) (the same pattern already used for `POST /auth/login` in [`backend/src/auth/routes.ts`](../../backend/src/auth/routes.ts)), so in this repo's reference backend the limit is live.
+
+### Errors
+
+| Status | Body                                                             | Reason                                                                                                                                                                                                                                                                                                                                                                                           |
+| ------ | ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `400`  | `{ "error": "invalid request" }`                                 | `id`, `ref`, or the body's `idempotencyKey` fails validation (`ref` not `/^\d+$/`, `idempotencyKey` missing/empty/over 200 chars, etc).                                                                                                                                                                                                                                                          |
+| `401`  | `{ "error": "authentication required" }`                         | No valid session cookie / the host `auth` adapter resolved no `Principal`.                                                                                                                                                                                                                                                                                                                       |
+| `403`  | `{ "error": "actions disabled" }`                                | The global `actionsEnabled` kill-switch (see the [Admin API](./admin.md) feature flags) is off — actions are disabled for everyone (`ActionsDisabledError`).                                                                                                                                                                                                                                     |
+| `404`  | `{ "error": "notification or action not found" }`                | Any of: the notification doesn't exist; it exists but is outside the caller's [audience](#audience-scoping) (same no-existence-oracle behavior as [`POST /notifications/:id/read`](#post-notificationsidread)); `ref` doesn't index a real action on that notification; or the indexed action's `kind` is `"link"`, not `"dispatch"` (`NotFoundError` — all four collapse to this one response). |
+| `409`  | `{ "error": "module unavailable" }`                              | No `ActionDispatcher` transport was injected by the host, **or** the action's owning module is unknown to the registry, disabled, or has no registered `base_url` (`ModuleUnavailableError`).                                                                                                                                                                                                    |
+| `429`  | _(`@fastify/rate-limit`'s default error body, not this route's)_ | The per-principal limit (20 dispatches/min, see [Rate limit](#rate-limit) above) was exceeded — **only enforced if the host has registered `@fastify/rate-limit`**; otherwise this route never returns a 429 on its own.                                                                                                                                                                         |
+
+### Side effects
+
+- **Module call.** On a fresh (non-replayed) attempt that passes all gates, one outbound call to the owning module via the host-injected `ActionDispatcher`, at `base_url + action.path` with the action's `method` (`GET`/`POST` only for dispatch actions).
+- **Durable idempotency record.** One row written to `action_dispatches`, moved from `pending` to a terminal `ok`/`failed` status once the module responds (or the call throws/times out).
+- **Conditional mark-read.** If the dispatch succeeds (`ok: true`) **and** the module's response also sets `resolve: true`, the notification is marked read for the calling principal — the same mechanism and same per-user semantics as [`POST /notifications/:id/read`](#post-notificationsidread). A failed dispatch, or a successful one without `resolve: true`, never touches read state.
+- **No events published.**
+
+### PII
+
+Per the [notifications domain rules](../../.claude/rules/notifications-domain.md), neither the route nor `dispatchAction` **ever logs** the outbound dispatch payload (notification id, action ref, metadata, actor) or the module's response body — a thrown/failed dispatch is recorded durably by outcome only (`failed`, no message), and the cause is deliberately swallowed rather than logged, since it may carry the module's URL or payload.
 
 ## POST /notifications/read
 

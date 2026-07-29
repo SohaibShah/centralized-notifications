@@ -3,9 +3,11 @@ import { computed, ref } from "vue";
 import { ChevronDown, Circle, CircleCheck } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Icon from "../../ui/Icon.vue";
+import Spinner from "../../ui/Spinner.vue";
 import { actionIcon } from "../../design/icons";
 import { priorityLabel, priorityTextClass } from "../../design/tokens";
 import { exactTime, relativeTime } from "../../lib/time";
+import { useActions, useSettings } from "../../provider/context";
 
 // Config-driven feed row. Compact by default; clicking anywhere on the card (body or title)
 // opens it — expands any extra content (actions or a long body) AND marks it read
@@ -17,12 +19,23 @@ import { exactTime, relativeTime } from "../../lib/time";
 const props = defineProps<{ notification: FeedNotification }>();
 const emit = defineEmits<{
   open: [notification: FeedNotification];
-  action: [action: NotificationAction, notification: FeedNotification];
+  action: [action: NotificationAction, notification: FeedNotification, index: number];
   unread: [notification: FeedNotification];
 }>();
 
+const settings = useSettings();
+const { isPending, isLocked, resultFor } = useActions();
+
 const item = computed(() => props.notification);
-const hasActions = computed(() => (item.value.actions?.length ?? 0) > 0);
+// Link actions always render; `dispatch` actions render only when `actionsEnabled` is on (see the
+// same gate on the button below). Counting raw `actions.length` here would make a card whose ONLY
+// actions are `dispatch`-kind show an expand caret that reveals an empty row once gated off.
+const visibleActionCount = computed(
+  () =>
+    item.value.actions?.filter((a) => a.kind !== "dispatch" || settings.flags.actionsEnabled)
+      .length ?? 0,
+);
+const hasActions = computed(() => visibleActionCount.value > 0);
 // A long body gets an expand affordance even with no actions (single-line truncate hides it).
 const isLongBody = computed(
   () => (item.value.description?.length ?? 0) > 140 || (item.value.title?.length ?? 0) > 60,
@@ -147,18 +160,34 @@ function toggleRead() {
       </div>
     </div>
 
-    <div v-if="expanded && hasActions" class="mt-2.5 flex flex-wrap gap-2 pl-5">
-      <button
-        v-for="action in item.actions"
-        :key="action.label + action.url"
-        type="button"
-        data-test="action"
-        class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken"
-        @click.stop="emit('action', action, item)"
+    <div v-if="expanded && hasActions" class="mt-2.5 flex flex-wrap items-start gap-2 pl-5">
+      <span
+        v-for="(action, i) in item.actions"
+        :key="action.label + '-' + i"
+        class="inline-flex flex-col items-start gap-1"
       >
-        <Icon v-if="actionIcon(action.icon)" :icon="actionIcon(action.icon)!" :size="13" />
-        {{ action.label }}
-      </button>
+        <button
+          v-if="action.kind !== 'dispatch' || settings.flags.actionsEnabled"
+          type="button"
+          data-test="action"
+          class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken disabled:pointer-events-none disabled:opacity-50"
+          :disabled="action.kind === 'dispatch' && isLocked(item.id)"
+          :aria-busy="action.kind === 'dispatch' && isPending(item.id, i) ? 'true' : undefined"
+          @click.stop="emit('action', action, item, i)"
+        >
+          <Spinner v-if="action.kind === 'dispatch' && isPending(item.id, i)" :size="13" />
+          <Icon v-else-if="actionIcon(action.icon)" :icon="actionIcon(action.icon)!" :size="13" />
+          {{ action.label }}
+        </button>
+        <span
+          v-if="action.kind === 'dispatch' && resultFor(item.id, i)"
+          data-test="action-result"
+          class="text-[12px]"
+          :class="resultFor(item.id, i)?.ok ? 'text-success-strong' : 'text-danger'"
+        >
+          {{ resultFor(item.id, i)?.message }}
+        </span>
+      </span>
     </div>
   </article>
 </template>

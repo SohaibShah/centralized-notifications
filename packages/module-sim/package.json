@@ -1,0 +1,26 @@
+{
+  "name": "@notifications/module-sim",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Dev-only Fastify app that emulates the running modules: emits action-bearing notifications to the hub and handles dispatched actions.",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsup",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --passWithNoTests"
+  },
+  "dependencies": {
+    "@notifications/shared": "workspace:*",
+    "dotenv": "^17.4.2",
+    "fastify": "^5.2.1",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5",
+    "tsup": "^8.3.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.0"
+  }
+}

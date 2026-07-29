@@ -17,7 +17,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   loadMore: [];
   open: [notification: FeedNotification];
-  action: [action: NotificationAction, notification: FeedNotification];
+  action: [action: NotificationAction, notification: FeedNotification, index: number];
   unread: [notification: FeedNotification];
   markAll: [];
 }>();
@@ -76,7 +76,7 @@ onBeforeUnmount(() => observer?.disconnect());
         :key="n.id"
         :notification="n"
         @open="(x) => emit('open', x)"
-        @action="(a, x) => emit('action', a, x)"
+        @action="(a, x, i) => emit('action', a, x, i)"
         @unread="(x) => emit('unread', x)"
       />
     </section>
@@ -99,7 +99,7 @@ onBeforeUnmount(() => observer?.disconnect());
           :key="n.id"
           :notification="n"
           @open="(x) => emit('open', x)"
-          @action="(a, x) => emit('action', a, x)"
+          @action="(a, x, i) => emit('action', a, x, i)"
           @unread="(x) => emit('unread', x)"
         />
       </div>

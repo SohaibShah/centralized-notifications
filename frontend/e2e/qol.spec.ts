@@ -86,7 +86,6 @@ test.describe("QoL", () => {
     await login(page, "admin");
     await page.goto("/admin");
     await page.getByRole("button", { name: "Dev Labs" }).click();
-    await page.locator('[data-test="devlabs-maintenance"]').click();
 
     await page.locator('[data-test="op-delete-all"]').click();
     // Confirm is disabled until the exact word is typed.

@@ -38,3 +38,12 @@ test("settings default true; updateSettings persists and invalidates", async () 
   await store.updateSettings({ aiSummaryEnabled: false });
   expect((await store.getSettings()).aiSummaryEnabled).toBe(false);
 });
+
+test("listModules exposes base_url and setModuleBaseUrl updates it", async () => {
+  await store.setModuleBaseUrl("dsr", "http://localhost:4000/dsr");
+  const mods = await store.listModules();
+  expect(mods.find((m) => m.id === "dsr")?.baseUrl).toBe("http://localhost:4000/dsr");
+  expect(await store.getModuleBaseUrl("dsr")).toBe("http://localhost:4000/dsr");
+  await store.setModuleBaseUrl("dsr", null);
+  expect(await store.getModuleBaseUrl("dsr")).toBeNull();
+});

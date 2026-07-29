@@ -4,11 +4,12 @@ import type { ChatSource } from "@notifications/shared";
 import { formatRelativeAge } from "@notifications/shared";
 import { actionIcon } from "../../design/icons";
 import Icon from "../../ui/Icon.vue";
+import Spinner from "../../ui/Spinner.vue";
 import { useActions } from "../../provider/context";
 
 const props = defineProps<{ source: ChatSource }>();
 const open = ref(false);
-const { runAction } = useActions();
+const { runAction, isPending, isLocked, resultFor } = useActions();
 
 // Priority → dot color, mirroring the notification card's convention.
 const dotClass: Record<ChatSource["priority"], string> = {
@@ -40,17 +41,37 @@ const dotClass: Record<ChatSource["priority"], string> = {
         >{{ props.source.priority }} · {{ formatRelativeAge(props.source.ageMinutes) }} old</span
       >
       <span v-if="props.source.actions.length" class="flex flex-wrap gap-2">
-        <button
-          v-for="action in props.source.actions"
-          :key="action.label + action.url"
-          type="button"
-          data-test="chip-action"
-          class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 font-medium text-text hover:bg-sunken"
-          @click="runAction(action, { id: props.source.id })"
+        <span
+          v-for="(action, i) in props.source.actions"
+          :key="action.label + '-' + i"
+          class="inline-flex flex-col items-start gap-1"
         >
-          <Icon v-if="actionIcon(action.icon)" :icon="actionIcon(action.icon)!" :size="13" />
-          {{ action.label }}
-        </button>
+          <button
+            type="button"
+            data-test="chip-action"
+            class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 font-medium text-text transition-colors duration-100 hover:bg-sunken disabled:pointer-events-none disabled:opacity-50"
+            :disabled="action.kind === 'dispatch' && isLocked(props.source.id)"
+            :aria-busy="
+              action.kind === 'dispatch' && isPending(props.source.id, i) ? 'true' : undefined
+            "
+            @click="runAction(action, { id: props.source.id, ref: i })"
+          >
+            <Spinner
+              v-if="action.kind === 'dispatch' && isPending(props.source.id, i)"
+              :size="13"
+            />
+            <Icon v-else-if="actionIcon(action.icon)" :icon="actionIcon(action.icon)!" :size="13" />
+            {{ action.label }}
+          </button>
+          <span
+            v-if="action.kind === 'dispatch' && resultFor(props.source.id, i)"
+            data-test="chip-action-result"
+            class="text-[12px]"
+            :class="resultFor(props.source.id, i)?.ok ? 'text-success-strong' : 'text-danger'"
+          >
+            {{ resultFor(props.source.id, i)?.message }}
+          </span>
+        </span>
       </span>
     </span>
   </span>

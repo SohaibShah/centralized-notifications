@@ -70,7 +70,9 @@ Keep this section accurate as scripts change.
 
 - `pnpm install` — install all workspace dependencies (`frontend/`, `backend/`, `packages/shared/`)
 - `docker compose up -d` — Postgres (and Redis, used from week 5) for local dev
-- `pnpm dev` — runs frontend + backend together in watch mode
+- `pnpm dev` — runs frontend + backend + module-sim together in watch mode; module-sim serves
+  the control center at http://localhost:4000, which replaces the old in-app generator as the
+  way to produce test notifications in dev
 - `pnpm lint` / `pnpm typecheck` — must be clean before a change is "done"
 - `pnpm test` — Vitest unit tests across all packages
 - `pnpm test:e2e` — Playwright e2e (wired with the first user-facing flow, Week 1 Task 7)

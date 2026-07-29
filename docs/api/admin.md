@@ -16,9 +16,10 @@ the note on [`GET /notifications`](./notifications.md#get-notifications).
 > `@notifications/server-fastify`.** They are no longer hand-written `backend/` routes — they
 > are mounted by the `notificationFastifyPlugin` (see the [BE library integration
 > guide](../architecture/be-library-integration.md)). The request/response shapes below are
-> **unchanged** by the extraction. (The [`POST /admin/simulate`](#post-adminsimulate) and
-> [`/admin/maintenance/*`](#maintenance-devqa) dev/QA routes are **not** part of the library —
-> they remain reference-app routes in `backend/`.)
+> **unchanged** by the extraction. (The [`/admin/maintenance/*`](#maintenance-devqa) dev/QA
+> routes are **not** part of the library — they remain reference-app routes in `backend/`. The
+> old `POST /admin/simulate` dev/QA generator has been removed — generating test notifications
+> now goes through `packages/module-sim`'s control center, not a reference-app route.)
 >
 > **Identity and the admin gate come from the host.** There is no owned session or users
 > table in the library. The plugin's `requireAdmin` preHandler calls the host's `auth(req)`
@@ -61,6 +62,7 @@ An array of module summaries:
 | `key`                 | string            | The module's identifier, as sent in the notification's `module` field.                              |
 | `label`               | string            | Display label, from the seed catalog (e.g. `"Data Mapping"`). **Not editable** — see `PATCH` below. |
 | `enabled`             | boolean           | Whether the module is currently allowed to deliver notifications.                                   |
+| `baseUrl`             | string \| null    | The module's registered API base URL (admin-editable via `PATCH`). `null` = not dispatchable.       |
 | `lastSeenAt`          | string (ISO 8601) | Timestamp of the module's most recent publish.                                                      |
 | `total`               | number            | Count of **all** notifications ever recorded for this module (suppressed or not).                   |
 | `suppressed`          | number            | Of `total`, how many were recorded but not delivered (published while the module was disabled).     |
@@ -75,6 +77,7 @@ An array of module summaries:
     "key": "dsr",
     "label": "Dsr",
     "enabled": true,
+    "baseUrl": "https://dsr.internal.example.com",
     "lastSeenAt": "2026-07-10T09:15:22.481Z",
     "total": 42,
     "suppressed": 3,
@@ -98,8 +101,8 @@ None — read-only.
 
 **Auth:** required, admin only ([`requireAdmin`](../../backend/src/auth/guards.ts) — `401`/`403` as above).
 
-Enables/disables a module. This is the only mutable field — labels come from the seed catalog
-and are **not** editable.
+Enables/disables a module and/or sets its registered API base URL. Labels come from the seed
+catalog and are **not** editable.
 
 ### Request
 
@@ -109,17 +112,28 @@ Path parameter:
 | ----- | -------------------- | -------- | ------------------------ |
 | `key` | string (1–100 chars) | yes      | The module's identifier. |
 
-Body — only `enabled` is accepted, and it is **required**:
+Body — any subset of the two fields below; at least one is required:
 
-| Field     | Type    | Required | Notes                      |
-| --------- | ------- | -------- | -------------------------- |
-| `enabled` | boolean | yes      | Enable/disable the module. |
+| Field     | Type           | Required | Notes                                                                                                                                                                                                                                                                                 |
+| --------- | -------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled` | boolean        | no*      | Enable/disable the module.                                                                                                                                                                                                                                                            |
+| `baseUrl` | string \| null | no*      | The module's registered API base URL, used by the (upcoming) action dispatcher. Must be a non-empty `http(s)://` URL (case-insensitive scheme, max 2048 chars), or explicit `null` to clear it. Anything else — a `javascript:` URL, a malformed string, etc. — is rejected as `400`. |
 
-A body without `enabled` (including an empty body, or one carrying only a now-unsupported
-`label`) is rejected as `400`.
+\* An empty body (neither field present) is rejected as `400`. Both fields may be sent together
+in the same request; each present field is applied independently.
+
+A module with `baseUrl: null` (the default) is **not dispatchable** — the action dispatcher
+rejects dispatch actions for it until an admin sets a `baseUrl`.
+
+The current value is readable via [`GET /admin/modules`](#get-adminmodules), which includes
+each module's `baseUrl` in its response.
 
 ```json
 { "enabled": false }
+```
+
+```json
+{ "baseUrl": "https://dsr.internal.example.com" }
 ```
 
 ### Response `204`
@@ -128,20 +142,22 @@ A body without `enabled` (including an empty body, or one carrying only a now-un
 
 ### Errors
 
-| Status | Body                                     | Reason                                                         |
-| ------ | ---------------------------------------- | -------------------------------------------------------------- |
-| `400`  | `{ "error": "invalid module key" }`      | `key` path parameter is empty or over 100 chars.               |
-| `400`  | `{ "error": "invalid request body" }`    | Body fails validation — `enabled` is missing or not a boolean. |
-| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                       |
-| `403`  | `{ "error": "admin role required" }`     | Logged in, but not an admin.                                   |
-| `404`  | `{ "error": "module not found" }`        | No module with that `key` exists in the seeded catalog.        |
+| Status | Body                                     | Reason                                                                                                                                                               |
+| ------ | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid module key" }`      | `key` path parameter is empty or over 100 chars.                                                                                                                     |
+| `400`  | `{ "error": "invalid request body" }`    | Body fails validation — neither `enabled` nor `baseUrl` present, `enabled` is not a boolean, or `baseUrl` isn't a valid `http(s)` URL (or `null`) within 2048 chars. |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                                                                                             |
+| `403`  | `{ "error": "admin role required" }`     | Logged in, but not an admin.                                                                                                                                         |
+| `404`  | `{ "error": "module not found" }`        | No module with that `key` exists in the seeded catalog.                                                                                                              |
 
 ### Side effects
 
-Updates the `modules` row's `enabled` column. **Invalidates the in-memory policy
-cache** (the service's [`PolicyStore`](../../packages/core/src/policy/store.ts) invalidates its cache on any write) — a disable/enable
-takes effect starting with the module's **next ingest**, not retroactively on already-persisted
-notifications.
+Updates the `modules` row's `enabled` and/or `base_url` columns, depending on which fields were
+present in the body. **Invalidates the in-memory policy cache** (the service's
+[`PolicyStore`](../../packages/core/src/policy/store.ts) invalidates its cache on any write) — an
+`enabled` change takes effect starting with the module's **next ingest**; a `baseUrl` change
+takes effect on the dispatcher's next dispatch attempt. Neither is retroactive on
+already-persisted notifications.
 
 ## GET /admin/settings
 
@@ -259,141 +275,15 @@ See the field table under [`GET /admin/settings`](#get-adminsettings) — identi
 
 None — read-only.
 
-## POST /admin/simulate
-
-**Auth:** required, admin only ([`requireAdmin`](../../backend/src/auth/guards.ts) — `401` if
-not logged in, `403` if logged in but not an admin).
-
-**Non-production only.** The route is registered **only when `NODE_ENV !== "production"`**
-(see [`isSimulatorEnabled`](../../backend/src/server.ts)). In production it is genuinely
-**absent** — a request hits Fastify's not-found handler and returns `404`, it is not merely
-hidden behind the admin gate.
-
-> **Operational requirement:** `NODE_ENV` defaults to `"development"`, so this gate fails
-> **open** — any production deployment **must set `NODE_ENV=production` explicitly**. An unset
-> value leaves this endpoint registered.
-
-The dev/QA notification generator. It fabricates notifications and pushes each one through the
-**real** pipeline via `service.ingest()`
-([`packages/core/src/pipeline/ingest.ts`](../../packages/core/src/pipeline/ingest.ts)), so
-dedupe, module policy/suppression, and SSE delivery all behave exactly as they do for a genuine
-publish. This
-endpoint exists so the browser can generate test traffic **without ever holding the
-service-to-service `x-internal-token`** used by [`POST /internal/publish`](./notifications.md) —
-that token is never exposed to the client.
-
-Source: [`backend/src/http/admin/simulate.ts`](../../backend/src/http/admin/simulate.ts),
-presets in [`backend/src/sim/presets.ts`](../../backend/src/sim/presets.ts).
-
-### Request
-
-Body is a **discriminated union on `mode`** — exactly one of the three shapes below. Any
-invalid body (bad `priority`, missing `title`, unknown `preset`, out-of-range `count`, etc.)
-is rejected as `400` **before any pipeline work runs**.
-
-#### `mode: "custom"`
-
-| Field           | Type    | Required | Notes                                                                                                                                          |
-| --------------- | ------- | -------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`          | string  | yes      | Literal `"custom"`.                                                                                                                            |
-| `notification`  | object  | yes      | The shared [notification contract](./notifications.md) **minus `id`**. Any client-supplied `id` is not accepted — the server assigns its own.  |
-| `sampleActions` | integer | no       | `0`–`3`. When the notification carries no `actions` of its own, the server attaches this many canned sample actions. Ignored if `actions` set. |
-
-The server always assigns its own id of the form `sim-<ts>-<counter>-<rand>`, so repeated
-generation of the same body never dedupes against itself.
-
-```json
-{
-  "mode": "custom",
-  "notification": {
-    "module": "dsr",
-    "title": "DSR approaching SLA breach",
-    "description": "A data-subject request is within 24 hours of its statutory deadline.",
-    "priority": "critical",
-    "snoozable": false,
-    "category": "sla",
-    "audience": { "scope": "global" }
-  },
-  "sampleActions": 2
-}
-```
-
-#### `mode: "preset"`
-
-| Field    | Type   | Required | Notes                                     |
-| -------- | ------ | -------- | ----------------------------------------- |
-| `mode`   | string | yes      | Literal `"preset"`.                       |
-| `preset` | string | yes      | One of the fixed preset ids listed below. |
-
-Presets are deterministic (no RNG) — a given preset always produces the same body:
-
-| `preset`         | Label                     | Description                                        |
-| ---------------- | ------------------------- | -------------------------------------------------- |
-| `critical-dsr`   | Critical DSR              | A data-subject request about to breach SLA.        |
-| `high-access`    | High · access request     | Access approval with Approve/Deny/Review actions.  |
-| `normal-finding` | Normal · data finding     | A routine scan classification result.              |
-| `low-assessment` | Low · assessment reminder | A low-priority reminder with a single link.        |
-| `long-body`      | Long body                 | A very long description to test truncation/expand. |
-
-```json
-{ "mode": "preset", "preset": "critical-dsr" }
-```
-
-#### `mode: "burst"`
-
-| Field   | Type    | Required | Notes                                                                                                           |
-| ------- | ------- | -------- | --------------------------------------------------------------------------------------------------------------- |
-| `mode`  | string  | yes      | Literal `"burst"`.                                                                                              |
-| `count` | integer | yes      | Positive, and `≤ SIMULATE_MAX_BURST` (env var, default `10000`). Over-ceiling or non-positive counts are `400`. |
-| `seed`  | integer | no       | Makes the generated batch reproducible — same seed produces the same batch of bodies.                           |
-
-Large bursts are ingested in **chunks of 500**. The generated notifications get their own
-unique per-burst ids (server-controlled).
-
-```json
-{ "mode": "burst", "count": 250, "seed": 42 }
-```
-
-### Response `200`
-
-| Field        | Type   | Notes                                                                                                                                    |
-| ------------ | ------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
-| `published`  | number | How many generated notifications were accepted **and** belong to an enabled module (delivered).                                          |
-| `suppressed` | number | How many were accepted but belong to an **admin-disabled** module — recorded/policy-suppressed, not delivered and not shown in the feed. |
-
-```json
-{ "published": 250, "suppressed": 0 }
-```
-
-### Errors
-
-| Status | Body                                     | Reason                                                                                                                          |
-| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| `400`  | `{ "error": "invalid request body" }`    | Body fails validation — bad/missing notification fields, unknown `preset`, or `count` non-positive / over `SIMULATE_MAX_BURST`. |
-| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                                                        |
-| `403`  | `{ "error": "admin role required" }`     | Logged in, but not an admin.                                                                                                    |
-| `404`  | (Fastify not-found)                      | The route is not registered at all in production (`NODE_ENV === "production"`).                                                 |
-
-### Side effects
-
-Runs every generated notification through the real pipeline via `service.ingest()`
-([`packages/core/src/pipeline/ingest.ts`](../../packages/core/src/pipeline/ingest.ts)):
-each is persisted, deduped on its server-assigned id, checked against module policy,
-and — for enabled modules — delivered live over SSE, exactly as a real publish. A notification
-generated for a **disabled** module is counted in `suppressed` and does **not** appear in the
-feed. No `x-internal-token` is used or exposed.
-
 ## Maintenance (dev/QA)
 
 The `/admin/maintenance/*` routes are dev/QA database-reset helpers, all
 `POST` and mostly **destructive** (the exception is
 [`modules/reset`](#post-adminmaintenancemodulesreset), which now only re-enables the seeded
-catalog rather than deleting it). Like [`POST /admin/simulate`](#post-adminsimulate), they
-are registered **only when `NODE_ENV !== "production"`** (same
-[`isSimulatorEnabled`](../../backend/src/server.ts) guard — registered together with the
-simulator). In production every route on this page below is genuinely **absent**: a request
-hits Fastify's not-found handler and returns `404`, it is not merely hidden behind the admin
-gate.
+catalog rather than deleting it). They are registered **only when `NODE_ENV !== "production"`**
+([`isSimulatorEnabled`](../../backend/src/server.ts) guard). In production every route on this
+page below is genuinely **absent**: a request hits Fastify's not-found handler and returns
+`404`, it is not merely hidden behind the admin gate.
 
 > **Operational requirement:** `NODE_ENV` defaults to `"development"`, so this gate fails
 > **open** — any production deployment **must set `NODE_ENV=production` explicitly**. An unset

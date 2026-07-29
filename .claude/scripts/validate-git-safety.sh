@@ -6,14 +6,22 @@
 INPUT=$(cat)
 COMMAND=$(echo "$INPUT" | jq -r '.tool_input.command // empty')
 
+# Paths excluded from the generic hardcoded-credential CONTENT heuristic only (see below):
+# test/spec files legitimately carry dummy fixture tokens (e.g. a 16-char sample INTAKE token),
+# which are not real secrets — a real CI scanner (gitleaks/truffleHog) is the backstop for those.
+# The sensitive-FILENAME, AWS-key, and private-key checks below still apply to EVERY file.
+TEST_EXCLUDES=(':(exclude)*.test.ts' ':(exclude)*.test.tsx' ':(exclude)*.spec.ts' ':(exclude)*.spec.tsx' ':(exclude)*/test/*' ':(exclude)*/tests/*' ':(exclude)*/__tests__/*')
+
 if echo "$COMMAND" | grep -qE '\bgit +commit\b'; then
   DIFF=$(git diff --cached 2>/dev/null)
   FILES=$(git diff --cached --name-only 2>/dev/null)
+  CRED_DIFF=$(git diff --cached -- . "${TEST_EXCLUDES[@]}" 2>/dev/null)
 elif echo "$COMMAND" | grep -qE '\bgit +push\b'; then
   # Commits that exist locally but aren't on any remote-tracking branch yet —
   # i.e. what a push would actually send for the first time.
   DIFF=$(git log --branches --not --remotes -p 2>/dev/null)
   FILES=$(git log --branches --not --remotes --name-only --pretty=format: 2>/dev/null)
+  CRED_DIFF=$(git log --branches --not --remotes -p -- . "${TEST_EXCLUDES[@]}" 2>/dev/null)
 else
   exit 0
 fi
@@ -36,9 +44,12 @@ if echo "$DIFF" | grep -qE '\-\-\-\-\-BEGIN (RSA|EC|OPENSSH|DSA)? ?PRIVATE KEY\-
 fi
 
 # Reading a secret FROM the environment/config (process.env.X, import.meta.env.X, getEnv().X,
-# os.environ[...]) is the CORRECT pattern, not a hardcoded credential — exclude those so they
-# don't produce false positives. A real hardcoded value (a literal string/number) still trips.
-if echo "$DIFF" | grep -iE '(api.?key|secret|password|token)[[:space:]]*[:=][[:space:]]*.{0,3}[A-Za-z0-9/+_.-]{16,}' | grep -qivE 'process\.env|import\.meta\.env|getenv\(|os\.environ'; then
+# os.environ[...], or a validated config object exported as `env` — env.X) is the CORRECT pattern,
+# not a hardcoded credential — exclude those so they don't produce false positives. Such values are
+# dotted identifier references, never literals, so a real hardcoded value (a literal string/number)
+# still trips. Scans CRED_DIFF (source minus test/spec files) so dummy fixture tokens in tests don't
+# false-positive.
+if echo "$CRED_DIFF" | grep -iE '(api.?key|secret|password|token)[[:space:]]*[:=][[:space:]]*.{0,3}[A-Za-z0-9/+_.-]{16,}' | grep -qivE 'process\.env|import\.meta\.env|getenv\(|os\.environ|\benv\.'; then
   FLAGS="${FLAGS}- Found a line that looks like a hardcoded credential (key/secret/password/token assigned to a long value)."$'\n'
 fi
 

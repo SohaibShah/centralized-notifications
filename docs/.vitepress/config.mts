@@ -23,6 +23,7 @@ export default defineConfig({
             { text: 'Admin', link: '/api/admin' },
             { text: 'Auth', link: '/api/auth' },
             { text: 'Intake', link: '/api/intake' },
+            { text: 'Module-sim', link: '/api/module-sim' },
             { text: 'Notifications', link: '/api/notifications' },
             { text: 'SSE', link: '/api/sse' },
           ],

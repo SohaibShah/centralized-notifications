@@ -1,9 +1,10 @@
 import Fastify from "fastify";
 import type { FastifyInstance, FastifyRequest } from "fastify";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import type { Notification } from "@notifications/shared";
 import {
   createNotificationService,
+  type ActionDispatcher,
   type NotificationService,
   type Principal,
 } from "@notifications/core";
@@ -25,6 +26,7 @@ let svc: NotificationService;
 const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 const globalId = `route-global-${stamp}`;
 const teamId = `route-team-${stamp}`;
+const actionId = `route-action-${stamp}`;
 
 const notif = (id: string, audience: Notification["audience"]): Notification => ({
   id,
@@ -36,11 +38,23 @@ const notif = (id: string, audience: Notification["audience"]): Notification => 
   audience,
 });
 
+// Fake outbound transport for `dispatch` actions — injected the same way core's own
+// action-dispatch tests do it, so the route can be driven through every branch without a real
+// module server.
+const dispatcher: ActionDispatcher = { dispatch: vi.fn() };
+
 beforeAll(async () => {
-  svc = createNotificationService({ pool, config: { modules: [{ id: "dsr", label: "DSR" }] } });
+  svc = createNotificationService({
+    pool,
+    config: { modules: [{ id: "dsr", label: "DSR" }], actionDispatcher: dispatcher },
+  });
   await svc.ready();
   await svc.ingest(notif(globalId, { scope: "global" }));
   await svc.ingest(notif(teamId, { scope: "team", id: "eng" }));
+  await svc.ingest({
+    ...notif(actionId, { scope: "global" }),
+    actions: [{ label: "Approve", kind: "dispatch", method: "POST", path: "/actions/approve" }],
+  });
 
   app = Fastify({ maxParamLength: 256 });
   await app.register(notificationFastifyPlugin, {
@@ -52,6 +66,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
+  // Restore the shared module/settings singletons for any test file that runs after this one.
+  await svc.setModuleBaseUrl("dsr", null);
+  await svc.updateSettings({ actionsEnabled: true });
   await app.close();
   await pool.end();
 });
@@ -95,4 +112,100 @@ test("marking read is audience-scoped: out-of-audience id → 404", async () => 
     headers: { "x-test-user": "sam", "x-test-teams": "security" },
   });
   expect(res.statusCode).toBe(404);
+});
+
+const dispatchUser = { "x-test-user": `dispatch-caller-${stamp}` };
+
+test("dispatch action: 401 without a principal", async () => {
+  const res = await app.inject({
+    method: "POST",
+    url: `/notifications/${actionId}/actions/0/dispatch`,
+    payload: { idempotencyKey: "k-noauth" },
+  });
+  expect(res.statusCode).toBe(401);
+});
+
+test("dispatch action: missing idempotencyKey → 400", async () => {
+  const res = await app.inject({
+    method: "POST",
+    url: `/notifications/${actionId}/actions/0/dispatch`,
+    headers: dispatchUser,
+    payload: {},
+  });
+  expect(res.statusCode).toBe(400);
+});
+
+test("dispatch action: non-numeric ref → 400", async () => {
+  const res = await app.inject({
+    method: "POST",
+    url: `/notifications/${actionId}/actions/abc/dispatch`,
+    headers: dispatchUser,
+    payload: { idempotencyKey: "k-badref" },
+  });
+  expect(res.statusCode).toBe(400);
+});
+
+test("dispatch action: actionsEnabled off → 403", async () => {
+  await svc.updateSettings({ actionsEnabled: false });
+  try {
+    const res = await app.inject({
+      method: "POST",
+      url: `/notifications/${actionId}/actions/0/dispatch`,
+      headers: dispatchUser,
+      payload: { idempotencyKey: "k-disabled" },
+    });
+    expect(res.statusCode).toBe(403);
+    expect(res.json()).toMatchObject({ error: "actions disabled" });
+  } finally {
+    await svc.updateSettings({ actionsEnabled: true });
+  }
+});
+
+test("dispatch action: module has no base_url → 409", async () => {
+  // No base_url has been configured for "dsr" at this point (default / reset by afterAll of
+  // earlier-running suites) — the module is known + enabled but unreachable.
+  const res = await app.inject({
+    method: "POST",
+    url: `/notifications/${actionId}/actions/0/dispatch`,
+    headers: dispatchUser,
+    payload: { idempotencyKey: "k-unavailable" },
+  });
+  expect(res.statusCode).toBe(409);
+  expect(res.json()).toMatchObject({ error: "module unavailable" });
+});
+
+test("dispatch action: unknown action ref → 404", async () => {
+  const res = await app.inject({
+    method: "POST",
+    url: `/notifications/${actionId}/actions/5/dispatch`,
+    headers: dispatchUser,
+    payload: { idempotencyKey: "k-noref" },
+  });
+  expect(res.statusCode).toBe(404);
+  expect(res.json()).toMatchObject({ error: "notification or action not found" });
+});
+
+test("dispatch action: 200 returns the dispatch result and calls the service correctly", async () => {
+  vi.mocked(dispatcher.dispatch).mockResolvedValue({
+    status: 200,
+    body: { ok: true, message: "Approved", resolve: true },
+  });
+  await svc.setModuleBaseUrl("dsr", "http://localhost:4000/dsr");
+  try {
+    const res = await app.inject({
+      method: "POST",
+      url: `/notifications/${actionId}/actions/0/dispatch`,
+      headers: dispatchUser,
+      payload: { idempotencyKey: "k-happy" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, message: "Approved", resolve: true });
+    expect(dispatcher.dispatch).toHaveBeenCalledWith({
+      url: "http://localhost:4000/dsr/actions/approve",
+      method: "POST",
+      body: expect.objectContaining({ notificationId: actionId, actionRef: "0" }),
+    });
+  } finally {
+    await svc.setModuleBaseUrl("dsr", null);
+  }
 });

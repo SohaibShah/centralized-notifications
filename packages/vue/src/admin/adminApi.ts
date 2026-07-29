@@ -1,4 +1,4 @@
-import type { Notification, NotificationPriority } from "@notifications/shared";
+import type { NotificationPriority } from "@notifications/shared";
 import type { Transport } from "../transport/types";
 
 export interface AdminModule {
@@ -9,27 +9,8 @@ export interface AdminModule {
   total: number;
   suppressed: number;
   byPriority: Record<NotificationPriority, number>;
-}
-
-export interface CustomSpec {
-  mode: "custom";
-  notification: Omit<Notification, "id">;
-  sampleActions?: number;
-}
-export interface PresetSpec {
-  mode: "preset";
-  preset: string;
-}
-export interface BurstSpec {
-  mode: "burst";
-  count: number;
-  seed?: number;
-}
-export type SimulateSpec = CustomSpec | PresetSpec | BurstSpec;
-
-export interface SimulateResult {
-  published: number;
-  suppressed: number;
+  /** The module's API root — where action callbacks are sent. Null when unset. */
+  baseUrl: string | null;
 }
 
 export interface AdminSettings {
@@ -48,10 +29,8 @@ export function createAdminApi(transport: Transport) {
   const fetchModules = () => transport.get<AdminModule[]>("/admin/modules");
   return {
     fetchModules,
-    patchModule: (key: string, body: { enabled: boolean }) =>
+    patchModule: (key: string, body: { enabled?: boolean; baseUrl?: string | null }) =>
       transport.patch<void>(`/admin/modules/${encodeURIComponent(key)}`, body),
-    /** POST /admin/simulate — the non-prod dev/QA generator endpoint. */
-    simulate: (spec: SimulateSpec) => transport.post<SimulateResult>("/admin/simulate", spec),
     /** Discovered module keys, for the custom form's module datalist. */
     fetchModuleKeys: async (): Promise<string[]> => (await fetchModules()).map((m) => m.key),
     getAdminSettings: () => transport.get<AdminSettings>("/admin/settings"),

@@ -1,9 +1,17 @@
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
 import type { NotificationService } from "@notifications/core";
+import { moduleBaseUrlSchema } from "@notifications/shared";
 
 const moduleParamsSchema = z.object({ key: z.string().min(1).max(100) });
-const modulePatchSchema = z.object({ enabled: z.boolean() });
+const modulePatchSchema = z
+  .object({
+    enabled: z.boolean().optional(),
+    baseUrl: moduleBaseUrlSchema.nullable().optional(),
+  })
+  .refine((b) => b.enabled !== undefined || b.baseUrl !== undefined, {
+    message: "no fields to update",
+  });
 const settingsPatchSchema = z
   .object({
     aiSummaryEnabled: z.boolean().optional(),
@@ -35,6 +43,7 @@ export function notificationAdminRoutes(
       key: m.id,
       label: m.label,
       enabled: m.enabled,
+      baseUrl: m.baseUrl,
       lastSeenAt: m.lastSeenAt,
       total: m.total,
       suppressed: m.suppressed,
@@ -52,7 +61,12 @@ export function notificationAdminRoutes(
     const known = (await service.listModules()).some((m) => m.id === params.data.key);
     if (!known) return reply.code(404).send({ error: "module not found" });
 
-    await service.setModuleEnabled(params.data.key, body.data.enabled);
+    if (body.data.enabled !== undefined) {
+      await service.setModuleEnabled(params.data.key, body.data.enabled);
+    }
+    if (body.data.baseUrl !== undefined) {
+      await service.setModuleBaseUrl(params.data.key, body.data.baseUrl);
+    }
     return reply.code(204).send();
   });
 
