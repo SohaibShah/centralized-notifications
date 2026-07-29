@@ -44,10 +44,12 @@ if echo "$DIFF" | grep -qE '\-\-\-\-\-BEGIN (RSA|EC|OPENSSH|DSA)? ?PRIVATE KEY\-
 fi
 
 # Reading a secret FROM the environment/config (process.env.X, import.meta.env.X, getEnv().X,
-# os.environ[...]) is the CORRECT pattern, not a hardcoded credential — exclude those so they
-# don't produce false positives. A real hardcoded value (a literal string/number) still trips.
-# Scans CRED_DIFF (source minus test/spec files) so dummy fixture tokens in tests don't false-positive.
-if echo "$CRED_DIFF" | grep -iE '(api.?key|secret|password|token)[[:space:]]*[:=][[:space:]]*.{0,3}[A-Za-z0-9/+_.-]{16,}' | grep -qivE 'process\.env|import\.meta\.env|getenv\(|os\.environ'; then
+# os.environ[...], or a validated config object exported as `env` — env.X) is the CORRECT pattern,
+# not a hardcoded credential — exclude those so they don't produce false positives. Such values are
+# dotted identifier references, never literals, so a real hardcoded value (a literal string/number)
+# still trips. Scans CRED_DIFF (source minus test/spec files) so dummy fixture tokens in tests don't
+# false-positive.
+if echo "$CRED_DIFF" | grep -iE '(api.?key|secret|password|token)[[:space:]]*[:=][[:space:]]*.{0,3}[A-Za-z0-9/+_.-]{16,}' | grep -qivE 'process\.env|import\.meta\.env|getenv\(|os\.environ|\benv\.'; then
   FLAGS="${FLAGS}- Found a line that looks like a hardcoded credential (key/secret/password/token assigned to a long value)."$'\n'
 fi
 
