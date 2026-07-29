@@ -124,6 +124,12 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
 
   .field { display: flex; flex-direction: column; }
   .field + .field { margin-top: 12px; }
+  .field .hint {
+    margin: 4px 0 0;
+    color: var(--text-faint);
+    font-size: 11px;
+  }
+  .field[hidden] { display: none; }
 
   select,
   input[type="text"],
@@ -261,6 +267,21 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
         </select>
       </div>
       <div class="field">
+        <label for="custom-audience-scope">Audience</label>
+        <select id="custom-audience-scope" name="audienceScope" required>
+          <option value="global" selected>Everyone (global)</option>
+          <option value="team">Team</option>
+          <option value="role">Role</option>
+          <option value="user">User</option>
+        </select>
+      </div>
+      <div class="field" id="custom-audience-id-field" hidden>
+        <label for="custom-audience-id">Audience ID</label>
+        <input id="custom-audience-id" name="audienceId" type="text" maxlength="200" list="custom-audience-id-list" autocomplete="off" aria-describedby="custom-audience-hint" />
+        <datalist id="custom-audience-id-list"></datalist>
+        <p class="hint" id="custom-audience-hint"></p>
+      </div>
+      <div class="field">
         <fieldset id="custom-actions-fieldset">
           <legend>Actions</legend>
           <p class="empty">Select a module to see its actions.</p>
@@ -374,6 +395,45 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
     });
   }
 
+  // Autocomplete hints for the audience ID field, keyed by scope. These mirror the seeded
+  // identity fixtures (backend/src/auth/seed.ts) so a dev/QA picks an id that actually resolves;
+  // the field stays free text, so any value is still allowed. Note the seeded "admin" login is
+  // role "admin" with no team, so role:admin or user:admin are the ones it will actually receive.
+  var AUDIENCE_SUGGESTIONS = {
+    team: ["privacy-ops", "security"],
+    role: ["admin", "privacy-analyst", "security-reviewer", "access-approver"],
+    user: ["admin", "priya", "sam", "alex", "jordan"],
+  };
+
+  function renderAudienceScope(scope) {
+    var field = el("custom-audience-id-field");
+    var input = el("custom-audience-id");
+    var list = el("custom-audience-id-list");
+    var hint = el("custom-audience-hint");
+
+    if (scope === "global") {
+      field.hidden = true;
+      input.value = "";
+      return;
+    }
+
+    field.hidden = false;
+    var suggestions = AUDIENCE_SUGGESTIONS[scope] || [];
+    list.innerHTML = "";
+    suggestions.forEach(function (id) {
+      var opt = document.createElement("option");
+      opt.value = id;
+      list.appendChild(opt);
+    });
+    input.placeholder = suggestions.length ? "e.g. " + suggestions[0] : scope + " id";
+    hint.textContent =
+      "Which " + scope + " should receive this. Seeded " + scope + "s: " + suggestions.join(", ") + ".";
+    // On each scope change, prefill a sensible default: role/user default to "admin" (the seeded
+    // login you test with will actually receive it); team has no admin member, so default to the
+    // first seeded team. Overwriting on change avoids leaving a stale id from the previous scope.
+    input.value = scope === "team" ? suggestions[0] : "admin";
+  }
+
   function loadCatalog() {
     return fetch("/catalog")
       .then(function (res) {
@@ -409,6 +469,10 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
     renderActionsForModule(event.target.value);
   });
 
+  el("custom-audience-scope").addEventListener("change", function (event) {
+    renderAudienceScope(event.target.value);
+  });
+
   el("custom-form").addEventListener("submit", function (event) {
     event.preventDefault();
     var resultNode = el("custom-result");
@@ -425,6 +489,17 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
       return;
     }
 
+    var scope = el("custom-audience-scope").value;
+    var audience = { scope: scope };
+    if (scope !== "global") {
+      var audienceId = el("custom-audience-id").value.trim();
+      if (!audienceId) {
+        showResult(resultNode, "error", "Enter an audience ID for the " + scope + " scope.");
+        return;
+      }
+      audience.id = audienceId;
+    }
+
     var payload = {
       mode: "custom",
       module: el("custom-module").value,
@@ -432,6 +507,7 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
       description: el("custom-description").value,
       priority: el("custom-priority").value,
       actions: actions,
+      audience: audience,
     };
 
     postEmit(payload).then(function (result) {

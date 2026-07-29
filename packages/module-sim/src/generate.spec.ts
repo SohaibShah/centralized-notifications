@@ -87,10 +87,25 @@ describe("buildCustom", () => {
       description: "A hand-authored scenario for QA.",
       priority: "high",
       actions: ["approve"],
+      audience: { scope: "global" },
     });
     expectActionable(n);
     expect(n.title).toBe("Custom DSR alert");
     expect(n.priority).toBe("high");
+    expect(n.audience).toEqual({ scope: "global" });
+  });
+
+  it("carries the caller-provided audience through onto the notification", () => {
+    const n = buildCustom({
+      module: "access-governance",
+      title: "Team-scoped access alert",
+      description: "Only the security team should see this.",
+      priority: "high",
+      actions: ["revoke"],
+      audience: { scope: "team", id: "security" },
+    });
+    expectActionable(n);
+    expect(n.audience).toEqual({ scope: "team", id: "security" });
   });
 
   it("throws for an action name not in the module's catalog", () => {
@@ -101,6 +116,7 @@ describe("buildCustom", () => {
         description: "Bad",
         priority: "low",
         actions: ["not-a-real-action"],
+        audience: { scope: "global" },
       }),
     ).toThrow();
   });
@@ -113,6 +129,7 @@ describe("buildCustom", () => {
         description: "Bad",
         priority: "low",
         actions: ["approve"],
+        audience: { scope: "global" },
       }),
     ).toThrow();
   });
@@ -130,6 +147,7 @@ describe("buildCustom", () => {
           description: "Bad",
           priority: "low",
           actions: ["approve"],
+          audience: { scope: "global" },
         }),
       ).toThrow(`unknown module: "${moduleKey}"`);
     },

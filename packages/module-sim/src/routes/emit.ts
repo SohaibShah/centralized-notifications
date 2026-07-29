@@ -1,6 +1,6 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
-import { NOTIFICATION_PRIORITIES, type Notification } from "@notifications/shared";
+import { audienceSchema, NOTIFICATION_PRIORITIES, type Notification } from "@notifications/shared";
 import type { AppConfig } from "../app";
 import { buildCustom, generateBurst, generatePreset, PRESET_IDS } from "../generate";
 
@@ -31,6 +31,10 @@ const customSchema = z.object({
   // At least one dispatch action name is required — every notification emit.ts publishes
   // must be actionable (see generate.ts's CustomInput doc comment).
   actions: z.array(z.string().min(1)).min(1).max(5),
+  // Target audience, validated with the same shared schema the hub uses (so `team`/`role`/`user`
+  // scopes require an `id` here too, not just server-side). Omitted -> everyone, matching the
+  // old admin generator's `global` default.
+  audience: audienceSchema.optional(),
 });
 
 const emitBodySchema = z.discriminatedUnion("mode", [burstSchema, presetSchema, customSchema]);
@@ -83,6 +87,7 @@ export function registerEmitRoute(
             description: body.description,
             priority: body.priority,
             actions: body.actions,
+            audience: body.audience ?? { scope: "global" },
           }),
         ];
       } catch (err) {

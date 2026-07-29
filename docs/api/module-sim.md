@@ -103,17 +103,19 @@ Every preset is emitted with `audience: { scope: "global" }`.
 
 **`mode: "custom"`** — one hand-built notification.
 
-| Field         | Type       | Required | Notes                                                                                                           |
-| ------------- | ---------- | -------- | --------------------------------------------------------------------------------------------------------------- |
-| `mode`        | `"custom"` | yes      |                                                                                                                 |
-| `module`      | string     | yes      | Must be one of the four registered modules (see [Action reference](#action-reference)). Unknown module → `400`. |
-| `title`       | string     | yes      | Min length 1.                                                                                                   |
-| `description` | string     | yes      |                                                                                                                 |
-| `priority`    | string     | yes      | One of `low`, `normal`, `high`, `critical`.                                                                     |
-| `actions`     | string[]   | yes      | 1–5 action names, resolved against `module`'s catalog. Any name not in that module's catalog → `400`.           |
+| Field         | Type       | Required | Notes                                                                                                                                                                                                                                                                                                    |
+| ------------- | ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`        | `"custom"` | yes      |                                                                                                                                                                                                                                                                                                          |
+| `module`      | string     | yes      | Must be one of the four registered modules (see [Action reference](#action-reference)). Unknown module → `400`.                                                                                                                                                                                          |
+| `title`       | string     | yes      | Min length 1.                                                                                                                                                                                                                                                                                            |
+| `description` | string     | yes      |                                                                                                                                                                                                                                                                                                          |
+| `priority`    | string     | yes      | One of `low`, `normal`, `high`, `critical`.                                                                                                                                                                                                                                                              |
+| `actions`     | string[]   | yes      | 1–5 action names, resolved against `module`'s catalog. Any name not in that module's catalog → `400`.                                                                                                                                                                                                    |
+| `audience`    | object     | no       | Shared `audienceSchema` (`{ scope, id? }`). `scope` is one of `global` / `team` / `role` / `user`. Omitted → defaults to `{ scope: "global" }`. Non-global scopes require an `id` (missing id → `400`, hub never called). For `team` the id is a team key, for `role` a role key, for `user` a username. |
 
-Emitted with `snoozable: true` and `audience: { scope: "global" }` (fixed — not
-caller-configurable in this mode).
+Emitted with `snoozable: true` (fixed — not caller-configurable in this mode). The
+`audience` is caller-configurable via the `audience` field above and defaults to
+`{ scope: "global" }` when omitted.
 
 ```json
 {
@@ -249,11 +251,11 @@ regardless of process cwd).
 The page has three panels, each posting same-origin to this same service's
 [`POST /emit`](#post-emit) (documented above) with the mode it corresponds to:
 
-| Panel  | Behavior                                                                                                                                                                                                                           |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Custom | Fetches [`GET /catalog`](#get-catalog) on page load to populate a module dropdown and, per selected module, a checkbox list of that module's actions. Submits `{ mode: "custom", module, title, description, priority, actions }`. |
-| Preset | Fetches [`GET /catalog`](#get-catalog) for the list of preset ids. Submits `{ mode: "preset", preset }`.                                                                                                                           |
-| Burst  | A count input capped client-side at `MAX_BURST` (currently `50` — the same constant `POST /emit` enforces server-side). Submits `{ mode: "burst", count }`.                                                                        |
+| Panel  | Behavior                                                                                                                                                                                                                                     |
+| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Custom | Fetches [`GET /catalog`](#get-catalog) on page load to populate a module dropdown and, per selected module, a checkbox list of that module's actions. Submits `{ mode: "custom", module, title, description, priority, actions, audience }`. |
+| Preset | Fetches [`GET /catalog`](#get-catalog) for the list of preset ids. Submits `{ mode: "preset", preset }`.                                                                                                                                     |
+| Burst  | A count input capped client-side at `MAX_BURST` (currently `50` — the same constant `POST /emit` enforces server-side). Submits `{ mode: "burst", count }`.                                                                                  |
 
 Each panel shows the `/emit` response (`{ "published": N }`) or error inline in its own
 status region — no page reload, no shared state between panels.

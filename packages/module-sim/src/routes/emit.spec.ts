@@ -128,6 +128,77 @@ describe("POST /emit", () => {
     expectDispatchActionsMatchCatalog(body[0]!);
   });
 
+  it("custom: forwards a specific (non-global) audience to the hub", async () => {
+    const { fetchImpl, calls } = fakeFetch();
+    const app = buildApp(cfg, { fetchImpl });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/emit",
+      headers: { "content-type": "application/json" },
+      payload: {
+        mode: "custom",
+        module: "access-governance",
+        title: "Team-scoped alert",
+        description: "Security team only",
+        priority: "high",
+        actions: ["revoke"],
+        audience: { scope: "team", id: "security" },
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(calls[0]!.init.body as string) as Notification[];
+    expect(body[0]!.audience).toEqual({ scope: "team", id: "security" });
+  });
+
+  it("custom: omitting audience defaults to global", async () => {
+    const { fetchImpl, calls } = fakeFetch();
+    const app = buildApp(cfg, { fetchImpl });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/emit",
+      headers: { "content-type": "application/json" },
+      payload: {
+        mode: "custom",
+        module: "dsr",
+        title: "No audience given",
+        description: "Should reach everyone",
+        priority: "normal",
+        actions: ["approve"],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = JSON.parse(calls[0]!.init.body as string) as Notification[];
+    expect(body[0]!.audience).toEqual({ scope: "global" });
+  });
+
+  it("custom: a non-global audience missing its id -> 400, hub never called", async () => {
+    const { fetchImpl, calls } = fakeFetch();
+    const app = buildApp(cfg, { fetchImpl });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/emit",
+      headers: { "content-type": "application/json" },
+      payload: {
+        mode: "custom",
+        module: "dsr",
+        title: "Bad audience",
+        description: "team scope with no id",
+        priority: "low",
+        actions: ["approve"],
+        audience: { scope: "team" },
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
   it("custom: unknown action name for the module -> 400, hub never called", async () => {
     const { fetchImpl, calls } = fakeFetch();
     const app = buildApp(cfg, { fetchImpl });

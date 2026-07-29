@@ -293,6 +293,10 @@ export interface CustomInput {
    * emitted notification must be actionable (see the emit route's zod body, which enforces
    * `.min(1)`). */
   actions: string[];
+  /** Who the notification targets. Restores the audience picker the old admin generator's
+   * custom form had (`global` / `team` / `role` / `user`) so dev/QA can emit to a specific
+   * audience, not just everyone. Already validated against `audienceSchema` at the emit boundary. */
+  audience: Audience;
 }
 
 /** Builds one notification from caller-supplied fields + dispatch actions chosen from that
@@ -318,7 +322,7 @@ export function buildCustom(input: CustomInput): Notification {
     description: input.description,
     priority: input.priority,
     snoozable: true,
-    audience: { scope: "global" },
+    audience: input.audience,
     actions,
   };
   return validate(notification);
