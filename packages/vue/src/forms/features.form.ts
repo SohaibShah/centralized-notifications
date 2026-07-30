@@ -28,6 +28,12 @@ export const featuresForm: FormSchema = {
       type: "switch",
       hint: "Allow module action buttons on notification cards.",
     },
+    {
+      name: "summaryTime",
+      label: "Daily summary time",
+      type: "time",
+      hint: "When each user's AI summary is generated, in their own timezone (24-hour).",
+    },
   ],
   submitLabel: "Save changes",
   submittingLabel: "Saving…",

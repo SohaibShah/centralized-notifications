@@ -28,8 +28,25 @@ describe("FeaturesPanel", () => {
       chatbotEnabled: false,
       groupingEnabled: true,
       actionsEnabled: true,
+      summaryTime: "08:00",
     });
     patchMock.mockResolvedValue(undefined);
+  });
+
+  it("renders the summary-time field from settings and submits it", async () => {
+    const wrapper = mountPanel();
+    await flushPromises();
+    const input = wrapper.find('input[name="summaryTime"]');
+    expect(input.exists()).toBe(true);
+    expect((input.element as HTMLInputElement).value).toBe("08:00");
+
+    await input.setValue("06:30");
+    await wrapper.get("form").trigger("submit");
+    await flushPromises();
+    expect(patchMock).toHaveBeenCalledWith(
+      "/admin/settings",
+      expect.objectContaining({ summaryTime: "06:30" }),
+    );
   });
 
   it("seeds switches from GET /admin/settings and saves changes via PATCH", async () => {
