@@ -21,16 +21,41 @@ const TEAMS = [
 ];
 
 const USERS = [
-  { username: "admin", displayName: "Admin User", roles: ["admin"], teams: [] as string[] },
+  {
+    username: "admin",
+    displayName: "Admin User",
+    roles: ["admin"],
+    teams: [] as string[],
+    timezone: "America/New_York",
+  },
   {
     username: "priya",
     displayName: "Priya Nair",
     roles: ["privacy-analyst"],
     teams: ["privacy-ops"],
+    timezone: "Asia/Kolkata",
   },
-  { username: "sam", displayName: "Sam Okafor", roles: ["security-reviewer"], teams: ["security"] },
-  { username: "alex", displayName: "Alex Chen", roles: ["access-approver"], teams: [] as string[] },
-  { username: "jordan", displayName: "Jordan Lee", roles: [] as string[], teams: ["privacy-ops"] },
+  {
+    username: "sam",
+    displayName: "Sam Okafor",
+    roles: ["security-reviewer"],
+    teams: ["security"],
+    timezone: "Europe/London",
+  },
+  {
+    username: "alex",
+    displayName: "Alex Chen",
+    roles: ["access-approver"],
+    teams: [] as string[],
+    timezone: "Asia/Singapore",
+  },
+  {
+    username: "jordan",
+    displayName: "Jordan Lee",
+    roles: [] as string[],
+    teams: ["privacy-ops"],
+    timezone: "America/Los_Angeles",
+  },
 ];
 
 export async function seedIdentity(): Promise<void> {
@@ -50,12 +75,13 @@ export async function seedIdentity(): Promise<void> {
   const passwordHash = await hashPassword(DEV_PASSWORD);
   for (const user of USERS) {
     const { rows } = await query<{ id: string }>(
-      `INSERT INTO users (username, display_name, password_hash)
-       VALUES ($1, $2, $3)
+      `INSERT INTO users (username, display_name, password_hash, timezone)
+       VALUES ($1, $2, $3, $4)
        ON CONFLICT (username) DO UPDATE
-         SET display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash
+         SET display_name = EXCLUDED.display_name, password_hash = EXCLUDED.password_hash,
+             timezone = EXCLUDED.timezone
        RETURNING id`,
-      [user.username, user.displayName, passwordHash],
+      [user.username, user.displayName, passwordHash, user.timezone],
     );
     const userId = rows[0]?.id;
     if (!userId) throw new Error(`failed to upsert user ${user.username}`);
