@@ -42,6 +42,13 @@ export interface Settings {
   summaryTime: string;
 }
 
+/** A persisted AI summary for one user. `basedOn` = notifications summarized (0 = caught-up). */
+export interface StoredSummary {
+  summary: string;
+  basedOn: number;
+  generatedAt: string; // ISO
+}
+
 /** One chat message in the OpenAI-compatible shape. */
 export interface AiMessage {
   role: "system" | "user" | "assistant";

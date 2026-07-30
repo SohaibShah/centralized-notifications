@@ -26,6 +26,7 @@ const on: Settings = {
   groupingEnabled: true,
   actionsEnabled: true,
   retentionDays: 30,
+  summaryTime: "08:00",
 };
 
 const stamp = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
