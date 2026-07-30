@@ -15,7 +15,7 @@ export const featuresForm: FormSchema = {
       name: "summaryTime",
       label: "Daily summary time",
       type: "time",
-      hint: "When each user's AI summary is generated, in their own timezone (24-hour).",
+      hint: "When each user's AI summary is generated, in their own timezone.",
       group: "AI",
       // Only relevant while AI summaries are on; hidden (but its value is preserved) when off.
       showIf: { field: "aiSummaryEnabled", equals: true },
