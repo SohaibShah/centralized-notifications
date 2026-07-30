@@ -56,7 +56,14 @@ async function seedUnread(svc: NotificationService, user: string): Promise<void>
 let ok: { app: FastifyInstance; svc: NotificationService };
 beforeAll(async () => {
   ok = await buildApp({ complete: async () => "FAKE SUMMARY" });
+  // Sibling files seed GLOBAL-scoped notifications into this shared plugin test DB (migrated once
+  // per run, not per file); globals are visible to every principal, which would inflate `basedOn`
+  // and break the caught-up (0) assertion depending on file order. Clear them for determinism.
+  await pool.query("DELETE FROM notifications WHERE audience_scope = 'global'");
   await seedUnread(ok.svc, "sumuser");
+  // A sibling file may leave aiSummaryEnabled=false on the shared singleton; set it back so this
+  // file starts enabled (PolicyStore caches per-instance and only its own writes invalidate).
+  await ok.svc.updateSettings({ aiSummaryEnabled: true });
 });
 afterAll(async () => {
   await ok.app.close();

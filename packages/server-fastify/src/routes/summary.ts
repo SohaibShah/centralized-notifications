@@ -1,4 +1,4 @@
-import type { FastifyInstance, preHandlerHookHandler } from "fastify";
+import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
 import {
   AiDisabledError,
   AiNotConfiguredError,
@@ -37,7 +37,7 @@ export function notificationSummaryRoute(
         rateLimit: {
           max: 10,
           timeWindow: "1 minute",
-          keyGenerator: (req) => req.principal?.userKey ?? req.ip,
+          keyGenerator: (req: FastifyRequest) => req.principal?.userKey ?? req.ip,
         },
       },
     },

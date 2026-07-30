@@ -183,3 +183,24 @@ test("settings round-trip: PATCH /admin/settings reflects in GET /settings/featu
   expect(features.statusCode).toBe(200);
   expect((features.json() as { aiSummaryEnabled: boolean }).aiSummaryEnabled).toBe(false);
 });
+
+test("PATCH /admin/settings validates summaryTime and exposes it via GET /settings/features", async () => {
+  const good = await app.inject({
+    method: "PATCH",
+    url: "/admin/settings",
+    headers: admin,
+    payload: { summaryTime: "06:30" },
+  });
+  expect(good.statusCode).toBe(204);
+
+  const bad = await app.inject({
+    method: "PATCH",
+    url: "/admin/settings",
+    headers: admin,
+    payload: { summaryTime: "6:30pm" },
+  });
+  expect(bad.statusCode).toBe(400);
+
+  const features = await app.inject({ method: "GET", url: "/settings/features", headers: plain });
+  expect((features.json() as { summaryTime: string }).summaryTime).toBe("06:30");
+});
