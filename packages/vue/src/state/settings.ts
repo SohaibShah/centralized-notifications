@@ -20,15 +20,22 @@ export function createSettingsState(deps: { transport: Transport }) {
     groupingEnabled: true,
     actionsEnabled: true,
   });
+  const summaryTime = ref("08:00");
   const loaded = ref(false);
 
   async function load(): Promise<void> {
-    const data = await deps.transport.get<FeatureFlags>("/settings/features");
-    Object.assign(flags, data);
+    const data = await deps.transport.get<FeatureFlags & { summaryTime?: string }>(
+      "/settings/features",
+    );
+    flags.aiSummaryEnabled = data.aiSummaryEnabled;
+    flags.chatbotEnabled = data.chatbotEnabled;
+    flags.groupingEnabled = data.groupingEnabled;
+    flags.actionsEnabled = data.actionsEnabled;
+    if (data.summaryTime) summaryTime.value = data.summaryTime;
     loaded.value = true;
   }
 
-  return reactive({ flags, loaded, load });
+  return reactive({ flags, summaryTime, loaded, load });
 }
 
 export type SettingsState = ReturnType<typeof createSettingsState>;

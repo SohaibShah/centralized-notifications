@@ -25,4 +25,18 @@ describe("settings state", () => {
     expect(s.flags.aiSummaryEnabled).toBe(false);
     expect(s.loaded).toBe(true);
   });
+
+  it("loads summaryTime from GET /settings/features (default '08:00' before load)", async () => {
+    const get = vi.fn(async () => ({
+      aiSummaryEnabled: true,
+      chatbotEnabled: true,
+      groupingEnabled: true,
+      actionsEnabled: true,
+      summaryTime: "06:30",
+    }));
+    const s = createSettingsState({ transport: fakeTransport({ get }) });
+    expect(s.summaryTime).toBe("08:00");
+    await s.load();
+    expect(s.summaryTime).toBe("06:30");
+  });
 });
