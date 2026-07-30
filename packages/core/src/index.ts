@@ -26,7 +26,10 @@ export type {
   ActionDispatchResult,
   AiMessage,
   AiProvider,
+  StoredSummary,
 } from "./types";
+export { computeDueSummaries } from "./ai/schedule";
+export type { DueUser } from "./ai/schedule";
 export type { ChatTurn, AnswerChunk } from "./ai/answer";
 export type { ChatSource } from "@notifications/shared";
 export type { ChatContextItem } from "./ai/retrieve";
