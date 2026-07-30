@@ -25,6 +25,10 @@ export interface FormField {
     equals?: string | number | boolean;
     notEquals?: string | number | boolean;
   };
+  /** Optional section label. Consecutive fields sharing a `group` render under one heading; the
+   *  heading is skipped when every field in the group is hidden by `showIf`. Ungrouped fields render
+   *  with no heading (the default for simple forms like login). */
+  group?: string;
 }
 
 export interface FormSchema {
