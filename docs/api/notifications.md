@@ -432,41 +432,91 @@ the authenticated user). No events published.
 
 **Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
 
-Returns a short **AI triage digest** of the caller's own **unread** notifications — a couple of sentences telling the user what needs attention, rather than another list. It reads the same set the [counts](#get-notificationscounts) do (audience-scoped, unread, non-suppressed), takes the **top 25 critical-first** (`ORDER BY priority_rank ASC, created_at ASC` — highest priority first, oldest first within a priority), and hands their titles/descriptions to a **host-injected `AiProvider`** to summarize. In the reference app that provider is a local Ollama model behind an OpenAI-compatible adapter (see [`AiProvider`](../../packages/core/src/types.ts) and `NotificationServiceConfig.ai`); the library owns the prompt, the host owns the model transport. Read-only from the caller's perspective — it never changes read state.
+Returns the caller's **persisted AI triage digest** — a short couple-of-sentences summary of what needs attention. **This is a read, not a generation:** it returns the summary already stored for the caller and **never calls the `AiProvider`**, so it can't return `501`/`429`/`502`. Summaries are produced out-of-band — on a **schedule** (a daily per-user-local generation job in the reference host) or by an explicit [`POST /notifications/summary/refresh`](#post-notificationssummaryrefresh) — and `generatedAt` reflects that last generation (scheduled or manual). Read-only from the caller's perspective — it never changes read state.
 
-**Empty unread set is short-circuited.** If the caller has nothing unread, the endpoint returns `{ "summary": "You're all caught up.", "basedOn": 0 }` **without calling the model at all** — no provider round-trip, no rate-limit charge.
-
-Source of truth: [`packages/server-fastify/src/routes/summary.ts`](../../packages/server-fastify/src/routes/summary.ts) (the route + status mapping), [`packages/core/src/ai/summarize.ts`](../../packages/core/src/ai/summarize.ts) (`SummaryEngine.summarize` — gating, cache, rate limit, provider call), and [`packages/core/src/ai/errors.ts`](../../packages/core/src/ai/errors.ts) (the error → status contract).
+Source of truth: [`packages/server-fastify/src/routes/summary.ts`](../../packages/server-fastify/src/routes/summary.ts) (the route + status mapping) and `NotificationService.getStoredSummary` in [`packages/core/src/service.ts`](../../packages/core/src/service.ts).
 
 > **Gated by a feature flag.** The digest is only available when the `aiSummaryEnabled` [setting](../../packages/core/src/types.ts) is on (see the [Admin API](./admin.md) feature flags). With it off the endpoint returns `404`, so a disabled feature is indistinguishable from a route that doesn't exist.
 
 ### Request
 
-No parameters. The endpoint always summarizes the caller's full audience-scoped unread set (capped at 25); there are no query params, filters, or body.
+No parameters. There are no query params, filters, or body.
 
 ### Response `200`
+
+When the caller has a stored summary:
 
 ```json
 {
   "summary": "2 critical items need attention: a DSR is 3 days from SLA breach and an access request is awaiting your approval. The rest can wait.",
-  "basedOn": 2
+  "basedOn": 2,
+  "generatedAt": "2026-07-30T06:00:00.000Z"
 }
 ```
 
-| Field     | Type   | Notes                                                                                                                                                                                        |
-| --------- | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `summary` | string | The model-produced (trimmed) triage text, or the fixed `"You're all caught up."` when nothing is unread. A provider that returns empty content is treated as a `502`, never a blank summary. |
-| `basedOn` | number | How many unread notifications informed the summary — the size of the (capped, ≤ 25) set fed to the model. `0` for the caught-up case.                                                        |
+When the caller has no stored summary yet (no generation has run for them):
 
-### Caching & cost
+```json
+{ "summary": null, "basedOn": 0, "generatedAt": null }
+```
 
-The server caches the last summary **per user**, keyed by a **signature of the unread set** (a SHA-256 of the total-unread count plus the ordered ids of the top-25). A repeat request whose unread set hasn't changed returns the cached summary **without re-invoking the model** — so re-opening the panel is free, and only a real change to the unread set (a new notification, or one marked read) triggers a fresh model call. The signature includes the total unread count, so a change _outside_ the top-25 window still invalidates the cache. The cache is single-instance, in-process (like the policy cache), not shared across replicas.
+| Field         | Type                | Notes                                                                                                                                                                                                                                         |
+| ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `summary`     | string \| null      | The stored (trimmed) triage text, or `null` when nothing has been generated for the caller yet.                                                                                                                                              |
+| `basedOn`     | number              | How many unread notifications informed the stored summary. `0` when there is no summary yet, **and also** when the summary is a "caught up" marker (see below).                                                                              |
+| `generatedAt` | string (ISO 8601) \| null | When the stored summary was produced (scheduled or manual refresh). `null` only when there is no stored summary. **`basedOn` of `0` with a _non-null_ `generatedAt` is the "caught up" marker** — a summary was generated but nothing was unread. |
 
-The frontend fetches this endpoint **lazily** — only on first expand of the AI-summary disclosure, not on every feed load — so a user who never opens it never triggers a model call.
+### Errors
+
+| Status | Body                                     | Reason                                                                                                   |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie / the host `auth` adapter resolved no `Principal`.                               |
+| `404`  | `{ "error": "ai summary disabled" }`     | The `aiSummaryEnabled` feature flag is off — the feature is turned off for everyone (`AiDisabledError`). |
+
+### Side effects
+
+None — read-only. No provider call, no read-state or notification writes, no events published.
+
+## POST /notifications/summary/refresh
+
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
+
+The manual **"reload"** endpoint. **Regenerates the caller's summary now**, persists it (updating `generatedAt`), and returns the fresh result. This is the on-demand counterpart to the scheduled generation job — where [`GET /notifications/summary`](#get-notificationssummary) only reads what's stored, this endpoint produces a new one and writes it to the **same** stored slot, so a subsequent `GET /notifications/summary` returns **exactly** what this refresh returned.
+
+Generation reads the same set the [counts](#get-notificationscounts) do (audience-scoped, unread, non-suppressed), takes the **top 25 critical-first**, and hands their titles/descriptions to the **host-injected `AiProvider`** to summarize. In the reference app that provider is a local Ollama model behind an OpenAI-compatible adapter (see [`AiProvider`](../../packages/core/src/types.ts) and `NotificationServiceConfig.ai`); the library owns the prompt, the host owns the model transport.
+
+Source of truth: [`packages/server-fastify/src/routes/summary.ts`](../../packages/server-fastify/src/routes/summary.ts) (the route + status mapping), [`packages/core/src/ai/summarize.ts`](../../packages/core/src/ai/summarize.ts) (`SummaryEngine` — gating, rate limit, provider call), and [`packages/core/src/ai/errors.ts`](../../packages/core/src/ai/errors.ts) (the error → status contract).
+
+> **Gated by the same feature flag.** With `aiSummaryEnabled` off, this returns `404` (`AiDisabledError`), same as the read endpoint.
+
+### Request
+
+No parameters. The endpoint always regenerates from the caller's full audience-scoped unread set (capped at 25); there are no query params, filters, or body.
+
+### Response `200`
+
+Same shape as the read endpoint returns for a stored summary — the freshly generated summary, now persisted:
+
+```json
+{
+  "summary": "2 critical items need attention: a DSR is 3 days from SLA breach and an access request is awaiting your approval. The rest can wait.",
+  "basedOn": 2,
+  "generatedAt": "2026-07-30T14:22:09.117Z"
+}
+```
+
+| Field         | Type              | Notes                                                                                                            |
+| ------------- | ----------------- | -------------------------------------------------------------------------------------------------------------- |
+| `summary`     | string            | The model-produced (trimmed) triage text. A provider that returns empty content is treated as a `502`, never a blank summary. |
+| `basedOn`     | number            | Size of the (capped, ≤ 25) unread set fed to the model. `0` when nothing was unread ("caught up" marker).       |
+| `generatedAt` | string (ISO 8601) | The just-now generation time this refresh persisted.                                                            |
 
 ### Rate limit
 
-Provider calls are rate-limited **per recipient** to **6 per minute** (a sliding 60-second window). Exceeding it returns `429`. Cache hits and the empty-set short-circuit don't count against the limit — only calls that actually reach the model do.
+Two limits apply:
+
+- **Per-recipient (model)** — provider calls are rate-limited per recipient (see [`SummaryEngine`](../../packages/core/src/ai/summarize.ts)); exceeding it surfaces as `429 { "error": "rate limited" }` (`AiRateLimitError`).
+- **Route-level** — the route declares `config.rateLimit`: `max: 10`, `timeWindow: "1 minute"`, keyed by `req.principal?.userKey` (falling back to `req.ip`). Exceeding it returns `@fastify/rate-limit`'s default `429` body (`{ "statusCode": 429, "error": "Too Many Requests", "message": … }`). Like the [dispatch route's limit](#rate-limit), this is **opt-in per host** — it only takes effect if the host registered [`@fastify/rate-limit`](https://github.com/fastify/fastify-rate-limit); the reference app does (`{ global: false }` in [`backend/src/server.ts`](../../backend/src/server.ts)).
 
 ### PII
 
@@ -478,13 +528,15 @@ To produce the summary, the caller's unread notification **titles and descriptio
 | ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | `401`  | `{ "error": "authentication required" }` | No valid session cookie / the host `auth` adapter resolved no `Principal`.                                               |
 | `404`  | `{ "error": "ai summary disabled" }`     | The `aiSummaryEnabled` feature flag is off — the feature is turned off for everyone (`AiDisabledError`).                 |
-| `429`  | `{ "error": "rate limited" }`            | The per-recipient rate limit (6 model calls/min) was exceeded (`AiRateLimitError`).                                      |
+| `429`  | `{ "error": "rate limited" }` _or_ `@fastify/rate-limit`'s default body | Per-recipient model limit (`AiRateLimitError`) or the route-level 10/min limit was exceeded (see [Rate limit](#rate-limit-1)). |
 | `501`  | `{ "error": "ai not configured" }`       | No `AiProvider` was injected by the host — the feature is enabled but no model is wired (`AiNotConfiguredError`).        |
 | `502`  | `{ "error": "summary unavailable" }`     | The injected provider failed — timeout, non-2xx, or empty completion (e.g. the local model is down) (`AiProviderError`). |
 
 ### Side effects
 
-None on the caller's data — read-only (no read-state or notification writes, no events published). The only state touched is the in-process per-user summary cache and rate-limit window, and — on a cache miss for a non-empty set — one call to the injected `AiProvider`.
+- **Provider call.** One call to the injected `AiProvider` for a non-empty unread set (past the flag/provider/rate-limit gates).
+- **Persisted summary.** The generated summary (including `generatedAt`) is written to the caller's stored summary slot — the exact value a subsequent [`GET /notifications/summary`](#get-notificationssummary) returns.
+- **No events published.**
 
 ## POST /notifications/chat
 
