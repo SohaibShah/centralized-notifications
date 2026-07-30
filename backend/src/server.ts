@@ -5,11 +5,14 @@ import { SHARED_PACKAGE } from "@notifications/shared";
 import { notificationFastifyPlugin } from "@notifications/server-fastify";
 import { authRoutes } from "./auth/routes";
 import { getSessionUser } from "./auth/guards";
+import { getUserWithRolesTeams } from "./auth/repository";
 import { registerSession } from "./auth/session";
 import { getEnv, type Env } from "./config/env";
 import { maintenanceRoutes } from "./http/admin/maintenance";
 import { createReferenceService } from "./reference/service";
 import { toPrincipal } from "./reference/principal-adapter";
+import { listSummaryScheduleRows } from "./summary/schedule-repo";
+import { startSummaryScheduler } from "./summary/scheduler";
 
 /**
  * DB maintenance is a non-production tool: its routes are registered only outside production,
@@ -67,6 +70,22 @@ export async function buildServer(): Promise<FastifyInstance> {
   }
 
   app.get("/health", async () => ({ status: "ok", shared: SHARED_PACKAGE }));
+
+  // Daily per-user-local summary generation. Host-owned (core is identity-free and can't enumerate
+  // users): the in-process timer drives core's pure due-check + refreshSummary per due user. Never
+  // runs under NODE_ENV=test (the suites drive runSummaryTick directly with an injected clock).
+  const env = getEnv();
+  if (env.NODE_ENV !== "test" && env.SUMMARY_SCHEDULER_ENABLED) {
+    const stop = startSummaryScheduler({
+      getSettings: () => service.getSettings(),
+      listRows: listSummaryScheduleRows,
+      generate: async (row) => {
+        const user = await getUserWithRolesTeams(row.id);
+        if (user) await service.refreshSummary({ principal: toPrincipal(user) });
+      },
+    });
+    app.addHook("onClose", async () => stop());
+  }
 
   return app;
 }
