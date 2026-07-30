@@ -39,7 +39,7 @@ async function buildApp(
   return { app, svc };
 }
 
-// Seed one unread user-scoped notification so the summarizer has a non-empty set for `user`.
+// Seed one unread user-scoped notification so a refresh has a non-empty set for `user`.
 async function seedUnread(svc: NotificationService, user: string): Promise<void> {
   const n: Notification = {
     id: `sumroute-${user}-${stamp}`,
@@ -64,27 +64,51 @@ afterAll(async () => {
   await pool.end();
 });
 
-test("200 with the summary for an authed principal with unread", async () => {
+test("GET returns the stored null-shape for a user with no summary yet", async () => {
   const res = await ok.app.inject({
     method: "GET",
     url: "/notifications/summary",
-    headers: { "x-test-user": "sumuser" },
+    headers: { "x-test-user": `sumread-${stamp}` },
   });
   expect(res.statusCode).toBe(200);
-  expect(res.json()).toMatchObject({ summary: "FAKE SUMMARY" });
+  expect(res.json()).toEqual({ summary: null, basedOn: 0, generatedAt: null });
 });
 
-test("401 without auth", async () => {
+test("GET is 401 without auth", async () => {
   const res = await ok.app.inject({ method: "GET", url: "/notifications/summary" });
   expect(res.statusCode).toBe(401);
 });
 
-test("404 when aiSummaryEnabled is false", async () => {
+test("POST /refresh generates + persists; GET then reads it back", async () => {
+  const refresh = await ok.app.inject({
+    method: "POST",
+    url: "/notifications/summary/refresh",
+    headers: { "x-test-user": "sumuser" },
+  });
+  expect(refresh.statusCode).toBe(200);
+  const body = refresh.json() as { summary: string; basedOn: number; generatedAt: string };
+  expect(body).toMatchObject({ summary: "FAKE SUMMARY", basedOn: 1 });
+  expect(typeof body.generatedAt).toBe("string");
+
+  const get = await ok.app.inject({
+    method: "GET",
+    url: "/notifications/summary",
+    headers: { "x-test-user": "sumuser" },
+  });
+  expect(get.json()).toEqual(body);
+});
+
+test("POST /refresh is 401 without auth", async () => {
+  const res = await ok.app.inject({ method: "POST", url: "/notifications/summary/refresh" });
+  expect(res.statusCode).toBe(401);
+});
+
+test("POST /refresh is 404 when aiSummaryEnabled is false", async () => {
   await ok.svc.updateSettings({ aiSummaryEnabled: false });
   try {
     const res = await ok.app.inject({
-      method: "GET",
-      url: "/notifications/summary",
+      method: "POST",
+      url: "/notifications/summary/refresh",
       headers: { "x-test-user": "sumuser" },
     });
     expect(res.statusCode).toBe(404);
@@ -93,19 +117,19 @@ test("404 when aiSummaryEnabled is false", async () => {
   }
 });
 
-test("501 when no provider is configured", async () => {
+test("POST /refresh is 501 when no provider is configured", async () => {
   const { app, svc } = await buildApp(); // no ai provider
   await seedUnread(svc, "noprov");
   const res = await app.inject({
-    method: "GET",
-    url: "/notifications/summary",
+    method: "POST",
+    url: "/notifications/summary/refresh",
     headers: { "x-test-user": "noprov" },
   });
   expect(res.statusCode).toBe(501);
   await app.close();
 });
 
-test("502 when the provider throws", async () => {
+test("POST /refresh is 502 when the provider throws", async () => {
   const { app, svc } = await buildApp({
     complete: async () => {
       throw new Error("model down");
@@ -113,8 +137,8 @@ test("502 when the provider throws", async () => {
   });
   await seedUnread(svc, "proverr");
   const res = await app.inject({
-    method: "GET",
-    url: "/notifications/summary",
+    method: "POST",
+    url: "/notifications/summary/refresh",
     headers: { "x-test-user": "proverr" },
   });
   expect(res.statusCode).toBe(502);
