@@ -31,11 +31,34 @@ export async function runSummaryTick(deps: SchedulerDeps): Promise<void> {
 
 const FIFTEEN_MIN = 15 * 60 * 1000;
 
+/**
+ * Wrap `runSummaryTick` with a re-entrancy guard + a catch-all. The guard drops any beat that fires
+ * while the previous pass is still in flight — otherwise a batch that runs longer than the interval
+ * would let the next tick re-select users the running pass hasn't persisted yet and generate them
+ * concurrently (a duplicate model call within the same local day). The catch stops a rejecting
+ * setup query (`getSettings`/`listRows` both hit Postgres) from escaping as an unhandled rejection
+ * that could terminate the process.
+ */
+export function createGuardedTick(deps: SchedulerDeps): () => Promise<void> {
+  let running = false;
+  return async () => {
+    if (running) return;
+    running = true;
+    try {
+      await runSummaryTick(deps);
+    } catch (err) {
+      console.error("[summary-scheduler] tick failed", err);
+    } finally {
+      running = false;
+    }
+  };
+}
+
 /** Start the periodic scheduler (default every 15 min, to honor half-hour tz offsets). Returns a
  *  stop function. The caller wires `generate` to principal reconstruction + service.refreshSummary. */
 export function startSummaryScheduler(deps: SchedulerDeps & { intervalMs?: number }): () => void {
-  const tick = () => void runSummaryTick(deps);
-  const handle = setInterval(tick, deps.intervalMs ?? FIFTEEN_MIN);
-  tick(); // run once at startup (same-day catch-up)
+  const tick = createGuardedTick(deps);
+  const handle = setInterval(() => void tick(), deps.intervalMs ?? FIFTEEN_MIN);
+  void tick(); // run once at startup (same-day catch-up)
   return () => clearInterval(handle);
 }

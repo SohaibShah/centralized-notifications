@@ -18,15 +18,11 @@ export function notificationSummaryRoute(
   app.get("/notifications/summary", { preHandler: requirePrincipal }, async (req, reply) => {
     const principal = req.principal;
     if (!principal) return reply.code(401).send({ error: "authentication required" });
-    try {
-      const stored = await service.getStoredSummary({ principal });
-      if (!stored) return reply.code(200).send({ summary: null, basedOn: 0, generatedAt: null });
-      return reply.code(200).send(stored);
-    } catch (err) {
-      if (err instanceof AiDisabledError)
-        return reply.code(404).send({ error: "ai summary disabled" });
-      throw err;
-    }
+    // A plain read of the persisted summary — it never calls the AI provider, so there is no
+    // provider/disabled error to map here. Feature gating (aiSummaryEnabled) is the consumer's
+    // concern (the panel hides the whole section); the stored read stays contract-simple.
+    const stored = await service.getStoredSummary({ principal });
+    return reply.code(200).send(stored ?? { summary: null, basedOn: 0, generatedAt: null });
   });
 
   app.post(
