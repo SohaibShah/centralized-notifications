@@ -464,13 +464,43 @@ kept lockstep-identical, so "what your feed shows" always equals "what the live 
 delivers". Per the [global-vs-per-user precedence rule](#design-decisions), these per-user rules
 can only **further** restrict delivery — they never re-enable something an admin has suppressed.
 
-## GET /notifications/modules
+## GET /notifications/mute-targets
 
 **Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
 
-The **module catalog** (`id` + `label` only), readable by **any** authenticated user so the
-settings page can list modules to snooze/mute. This is **not** the admin view — no per-module
-stats, suppressed state, or `base_url` is exposed here.
+The **snooze/mute editor's catalog**: everything the caller can snooze or mute, each row carrying
+**the caller's own priority mix**. Scoped to the authenticated principal — no other user's data is
+exposed, and this is **not** the admin view (no `suppressed` state or `base_url`). It backs the
+settings page's snooze/mute editor, which pairs this list with the caller's active
+[rules](#the-rule-shape) (from [`GET /notifications/preferences`](#get-notificationspreferences)) to
+show what's muted and what each rule would hide.
+
+Two families of target are returned:
+
+- **`modules`** — the **host's full module catalog** (clean `label`s), always listed in catalog
+  order, even for a module the caller has never received a notification from (its mix is then all
+  zeros). These are the ids a `module`-kind mute rule targets.
+- **`categories`** — every category present in the caller's own (audience-scoped) notifications,
+  **plus** any category the caller has **already muted** (a `category`-kind rule), even if they
+  currently have no notifications in it. Including already-muted categories is deliberate: a muted
+  category with no current items would otherwise vanish from the list and be impossible to un-mute.
+  Categories are sorted by name.
+
+**The priority mix is the caller's own counts, and is _not_ reduced by the caller's mute rules.**
+Each `byPriority`/`total` is computed over the caller's **audience-scoped, non-`suppressed`**
+notifications (see [audience scoping](#audience-scoping)), counting **both read and unread** — unlike
+[`GET /notifications/counts`](#get-notificationscounts), there is no unread filter here. The counts
+deliberately **ignore the mute filter**, so an already-muted module/category still reports its real
+mix (that mix is exactly what tells the user what un-muting would surface). Only categories with a
+non-null `category` contribute.
+
+Source of truth:
+[`packages/server-fastify/src/routes/preferences.ts`](../../packages/server-fastify/src/routes/preferences.ts)
+(the route), `NotificationService.getMuteTargets` in
+[`packages/core/src/service.ts`](../../packages/core/src/service.ts) (catalog + already-muted
+assembly), and [`packages/core/src/read/mute-targets.ts`](../../packages/core/src/read/mute-targets.ts)
+(the audience-scoped, non-mute-filtered count query). The response type is
+[`MuteTargetsResponse`](../../packages/shared/src/preferences.ts).
 
 ### Request
 
@@ -478,21 +508,57 @@ No parameters.
 
 ### Response `200`
 
-A JSON array of `{ id, label }`:
+A [`MuteTargetsResponse`](../../packages/shared/src/preferences.ts) — `modules` and `categories`
+arrays, each row carrying a per-priority mix and its `total`:
 
 ```json
-[
-  { "id": "dsr", "label": "DSR" },
-  { "id": "access-governance", "label": "Access Governance" },
-  { "id": "data-mapping", "label": "Data Mapping" },
-  { "id": "assessments", "label": "Assessments" }
-]
+{
+  "modules": [
+    {
+      "id": "dsr",
+      "label": "DSR",
+      "byPriority": { "critical": 1, "high": 0, "normal": 2, "low": 0 },
+      "total": 3
+    },
+    {
+      "id": "access-governance",
+      "label": "Access Governance",
+      "byPriority": { "critical": 0, "high": 0, "normal": 0, "low": 0 },
+      "total": 0
+    }
+  ],
+  "categories": [
+    {
+      "name": "audit",
+      "byPriority": { "critical": 0, "high": 1, "normal": 0, "low": 0 },
+      "total": 1
+    },
+    {
+      "name": "sla",
+      "byPriority": { "critical": 1, "high": 0, "normal": 0, "low": 0 },
+      "total": 1
+    }
+  ]
+}
 ```
 
-| Field   | Type   | Notes                                                                   |
-| ------- | ------ | ----------------------------------------------------------------------- |
-| `id`    | string | The module's registry id — the value a `module`-kind mute rule targets. |
-| `label` | string | Human-readable name for the settings UI.                                |
+A **module** row ([`ModuleMuteTarget`](../../packages/shared/src/preferences.ts)):
+
+| Field        | Type   | Notes                                                                                                                                                          |
+| ------------ | ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `id`         | string | The module's registry id — the value a `module`-kind mute rule targets.                                                                                        |
+| `label`      | string | Human-readable module name (from the host catalog) for the settings UI.                                                                                        |
+| `byPriority` | object | The caller's own count per priority — all four keys (`critical`, `high`, `normal`, `low`) always present, zero-filled. Read **and** unread; not mute-filtered. |
+| `total`      | number | Sum of the four `byPriority` buckets. `0` for a module the caller has no notifications from.                                                                   |
+
+A **category** row ([`CategoryMuteTarget`](../../packages/shared/src/preferences.ts)) is identical
+except the identifier field is `name` (the free-form category string) instead of `id`/`label`:
+
+| Field        | Type   | Notes                                                                                                   |
+| ------------ | ------ | ------------------------------------------------------------------------------------------------------- |
+| `name`       | string | The category string — the value a `category`-kind mute rule targets.                                    |
+| `byPriority` | object | Same shape/semantics as the module row's `byPriority`.                                                  |
+| `total`      | number | Sum of the buckets. `0` for a category present only because the caller has an existing mute rule on it. |
 
 ### Errors
 
@@ -619,10 +685,10 @@ for what a rule actually does.
 
 Path parameters:
 
-| Param    | Type                     | Required | Notes                                                                                                                                                                                                   |
-| -------- | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `kind`   | `'module' \| 'category'` | yes      | Any other value → `400`.                                                                                                                                                                                |
-| `target` | string (1–100 chars)     | yes      | For `module`, must be a real module id from the [catalog](#get-notificationsmodules) — an unknown id → `400`. For `category`, any non-empty string (categories are free-form; only shape is validated). |
+| Param    | Type                     | Required | Notes                                                                                                                                                                                                               |
+| -------- | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`   | `'module' \| 'category'` | yes      | Any other value → `400`.                                                                                                                                                                                            |
+| `target` | string (1–100 chars)     | yes      | For `module`, must be a real module id from the [module catalog](#get-notificationsmute-targets) — an unknown id → `400`. For `category`, any non-empty string (categories are free-form; only shape is validated). |
 
 Body ([`putMuteBodySchema`](../../packages/shared/src/preferences.ts)):
 
