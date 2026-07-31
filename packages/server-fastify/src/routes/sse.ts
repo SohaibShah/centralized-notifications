@@ -68,7 +68,15 @@ export function notificationSseRoute(
     // snoozed/muted module's snoozable notifications never reach the stream (non-snoozable ones always
     // pass — see `isSuppressed`). Loaded at connect and refreshed on the heartbeat, so a rule the user
     // changes elsewhere takes effect within one heartbeat; the feed read is authoritative immediately.
-    let muteRules: MuteRule[] = await service.listMuteRules({ principal });
+    let muteRules: MuteRule[] = [];
+    try {
+      muteRules = await service.listMuteRules({ principal });
+    } catch {
+      // Fail open (deliver everything) on a DB blip — the heartbeat refresh will correct within 25s.
+      // Guarded like the heartbeat path so a rejected read can't throw out of a hijacked socket
+      // before the cleanup/close handlers below are registered (which would leak the connection).
+      muteRules = [];
+    }
 
     const unsubscribe = service.delivery.subscribe({
       principal,

@@ -16,6 +16,10 @@ const muteParamsSchema = z.object({
   target: z.string().min(1).max(100),
 });
 
+/** Upper bound on distinct snooze/mute rules per user — well above any realistic module+category
+ *  count, but a hard stop against unbounded growth from a free-form category loop. */
+const MAX_MUTE_RULES = 200;
+
 /**
  * Per-user preferences + snooze/mute rules for the authenticated principal. Every read and write is
  * scoped to `req.principal.userKey` — a user can only ever see or change their own preferences. All
@@ -77,6 +81,15 @@ export function notificationPreferencesRoutes(
       if (kind === "module") {
         const known = (await service.listModules()).some((m) => m.id === target);
         if (!known) return reply.code(400).send({ error: "unknown module" });
+      }
+
+      // Bound the number of distinct rules a user can create (categories are free-form, so a buggy or
+      // hostile client loop could otherwise grow the table unboundedly). Re-muting an existing target
+      // is always allowed (it's an upsert, not growth).
+      const existing = await service.listMuteRules({ principal });
+      const isNewTarget = !existing.some((r) => r.targetKind === kind && r.target === target);
+      if (isNewTarget && existing.length >= MAX_MUTE_RULES) {
+        return reply.code(400).send({ error: "too many mute rules" });
       }
 
       await service.putMuteRule({ principal, targetKind: kind, target, until });

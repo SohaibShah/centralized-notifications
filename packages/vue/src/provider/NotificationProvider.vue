@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { provide, toRef } from "vue";
+import { onMounted, provide, toRef } from "vue";
 import { createCookieTransport } from "../transport/cookie-transport";
 import { connectSse as defaultConnectSse } from "../transport/sse";
 import { createFeedState } from "../state/feed";
@@ -45,6 +45,13 @@ const ctx: NotificationsContext = {
   baseUrl,
 };
 provide(NOTIFICATIONS_KEY, ctx);
+
+// Load per-user preferences up front (not just when the settings page opens) so the critical-toast
+// preference and grouping toggle are live everywhere — the toast viewport is mounted app-wide and
+// reads `preferences.prefs.toastMinPriority`. Best-effort; the store keeps its defaults on failure.
+onMounted(() => {
+  void preferences.load().catch(() => {});
+});
 </script>
 
 <template>
