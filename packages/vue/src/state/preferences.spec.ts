@@ -42,6 +42,32 @@ describe("preferences state", () => {
     expect(s.rules).toContainEqual({ targetKind: "module", target: "dsr", mutedUntil: null });
   });
 
+  it("fires onRulesChanged after a persisted setMute/clearMute, but not on failure", async () => {
+    const onRulesChanged = vi.fn();
+    const ok = createPreferencesState({
+      transport: fakeTransport({
+        post: vi.fn(async () => undefined),
+        del: vi.fn(async () => undefined),
+      }),
+      onRulesChanged,
+    });
+    await ok.setMute("module", "dsr", null);
+    expect(onRulesChanged).toHaveBeenCalledTimes(1); // after the POST resolved
+    await ok.clearMute("module", "dsr");
+    expect(onRulesChanged).toHaveBeenCalledTimes(2);
+
+    const failing = createPreferencesState({
+      transport: fakeTransport({
+        post: vi.fn(async () => {
+          throw new Error("nope");
+        }),
+      }),
+      onRulesChanged,
+    });
+    await expect(failing.setMute("module", "dsr", null)).rejects.toThrow("nope");
+    expect(onRulesChanged).toHaveBeenCalledTimes(2); // not called on a failed write
+  });
+
   it("clearMute deletes and removes the rule; rolls back on error", async () => {
     const del = vi.fn(async () => {
       throw new Error("boom");

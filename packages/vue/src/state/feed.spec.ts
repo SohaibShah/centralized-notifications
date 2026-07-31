@@ -390,6 +390,22 @@ describe("feed store", () => {
     expect(seen).toEqual([["x", "h"]]); // unsubscribed → no further calls
   });
 
+  it("reload clears merged/live items and shows only the server's current set", async () => {
+    const feed = makeFeed();
+    getMock.mockResolvedValue(page([feedItem({ id: "a" })])); // both load + reload return only 'a'
+    feed.connect();
+    await feed.load();
+    sseState.onBatch!([liveNotif({ id: "b" })]); // a live arrival merges in
+    expect(feed.items.map((n) => n.id)).toContain("b");
+
+    // The server no longer returns 'b' (e.g. its module was just muted). A plain load() would keep the
+    // already-merged 'b'; reload() clears first so it actually disappears.
+    await feed.reload();
+    const ids = feed.items.map((n) => n.id);
+    expect(ids).toEqual(["a"]);
+    expect(ids).not.toContain("b");
+  });
+
   const counts = (
     unread: number,
     by: Partial<Record<string, number>> = {},

@@ -17,8 +17,14 @@ const DEFAULTS: UserPreferences = {
  * Per-user preferences + snooze/mute rules for the settings page. Loaded once from
  * GET /notifications/preferences; every mutation is optimistic (the UI updates immediately) and rolls
  * back to the prior value if the server rejects, re-throwing so the caller can surface the error.
+ *
+ * `onRulesChanged` fires AFTER a mute/snooze write is persisted server-side (not on the optimistic
+ * update) — the provider wires it to refetch the feed so the change takes effect with no page reload.
  */
-export function createPreferencesState(deps: { transport: Transport }) {
+export function createPreferencesState(deps: {
+  transport: Transport;
+  onRulesChanged?: () => void;
+}) {
   const prefs = reactive<UserPreferences>({ ...DEFAULTS });
   const rules = ref<MuteRule[]>([]);
   const loaded = ref(false);
@@ -78,6 +84,7 @@ export function createPreferencesState(deps: { transport: Transport }) {
       rules.value = snapshot;
       throw err;
     }
+    deps.onRulesChanged?.(); // rule is now persisted — safe to refetch the feed against it
   }
 
   /** Remove a snooze/mute rule. Optimistic + rollback. */
@@ -90,6 +97,7 @@ export function createPreferencesState(deps: { transport: Transport }) {
       rules.value = snapshot;
       throw err;
     }
+    deps.onRulesChanged?.();
   }
 
   return reactive({ prefs, rules, loaded, load, updatePref, setMute, clearMute });

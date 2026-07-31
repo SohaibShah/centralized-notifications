@@ -24,7 +24,17 @@ const connectSse = props.config.connectSse ?? ((opts) => defaultConnectSse(baseU
 // Build the state once. Order: leaf state first, then the coordinators that depend on siblings.
 const toast = createToastState();
 const settings = createSettingsState({ transport });
-const preferences = createPreferencesState({ transport });
+// When a snooze/mute rule is persisted, reconnect the live stream (so its server-side rule snapshot
+// is current) and re-read the feed + counts — the change takes effect with no page reload. `feed` is
+// declared just below; the callback only runs on later user action, by which point it's initialized.
+const preferences = createPreferencesState({
+  transport,
+  onRulesChanged: () => {
+    // Hard-reload (not merge) so a just-muted module's items actually leave the feed; `reload` also
+    // refreshes the dataset-wide counts.
+    void feed.reload();
+  },
+});
 const summary = createSummaryState({ transport });
 const feed = createFeedState({ transport, connectSse });
 const chat = createChatState({ baseUrl });
@@ -49,6 +59,8 @@ provide(NOTIFICATIONS_KEY, ctx);
 // Load per-user preferences up front (not just when the settings page opens) so the critical-toast
 // preference and grouping toggle are live everywhere — the toast viewport is mounted app-wide and
 // reads `preferences.prefs.toastMinPriority`. Best-effort; the store keeps its defaults on failure.
+// (Live re-fetch on a mute/snooze change is handled by `onRulesChanged` above, which fires after the
+// write is persisted — not here.)
 onMounted(() => {
   void preferences.load().catch(() => {});
 });

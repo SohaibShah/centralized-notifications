@@ -173,6 +173,19 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     }
   }
 
+  /**
+   * Hard-refresh the loaded feed from scratch, preserving the current sort + filters. Unlike `load()`
+   * (which merges), this clears the already-loaded items first, so notifications the server now
+   * filters out — e.g. a module the user just snoozed/muted — actually disappear. Used when the user's
+   * snooze/mute rules change (see the provider's `onRulesChanged`).
+   */
+  async function reload(): Promise<void> {
+    seen.clear();
+    items.value = [];
+    nextCursor.value = null;
+    await load();
+  }
+
   /** Fetch the next (older) keyset page. No-op while one is in flight or at the end. */
   async function loadMore(): Promise<void> {
     if (loadingMore.value || !nextCursor.value) return;
@@ -459,6 +472,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     groups,
     // actions
     load,
+    reload,
     loadMore,
     setSort,
     fetchCounts,
