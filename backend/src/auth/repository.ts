@@ -14,6 +14,8 @@ export interface SessionUser {
   displayName: string;
   roles: string[];
   teamIds: string[];
+  /** The user's IANA timezone (used by the summary scheduler + the settings page). */
+  timezone: string;
 }
 
 export async function getUserByUsername(username: string): Promise<UserRow | null> {
@@ -25,10 +27,12 @@ export async function getUserByUsername(username: string): Promise<UserRow | nul
 }
 
 export async function getUserWithRolesTeams(id: string): Promise<SessionUser | null> {
-  const { rows } = await query<{ id: string; username: string; display_name: string }>(
-    "SELECT id, username, display_name FROM users WHERE id = $1",
-    [id],
-  );
+  const { rows } = await query<{
+    id: string;
+    username: string;
+    display_name: string;
+    timezone: string;
+  }>("SELECT id, username, display_name, timezone FROM users WHERE id = $1", [id]);
   const user = rows[0];
   if (!user) return null;
 
@@ -47,5 +51,6 @@ export async function getUserWithRolesTeams(id: string): Promise<SessionUser | n
     displayName: user.display_name,
     roles: roles.rows.map((r) => r.role_key),
     teamIds: teams.rows.map((t) => t.team_key),
+    timezone: user.timezone,
   };
 }

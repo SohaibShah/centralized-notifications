@@ -40,6 +40,16 @@ afterAll(async () => {
 
 const asUser = (u: string) => ({ "x-test-user": u });
 
+test("GET /notifications/modules returns the id+label catalog for any user", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications/modules",
+    headers: asUser(user()),
+  });
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toContainEqual({ id: "dsr", label: "DSR" });
+});
+
 test("GET returns defaults and an empty rule list for a fresh user", async () => {
   const res = await app.inject({
     method: "GET",

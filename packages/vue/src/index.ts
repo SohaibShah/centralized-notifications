@@ -40,3 +40,6 @@ export type { Transport, SseClient, SseFactory, SseStatus } from "./transport/ty
 export { ApiError, createCookieTransport } from "./transport/cookie-transport";
 export { connectSse } from "./transport/sse";
 export type { FormSchema, FormField, FormValues } from "./forms/types";
+export { preferencesForm } from "./forms/preferences.form";
+export { resolveSnoozeUntil, SNOOZE_OPTIONS, muteStatusLabel } from "./preferences/snooze";
+export type { SnoozeOption } from "./preferences/snooze";

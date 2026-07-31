@@ -22,7 +22,7 @@ export const router = createRouter({
         {
           path: "settings",
           name: "settings",
-          component: () => import("@/features/settings/SettingsStub.vue"),
+          component: () => import("@/features/settings/SettingsView.vue"),
         },
         {
           path: "admin",

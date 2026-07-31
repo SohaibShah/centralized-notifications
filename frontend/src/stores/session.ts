@@ -11,6 +11,8 @@ export interface SessionUser {
   displayName?: string;
   roles: string[];
   teamIds: string[];
+  /** The user's IANA timezone (seeds the settings page's timezone control). */
+  timezone?: string;
 }
 
 export const useSessionStore = defineStore("session", () => {
