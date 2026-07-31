@@ -34,6 +34,10 @@ const notif = (
 });
 
 beforeAll(async () => {
+  // Sibling files seed GLOBAL-scoped notifications (visible to every principal) into this shared core
+  // test DB — some from module 'dsr', which this test mutes. They'd be hidden by the mute too and
+  // throw off the exact count delta. Clear them so this user's visible set is exactly its own 3 items.
+  await query("DELETE FROM notifications WHERE audience_scope = 'global'");
   await persist(query, notif(snoozableId, true, "normal"), false);
   await persist(query, notif(criticalId, false, "critical"), false);
   await persist(query, notif(snoozableCriticalId, true, "critical"), false); // snoozable + critical
