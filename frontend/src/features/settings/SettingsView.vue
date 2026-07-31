@@ -146,8 +146,9 @@ const preferencesInitial = computed<FormValues>(() => ({
           Snooze &amp; mute
         </p>
         <p class="mb-4 mt-1 text-[12px] leading-relaxed text-muted">
-          Snoozed or muted modules and categories are hidden from your feed, toasts, and summary —
-          every priority, until the snooze ends or you un-mute.
+          Snoozing or muting hides a module or category from your feed, toasts, and summary — any
+          priority — until the snooze ends or you un-mute. Notifications a module marks as
+          non-snoozable always come through.
         </p>
         <MuteRulesEditor
           :modules="muteTargets.modules"

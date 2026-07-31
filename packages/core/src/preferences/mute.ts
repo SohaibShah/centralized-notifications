@@ -3,13 +3,12 @@ import type { MuteRule } from "@notifications/shared";
 /**
  * The snooze/mute read filter, in two lockstep forms — the exact twin pattern of `audienceWhere` /
  * `matchAudience`. A rule is ACTIVE when `muted_until IS NULL` (muted indefinitely) OR it is a future
- * timestamp (snoozed, not yet expired). A notification is hidden from a user when an active rule of
- * theirs matches its module or category — **regardless of priority or the `snoozable` flag**. The
- * user's mute/snooze is authoritative: muting a module means "hide everything from it right now,"
- * including high- and critical-priority items and ones a publisher marked non-snoozable. (`snoozable`
- * is reserved for a future per-notification snooze; it does not gate this module/category mute.)
- * Keeping the SQL and the in-memory check identical is what makes "what your feed shows" == "what the
- * live stream delivers".
+ * timestamp (snoozed, not yet expired). A notification is hidden from a user when it is **`snoozable:
+ * true`** AND an active rule of theirs matches its module or category. The **`snoozable` flag is the
+ * only gate** — a notification of any priority (including `critical`) can be snoozed/muted when its
+ * publisher marked it snoozable; a `snoozable: false` notification is never affected by snooze/mute
+ * and always comes through, whatever its priority. Keeping the SQL and the in-memory check identical
+ * is what makes "what your feed shows" == "what the live stream delivers".
  */
 
 /**
@@ -20,20 +19,22 @@ import type { MuteRule } from "@notifications/shared";
 export function muteWhere(userKey: string, params: unknown[]): string {
   params.push(userKey);
   const u = params.length;
-  return `NOT EXISTS (
+  return `( n.snoozable = false
+         OR NOT EXISTS (
               SELECT 1 FROM user_mute_rules mr
                WHERE mr.user_key = $${u}::text
                  AND (mr.muted_until IS NULL OR mr.muted_until > now())
                  AND ( (mr.target_kind = 'module'   AND mr.target = n.module)
-                    OR (mr.target_kind = 'category' AND mr.target = n.category) ) )`;
+                    OR (mr.target_kind = 'category' AND mr.target = n.category) ) ) )`;
 }
 
 /** In-memory twin used by the delivery hub / SSE, where the DB is not on the hot path. */
 export function isSuppressed(
   rules: MuteRule[],
-  n: { module: string; category?: string | null },
+  n: { snoozable: boolean; module: string; category?: string | null },
   now: Date,
 ): boolean {
+  if (!n.snoozable) return false; // only snoozable notifications are ever affected by a rule
   return rules.some((r) => {
     const active = r.mutedUntil === null || new Date(r.mutedUntil) > now;
     if (!active) return false;

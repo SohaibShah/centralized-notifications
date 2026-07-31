@@ -93,9 +93,8 @@ test("a subscribed principal receives a matching global notification as an SSE f
   controller.abort();
 });
 
-test("a muted target's notifications are not streamed, regardless of priority/snoozable", async () => {
+test("a muted category suppresses snoozable notifs from the stream, but a non-snoozable one passes", async () => {
   // Mute the 'noisy' CATEGORY for this user BEFORE connecting, so the rule is loaded at connect time.
-  // (A category mute lets us prove suppression + liveness with the single test module.)
   const principal = { userKey: "mutestreamer", roles: [], teamKeys: [] } as const;
   await svc.putMuteRule({ principal, targetKind: "category", target: "noisy", until: null });
 
@@ -108,8 +107,8 @@ test("a muted target's notifications are not streamed, regardless of priority/sn
   await readUntil(reader, (b) => b.includes(": connected"));
 
   const suffix = Date.now();
-  const mutedCritId = `sse-muted-crit-${suffix}`; // muted category + critical + non-snoozable
-  const passId = `sse-pass-${suffix}`; // different category → streams (proves the stream is live)
+  const mutedId = `sse-muted-${suffix}`; // muted category + snoozable → suppressed (even as critical)
+  const passId = `sse-pass-${suffix}`; // muted category BUT non-snoozable → always through
   const base = {
     module: "dsr",
     title: "t",
@@ -118,18 +117,24 @@ test("a muted target's notifications are not streamed, regardless of priority/sn
   } as const;
   await svc.ingest({
     ...base,
-    id: mutedCritId,
+    id: mutedId,
     priority: "critical",
+    snoozable: true,
+    category: "noisy",
+  });
+  await svc.ingest({
+    ...base,
+    id: passId,
+    priority: "normal",
     snoozable: false,
     category: "noisy",
   });
-  await svc.ingest({ ...base, id: passId, priority: "high", snoozable: true, category: "other" });
 
-  // The unmuted-category one arrives; by then the muted (even though critical + non-snoozable) one
-  // has already been filtered out of the stream.
+  // The non-snoozable one arrives; by then the snoozable (even though critical) one has already been
+  // filtered out of the stream by the category mute.
   const stream = await readUntil(reader, (b) => b.includes(passId));
   expect(stream).toContain(passId);
-  expect(stream).not.toContain(mutedCritId);
+  expect(stream).not.toContain(mutedId);
 
   controller.abort();
 });

@@ -56,17 +56,17 @@ test("with no rules all notifications are visible", async () => {
   expect(ids).toContain(snoozableCriticalId);
 });
 
-test("muting the module hides ALL its notifications — every priority + snoozable flag", async () => {
+test("muting the module hides its SNOOZABLE notifs (any priority) but not the non-snoozable one", async () => {
   const before = await counts(query, { principal: user });
   await store.putRule(user.userKey, "module", "dsr", null); // mute indefinitely
 
   const ids = await feedIds();
   expect(ids).not.toContain(snoozableId); // snoozable normal → hidden
-  expect(ids).not.toContain(criticalId); // non-snoozable critical → hidden (user's mute wins)
-  expect(ids).not.toContain(snoozableCriticalId); // snoozable critical → hidden
+  expect(ids).not.toContain(snoozableCriticalId); // snoozable critical → hidden (priority not a gate)
+  expect(ids).toContain(criticalId); // non-snoozable critical → always through
 
   const after = await counts(query, { principal: user });
-  expect(after.unread).toBe(before.unread - 3); // all three dropped from the count
+  expect(after.unread).toBe(before.unread - 2); // the two snoozable ones dropped; the critical stays
 });
 
 test("an expired snooze reveals the notification again", async () => {
