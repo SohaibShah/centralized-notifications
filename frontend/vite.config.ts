@@ -23,6 +23,7 @@ export default defineConfig({
       // reload of those pages must serve index.html, not hit the backend).
       "/admin/": backend,
       "/settings/": backend,
+      "/me/": backend, // self-service profile endpoints (e.g. PATCH /me/timezone)
       "/internal": backend,
       "/health": backend,
       // SSE: disable buffering so events stream through as they arrive.

@@ -37,9 +37,11 @@ const timezoneForm = computed<FormSchema>(() => ({
     {
       name: "timezone",
       label: "Timezone",
-      type: "select",
+      type: "text",
       group: "Profile",
+      placeholder: "e.g. America/New_York",
       hint: "Sets when your daily summary generates and what 'tomorrow morning' means for snoozes.",
+      // Datalist suggestions; the server validates the final value against the IANA zone list.
       options: supportedTimeZones().map((z) => ({ value: z, label: z })),
     },
   ],
