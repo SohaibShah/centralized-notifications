@@ -15,14 +15,21 @@ export function notificationSummaryRoute(
 ): void {
   const { service, requirePrincipal } = deps;
 
+  // An opted-out user's summary is suppressed everywhere: the panel shows an "off" state instead of
+  // the digest + reload button. Reported as `optedOut` alongside the (empty) stored shape.
+  const EMPTY = { summary: null, basedOn: 0, generatedAt: null };
+
   app.get("/notifications/summary", { preHandler: requirePrincipal }, async (req, reply) => {
     const principal = req.principal;
     if (!principal) return reply.code(401).send({ error: "authentication required" });
+    if ((await service.getPreferences({ principal })).summaryOptOut) {
+      return reply.code(200).send({ optedOut: true, ...EMPTY });
+    }
     // A plain read of the persisted summary — it never calls the AI provider, so there is no
     // provider/disabled error to map here. Feature gating (aiSummaryEnabled) is the consumer's
     // concern (the panel hides the whole section); the stored read stays contract-simple.
     const stored = await service.getStoredSummary({ principal });
-    return reply.code(200).send(stored ?? { summary: null, basedOn: 0, generatedAt: null });
+    return reply.code(200).send({ optedOut: false, ...(stored ?? EMPTY) });
   });
 
   app.post(
@@ -40,8 +47,13 @@ export function notificationSummaryRoute(
     async (req, reply) => {
       const principal = req.principal;
       if (!principal) return reply.code(401).send({ error: "authentication required" });
+      if ((await service.getPreferences({ principal })).summaryOptOut) {
+        return reply.code(200).send({ optedOut: true, ...EMPTY });
+      }
       try {
-        return reply.code(200).send(await service.refreshSummary({ principal }));
+        return reply
+          .code(200)
+          .send({ optedOut: false, ...(await service.refreshSummary({ principal })) });
       } catch (err) {
         if (err instanceof AiDisabledError)
           return reply.code(404).send({ error: "ai summary disabled" });
