@@ -7,6 +7,7 @@ export { default as NotificationBell } from "./components/NotificationBell.vue";
 export { default as NotificationPanel } from "./components/NotificationPopover.vue";
 export { default as CriticalToastViewport } from "./components/CriticalToastViewport.vue";
 export { default as NotificationAdmin } from "./admin/NotificationAdmin.vue";
+export { default as MuteRulesEditor } from "./components/preferences/MuteRulesEditor.vue";
 
 // Reusable primitives the host may need (the reference LoginView renders FormRenderer)
 export { default as FormRenderer } from "./forms/FormRenderer.vue";
