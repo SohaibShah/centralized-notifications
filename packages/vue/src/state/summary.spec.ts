@@ -7,31 +7,49 @@ const fakeTransport = (over: Partial<Record<keyof Transport, unknown>> = {}): Tr
   ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), del: vi.fn(), ...over }) as Transport;
 
 describe("summary state", () => {
-  it("fetches once and becomes ready", async () => {
-    const get = vi.fn(async () => ({ summary: "S", basedOn: 2 }));
+  it("fetchStored → empty when the server has no summary yet", async () => {
+    const get = vi.fn(async () => ({ summary: null, basedOn: 0, generatedAt: null }));
     const s = createSummaryState({ transport: fakeTransport({ get }) });
-    await s.fetchSummary();
+    await s.fetchStored();
     expect(get).toHaveBeenCalledWith("/notifications/summary");
-    expect(s.status).toBe("ready");
-    expect(s.text).toBe("S");
+    expect(s.status).toBe("empty");
   });
 
-  it("does not refetch when already ready, unless forced", async () => {
-    const get = vi.fn(async () => ({ summary: "S", basedOn: 1 }));
+  it("fetchStored → ready with summary + timestamp", async () => {
+    const get = vi.fn(async () => ({
+      summary: "digest",
+      basedOn: 3,
+      generatedAt: "2026-07-31T08:00:00.000Z",
+    }));
     const s = createSummaryState({ transport: fakeTransport({ get }) });
-    await s.fetchSummary();
-    await s.fetchSummary(); // not forced → no-op
-    expect(get).toHaveBeenCalledTimes(1);
-    await s.fetchSummary(true); // forced
-    expect(get).toHaveBeenCalledTimes(2);
+    await s.fetchStored();
+    expect(s.status).toBe("ready");
+    expect(s.summary).toBe("digest");
+    expect(s.basedOn).toBe(3);
+    expect(s.generatedAt).toBe("2026-07-31T08:00:00.000Z");
   });
 
-  it("surfaces an ApiError message on failure", async () => {
+  it("refresh POSTs and updates the summary + timestamp", async () => {
+    const post = vi.fn(async () => ({
+      summary: "fresh",
+      basedOn: 5,
+      generatedAt: "2026-07-31T09:00:00.000Z",
+    }));
+    const s = createSummaryState({ transport: fakeTransport({ post }) });
+    await s.refresh();
+    expect(post).toHaveBeenCalledWith("/notifications/summary/refresh", {});
+    expect(s.status).toBe("ready");
+    expect(s.summary).toBe("fresh");
+    expect(s.generatedAt).toBe("2026-07-31T09:00:00.000Z");
+    expect(s.refreshing).toBe(false);
+  });
+
+  it("surfaces an ApiError message on a failed fetch", async () => {
     const get = vi.fn(async () => {
       throw new ApiError(502, "summary unavailable");
     });
     const s = createSummaryState({ transport: fakeTransport({ get }) });
-    await s.fetchSummary();
+    await s.fetchStored();
     expect(s.status).toBe("error");
     expect(s.error).toBe("summary unavailable");
   });

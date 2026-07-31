@@ -23,6 +23,7 @@ const SHARED_TABLES = [
   "modules",
   "global_settings",
   "action_dispatches",
+  "user_summaries",
 ];
 
 let libPool: pg.Pool;

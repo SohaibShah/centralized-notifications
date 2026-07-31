@@ -19,6 +19,10 @@ const settingsPatchSchema = z
     groupingEnabled: z.boolean().optional(),
     actionsEnabled: z.boolean().optional(),
     retentionDays: z.number().int().positive().optional(),
+    summaryTime: z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "summaryTime must be 'HH:MM' 24-hour")
+      .optional(),
   })
   .refine((b) => Object.keys(b).length > 0, "no fields to update");
 
@@ -82,10 +86,10 @@ export function notificationAdminRoutes(
   });
 
   app.get("/settings/features", { preHandler: requirePrincipal }, async (_req, reply) => {
-    const { aiSummaryEnabled, chatbotEnabled, groupingEnabled, actionsEnabled } =
+    const { aiSummaryEnabled, chatbotEnabled, groupingEnabled, actionsEnabled, summaryTime } =
       await service.getSettings();
     return reply
       .code(200)
-      .send({ aiSummaryEnabled, chatbotEnabled, groupingEnabled, actionsEnabled });
+      .send({ aiSummaryEnabled, chatbotEnabled, groupingEnabled, actionsEnabled, summaryTime });
   });
 }

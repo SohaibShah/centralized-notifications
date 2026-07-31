@@ -5,19 +5,20 @@ import { buildTestContext, mountWithProvider } from "../../test/provider-harness
 import type { NotificationsContext } from "../../provider/context";
 
 // The AI-summary slice is overridden with a fake so the disclosure's states are directly
-// controllable and no real fetch happens. Set `summaryState.*` before mounting; `fetchSummary`
-// is a spy. `reset` is present so the fake matches the slice shape.
+// controllable and no real fetch happens. Set `summaryState.*` before mounting; `fetchStored` and
+// `refresh` are spies.
 const summaryState = {
-  status: "idle" as "idle" | "loading" | "ready" | "error",
-  text: "",
+  status: "idle" as "idle" | "loading" | "ready" | "empty" | "error",
+  summary: "",
+  basedOn: 0,
+  generatedAt: null as string | null,
+  refreshing: false,
   error: null as string | null,
-  fetchSummary: vi.fn(),
-  reset: vi.fn(),
+  fetchStored: vi.fn(),
+  refresh: vi.fn(),
 };
 
-/** A context using the real feed/settings/actions slices, with summary faked. The stub transport's
- *  `post` is a vi.fn — markRead (fired by onAction) now goes through the transport, so it's the spy
- *  the read assertions check (replacing the old `@/api/client` mock). */
+/** A context using the real feed/settings/actions slices, with summary faked. */
 function makeCtx(): NotificationsContext {
   return buildTestContext({ summary: summaryState as unknown as NotificationsContext["summary"] });
 }
@@ -25,9 +26,13 @@ function makeCtx(): NotificationsContext {
 describe("InboxTab", () => {
   beforeEach(() => {
     summaryState.status = "idle";
-    summaryState.text = "";
+    summaryState.summary = "";
+    summaryState.basedOn = 0;
+    summaryState.generatedAt = null;
+    summaryState.refreshing = false;
     summaryState.error = null;
-    summaryState.fetchSummary.mockClear();
+    summaryState.fetchStored.mockClear();
+    summaryState.refresh.mockClear();
   });
 
   it("hides the AI-summary band when the ai_summary feature flag is off", () => {
@@ -108,8 +113,6 @@ describe("InboxTab", () => {
     const btn = wrapper.findAll("button").find((b) => b.text().trim() === "Approve");
     await btn!.trigger("click");
     expect(openSpy).not.toHaveBeenCalled();
-    // The emitted action index (0, its position in this notification's own actions array) is what
-    // keys the dispatch round-trip — NOT a hardcoded "/read" path.
     expect(ctx.transport.post).toHaveBeenCalledWith(
       "/notifications/a/actions/0/dispatch",
       expect.objectContaining({ idempotencyKey: expect.any(String) }),
@@ -160,68 +163,71 @@ describe("InboxTab", () => {
     expect(wrapper.get('[data-test="chip-count-high"]').text()).toBe("3");
   });
 
-  it("fetches the summary on open, and REFETCHES (force) on every reopen so it can't go stale", async () => {
+  it("fetches the STORED summary once on first open (does not regenerate)", async () => {
     const wrapper = mountWithProvider(InboxTab, { context: makeCtx() });
     const btn = wrapper.find('button[aria-controls="ai-summary-detail"]');
     expect(wrapper.find("#ai-summary-detail").exists()).toBe(false); // collapsed
-
     await btn.trigger("click"); // open
     expect(wrapper.find("#ai-summary-detail").exists()).toBe(true);
-    expect(summaryState.fetchSummary).toHaveBeenCalledTimes(1);
-    expect(summaryState.fetchSummary).toHaveBeenLastCalledWith(true); // force → reflects current set
+    expect(summaryState.fetchStored).toHaveBeenCalledTimes(1);
     expect(wrapper.get('[data-test="ai-glow"]').classes()).toContain("is-blooming");
-
-    await btn.trigger("click"); // close
-    await btn.trigger("click"); // reopen → refetch
-    expect(summaryState.fetchSummary).toHaveBeenCalledTimes(2);
   });
 
-  it("refreshes the open summary (debounced) when the unread set changes", async () => {
-    vi.useFakeTimers();
-    try {
-      const ctx = makeCtx();
-      const feed = ctx.feed;
-      const wrapper = mountWithProvider(InboxTab, { context: ctx });
-      await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click"); // open (1 call)
-      summaryState.fetchSummary.mockClear();
-
-      feed.counts = { unread: 25, unreadByPriority: { critical: 0, high: 25, normal: 0, low: 0 } };
-      await vi.advanceTimersByTimeAsync(1000); // debounce window
-      expect(summaryState.fetchSummary).toHaveBeenCalledWith(true);
-    } finally {
-      vi.useRealTimers();
-    }
-  });
-
-  it("does NOT drop the 'Sample' badge — it's real now (label only)", () => {
-    const wrapper = mountWithProvider(InboxTab, { context: makeCtx() });
-    expect(wrapper.text()).not.toContain("Sample");
-  });
-
-  it("shows a loading shimmer while the summary is loading", async () => {
+  it("shows a loading state while the summary is loading", async () => {
     summaryState.status = "loading";
     const wrapper = mountWithProvider(InboxTab, { context: makeCtx() });
     await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
     expect(wrapper.find('[data-test="ai-summary-loading"]').exists()).toBe(true);
   });
 
-  it("renders the summary text when ready", async () => {
+  it("renders the summary text + timestamp + reload when ready", async () => {
     summaryState.status = "ready";
-    summaryState.text = "Two items need action; start with the overdue DSAR.";
+    summaryState.summary = "Two items need action; start with the overdue DSAR.";
+    summaryState.basedOn = 2;
+    summaryState.generatedAt = "2026-07-31T08:00:00.000Z";
     const wrapper = mountWithProvider(InboxTab, { context: makeCtx() });
     await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
-    expect(wrapper.get('[data-test="ai-summary-text"]').text()).toContain(
-      "start with the overdue DSAR",
-    );
+    expect(wrapper.get('[data-test="ai-summary-text"]').text()).toContain("overdue DSAR");
+    expect(wrapper.find('[data-test="ai-summary-timestamp"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="ai-summary-reload"]').exists()).toBe(true);
   });
 
-  it("shows an error with a Retry that re-fetches", async () => {
+  it("shows a caught-up state (with timestamp) when basedOn is 0", async () => {
+    summaryState.status = "ready";
+    summaryState.basedOn = 0;
+    summaryState.generatedAt = "2026-07-31T08:00:00.000Z";
+    const wrapper = mountWithProvider(InboxTab, { context: makeCtx() });
+    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
+    expect(wrapper.find('[data-test="ai-summary-caughtup"]').exists()).toBe(true);
+    expect(wrapper.find('[data-test="ai-summary-timestamp"]').exists()).toBe(true);
+  });
+
+  it("shows the empty state with the configured schedule time", async () => {
+    summaryState.status = "empty";
+    const ctx = makeCtx();
+    ctx.settings.summaryTime = "08:00";
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
+    expect(wrapper.get('[data-test="ai-summary-empty"]').text()).toContain("08:00");
+  });
+
+  it("reload button calls summary.refresh", async () => {
+    summaryState.status = "ready";
+    summaryState.summary = "digest";
+    summaryState.basedOn = 2;
+    summaryState.generatedAt = "2026-07-31T08:00:00.000Z";
+    const wrapper = mountWithProvider(InboxTab, { context: makeCtx() });
+    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
+    await wrapper.get('[data-test="ai-summary-reload"]').trigger("click");
+    expect(summaryState.refresh).toHaveBeenCalled();
+  });
+
+  it("shows an error with a Retry that calls refresh", async () => {
     summaryState.status = "error";
     summaryState.error = "summary unavailable";
     const wrapper = mountWithProvider(InboxTab, { context: makeCtx() });
     await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
-    const retry = wrapper.get('[data-test="ai-summary-retry"]');
-    await retry.trigger("click");
-    expect(summaryState.fetchSummary).toHaveBeenCalledWith(true);
+    await wrapper.get('[data-test="ai-summary-retry"]').trigger("click");
+    expect(summaryState.refresh).toHaveBeenCalled();
   });
 });

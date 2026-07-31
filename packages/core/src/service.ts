@@ -9,6 +9,7 @@ import { counts } from "./read/counts";
 import { list } from "./read/feed";
 import { markRead, markReadBulk, markUnread } from "./read/read-state";
 import { SummaryEngine } from "./ai/summarize";
+import { createSummaryStore } from "./ai/summary-store";
 import { AnswerEngine, type AnswerChunk, type ChatTurn } from "./ai/answer";
 import { dispatchAction } from "./action/dispatch";
 import type {
@@ -17,6 +18,7 @@ import type {
   NotificationServiceConfig,
   Principal,
   Settings,
+  StoredSummary,
 } from "./types";
 
 /** `list` was given a cursor that doesn't decode or was issued for a different sort. */
@@ -74,6 +76,13 @@ export interface NotificationService {
    *  off), AiNotConfiguredError (no provider), AiRateLimitError, or AiProviderError. */
   summarize(args: { principal: Principal }): Promise<{ summary: string; basedOn: number }>;
 
+  /** Read the caller's persisted summary (scheduled or last manual refresh). Null = none yet. */
+  getStoredSummary(args: { principal: Principal }): Promise<StoredSummary | null>;
+
+  /** Generate the caller's summary now, persist it with a fresh generatedAt, and return it. Same
+   *  gating/rate-limit as `summarize`. Nothing unread → a based_on:0 marker, no provider call. */
+  refreshSummary(args: { principal: Principal }): Promise<StoredSummary>;
+
   /** Streaming Q/A grounded in the caller's audience-scoped notifications (read+unread). The async
    *  generator gates on its first `.next()`: throws AiDisabledError (chat off), AiNotConfiguredError
    *  (no streaming provider), AiRateLimitError; then yields a `sources` chunk followed by `delta`
@@ -114,6 +123,7 @@ export function createNotificationService(opts: {
     getSettings: () => policy.getSettings(),
     provider: opts.config.ai?.provider,
   });
+  const summaryStore = createSummaryStore(query);
 
   return {
     delivery: hub,
@@ -140,6 +150,17 @@ export function createNotificationService(opts: {
     getSettings: () => policy.getSettings(),
     updateSettings: (patch) => policy.updateSettings(patch),
     summarize: (args) => summaryEngine.summarize(args.principal),
+    getStoredSummary: (args) => summaryStore.get(args.principal.userKey),
+    refreshSummary: async (args) => {
+      const r = await summaryEngine.summarize(args.principal); // reuses gating + rate-limit + caught-up
+      const generatedAt = new Date().toISOString();
+      await summaryStore.upsert(args.principal.userKey, {
+        summary: r.summary,
+        basedOn: r.basedOn,
+        generatedAt,
+      });
+      return { summary: r.summary, basedOn: r.basedOn, generatedAt };
+    },
     answer: (args) => answerEngine.answer(args),
   };
 }

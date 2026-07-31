@@ -202,23 +202,24 @@ None — read-only.
 
 **Auth:** required, admin only ([`requireAdmin`](../../backend/src/auth/guards.ts) — `401`/`403` as above).
 
-Updates one or more of the global feature flags.
+Updates one or more of the global feature flags (and the AI-summary generation time).
 
 ### Request
 
-Body — any subset of the four boolean flags; at least one is required:
+Body — any subset of the fields below; at least one is required:
 
-| Field              | Type    | Required | Notes |
-| ------------------ | ------- | -------- | ----- |
-| `aiSummaryEnabled` | boolean | no*      |       |
-| `chatbotEnabled`   | boolean | no*      |       |
-| `groupingEnabled`  | boolean | no*      |       |
-| `actionsEnabled`   | boolean | no*      |       |
+| Field              | Type    | Required | Notes                                                                                                                       |
+| ------------------ | ------- | -------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `aiSummaryEnabled` | boolean | no*      |                                                                                                                             |
+| `chatbotEnabled`   | boolean | no*      |                                                                                                                             |
+| `groupingEnabled`  | boolean | no*      |                                                                                                                             |
+| `actionsEnabled`   | boolean | no*      |                                                                                                                             |
+| `summaryTime`      | string  | no*      | Daily AI-summary generation time-of-day, applied in **each user's own timezone**. `'HH:MM'` 24-hour, validated by `^([01]\d | 2[0-3]):[0-5]\d$`— a malformed value →`400`. |
 
 \* An empty body (no fields present) is rejected as `400`.
 
 ```json
-{ "aiSummaryEnabled": false }
+{ "aiSummaryEnabled": false, "summaryTime": "06:00" }
 ```
 
 ### Response `204`
@@ -259,11 +260,12 @@ No parameters.
   "aiSummaryEnabled": true,
   "chatbotEnabled": true,
   "groupingEnabled": true,
-  "actionsEnabled": true
+  "actionsEnabled": true,
+  "summaryTime": "06:00"
 }
 ```
 
-See the field table under [`GET /admin/settings`](#get-adminsettings) — identical shape.
+See the field table under [`GET /admin/settings`](#get-adminsettings) — the four flags share that shape; `summaryTime` is the `'HH:MM'` daily AI-summary generation time (applied in each user's own timezone).
 
 ### Errors
 

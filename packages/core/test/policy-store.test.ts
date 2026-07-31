@@ -10,7 +10,9 @@ const store = new PolicyStore({ query, catalog: [{ id: "dsr", label: "DSR" }] })
 beforeAll(() => store.reconcile());
 afterAll(async () => {
   // Restore the shared settings singleton so other test files see defaults.
-  await query("UPDATE global_settings SET ai_summary_enabled = true WHERE id = true");
+  await query(
+    "UPDATE global_settings SET ai_summary_enabled = true, summary_time = '08:00' WHERE id = true",
+  );
   await pool.end();
 });
 
@@ -37,6 +39,12 @@ test("settings default true; updateSettings persists and invalidates", async () 
   expect((await store.getSettings()).aiSummaryEnabled).toBe(true);
   await store.updateSettings({ aiSummaryEnabled: false });
   expect((await store.getSettings()).aiSummaryEnabled).toBe(false);
+});
+
+test("summaryTime defaults to '08:00' and round-trips an update", async () => {
+  expect((await store.getSettings()).summaryTime).toBe("08:00");
+  await store.updateSettings({ summaryTime: "06:30" });
+  expect((await store.getSettings()).summaryTime).toBe("06:30");
 });
 
 test("listModules exposes base_url and setModuleBaseUrl updates it", async () => {

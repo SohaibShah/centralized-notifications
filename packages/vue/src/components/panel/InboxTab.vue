@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onUnmounted, ref, watch } from "vue";
-import { ChevronDown, Inbox, SearchX, Sparkles, WifiOff } from "@lucide/vue";
+import { computed, ref } from "vue";
+import { ChevronDown, Inbox, RotateCw, SearchX, Sparkles, WifiOff } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Button from "../../ui/Button.vue";
 import Chip from "../../ui/Chip.vue";
@@ -11,6 +11,7 @@ import { useFeed } from "../../provider/context";
 import { useSettings } from "../../provider/context";
 import { useSummary } from "../../provider/context";
 import { useActions } from "../../provider/context";
+import { relativeTime, exactTime } from "../../lib/time";
 import FeedList from "../components/FeedList.vue";
 
 const feed = useFeed();
@@ -26,23 +27,10 @@ const bloomCount = ref(0);
 function toggleSummary(): void {
   aiOpen.value = !aiOpen.value;
   bloomCount.value++;
-  // Refetch fresh on every open so the digest reflects the CURRENT unread set (the server's
-  // signature cache returns instantly when nothing changed, so this is cheap).
-  if (aiOpen.value) void summary.fetchSummary(true);
+  // Open shows the STORED summary (pre-generated on schedule) — fetch it once, don't regenerate.
+  // Regeneration only happens on the daily job or an explicit reload.
+  if (aiOpen.value && summary.status === "idle") void summary.fetchStored();
 }
-
-// While the disclosure is open, keep it fresh as the unread set changes (new arrivals, reads).
-// Debounced so a burst of changes collapses into one refresh and can't spam the model.
-let refreshTimer: ReturnType<typeof setTimeout> | undefined;
-watch(
-  () => feed.counts.unread,
-  () => {
-    if (!aiOpen.value) return;
-    clearTimeout(refreshTimer);
-    refreshTimer = setTimeout(() => void summary.fetchSummary(true), 1000);
-  },
-);
-onUnmounted(() => clearTimeout(refreshTimer));
 
 // Empty vs filtered-empty are different states with different remedies.
 const isEmpty = computed(() => feed.status === "ready" && feed.items.length === 0);
@@ -108,16 +96,60 @@ async function onAction(
           class="flex items-center gap-1.5 text-ai motion-safe:animate-pulse"
         >
           <Icon :icon="Sparkles" :size="13" />
-          <span class="font-medium">Summarizing your inbox…</span>
+          <span class="font-medium">Loading your summary…</span>
         </div>
-        <p v-else-if="summary.status === 'ready'" data-test="ai-summary-text">{{ summary.text }}</p>
+
+        <div v-else-if="summary.status === 'ready'" class="flex flex-col gap-1.5">
+          <p v-if="summary.basedOn > 0" data-test="ai-summary-text">{{ summary.summary }}</p>
+          <p v-else data-test="ai-summary-caughtup" class="text-muted">You're all caught up.</p>
+          <div class="flex items-center gap-2 text-[11px] text-faint">
+            <time
+              v-if="summary.generatedAt"
+              data-test="ai-summary-timestamp"
+              :datetime="summary.generatedAt"
+              :title="exactTime(summary.generatedAt)"
+              class="font-mono tabular-nums"
+            >
+              Generated {{ relativeTime(summary.generatedAt) }}
+            </time>
+            <button
+              type="button"
+              data-test="ai-summary-reload"
+              class="ml-auto inline-flex items-center gap-1 rounded px-1.5 py-0.5 font-medium text-ai transition-colors hover:bg-sunken disabled:opacity-50"
+              :disabled="summary.refreshing"
+              :aria-busy="summary.refreshing ? 'true' : undefined"
+              @click="summary.refresh()"
+            >
+              <Icon
+                :icon="RotateCw"
+                :size="12"
+                :class="{ 'motion-safe:animate-spin': summary.refreshing }"
+              />
+              Reload
+            </button>
+          </div>
+        </div>
+
+        <p v-else-if="summary.status === 'empty'" data-test="ai-summary-empty" class="text-muted">
+          No summary yet — the daily summary runs at {{ settings.summaryTime }}.
+          <button
+            type="button"
+            data-test="ai-summary-reload"
+            class="font-medium text-ai underline disabled:opacity-50"
+            :disabled="summary.refreshing"
+            @click="summary.refresh()"
+          >
+            Generate now
+          </button>
+        </p>
+
         <p v-else-if="summary.status === 'error'" data-test="ai-summary-error" class="text-danger">
-          Couldn't generate a summary — is the local model running?
+          Couldn't load the summary — is the local model running?
           <button
             type="button"
             data-test="ai-summary-retry"
             class="underline"
-            @click="summary.fetchSummary(true)"
+            @click="summary.refresh()"
           >
             Retry
           </button>

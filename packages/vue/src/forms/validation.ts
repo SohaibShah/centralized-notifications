@@ -32,6 +32,16 @@ function fieldSchema(field: FormField): ZodTypeAny {
     return field.required ? base : base.optional();
   }
 
+  if (field.type === "time") {
+    // Mirror the server's validation (admin.ts) so the two can't drift — 24-hour 'HH:MM'.
+    const base = z
+      .string()
+      .regex(/^([01]\d|2[0-3]):[0-5]\d$/, {
+        message: `${field.label} must be a valid time (HH:MM)`,
+      });
+    return field.required ? base : base.optional();
+  }
+
   let base = z.string();
   if (field.type === "email") base = base.email({ message: "Enter a valid email address" });
   if (field.maxLength) base = base.max(field.maxLength);

@@ -28,6 +28,12 @@ const envSchema = z.object({
   AI_BASE_URL: z.string().url().default("http://localhost:11434/v1"),
   AI_MODEL: z.string().min(1).default("qwen2.5:7b"),
   AI_API_KEY: z.string().min(1).optional(),
+  // Master switch for the in-process daily-summary scheduler. Defaults on; set "false" to disable
+  // (e.g. a deploy that runs the scheduler elsewhere). Never runs under NODE_ENV=test regardless.
+  SUMMARY_SCHEDULER_ENABLED: z
+    .enum(["true", "false"])
+    .default("true")
+    .transform((v) => v === "true"),
 });
 
 export type Env = z.infer<typeof envSchema>;

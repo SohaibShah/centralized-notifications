@@ -38,6 +38,15 @@ export interface Settings {
   groupingEnabled: boolean;
   actionsEnabled: boolean;
   retentionDays: number;
+  /** Admin-configured daily summary time-of-day, 'HH:MM' 24h, applied in each user's own tz. */
+  summaryTime: string;
+}
+
+/** A persisted AI summary for one user. `basedOn` = notifications summarized (0 = caught-up). */
+export interface StoredSummary {
+  summary: string;
+  basedOn: number;
+  generatedAt: string; // ISO
 }
 
 /** One chat message in the OpenAI-compatible shape. */

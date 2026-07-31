@@ -13,7 +13,7 @@ async function login(page: import("@playwright/test").Page, username: string, pa
 }
 
 test.describe("AI summary", () => {
-  test("expanding the disclosure resolves to a summary or a graceful error (never stuck loading)", async ({
+  test("reload generates the stored summary (with a timestamp) from the unread set", async ({
     page,
     request,
   }) => {
@@ -23,7 +23,7 @@ test.describe("AI summary", () => {
     await login(page, DEV_USER, DEV_PASSWORD);
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
 
-    // Ensure a non-empty unread set so the summary path (not the caught-up shortcut) runs.
+    // Seed a non-empty unread set so the reload produces a real digest (basedOn > 0), not caught-up.
     const publish = await request.post(`${BACKEND}/internal/publish`, {
       headers: { "x-internal-token": intakeTokenValue, "content-type": "application/json" },
       data: {
@@ -41,13 +41,18 @@ test.describe("AI summary", () => {
     await page.getByRole("button", { name: /Notifications/ }).click();
     await expect(page.getByRole("dialog", { name: "Notifications" })).toBeVisible();
 
-    // Expand the AI-summary disclosure.
+    // Expand the AI-summary disclosure. It now shows the STORED summary (pre-generated on schedule) —
+    // no auto-generation on expand — so a reload control is present (empty state or a prior summary).
     await page.locator('button[aria-controls="ai-summary-detail"]').click();
+    await expect(page.locator("#ai-summary-detail")).toBeVisible();
 
-    // Provider-agnostic: it must resolve OUT of the loading state within the model-call budget — to a
-    // summary (fake/real provider up) or the graceful error (provider/Ollama down). Never stuck loading.
-    const resolved = page.locator('[data-test="ai-summary-text"], [data-test="ai-summary-error"]');
-    await expect(resolved.first()).toBeVisible({ timeout: 20_000 });
+    // Reload → POST /notifications/summary/refresh regenerates from the unread set and persists.
+    await page.locator('[data-test="ai-summary-reload"]').first().click();
+
+    // With AI_PROVIDER=fake (webServer env) and a seeded unread item, it resolves to a real digest
+    // with a generated-at timestamp — never stuck loading/refreshing.
+    await expect(page.locator('[data-test="ai-summary-text"]')).toBeVisible({ timeout: 20_000 });
+    await expect(page.locator('[data-test="ai-summary-timestamp"]')).toContainText(/Generated/);
     await expect(page.locator('[data-test="ai-summary-loading"]')).toHaveCount(0);
   });
 });

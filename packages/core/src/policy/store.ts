@@ -45,8 +45,10 @@ export class PolicyStore {
       grouping_enabled: boolean;
       actions_enabled: boolean;
       retention_days: number;
+      summary_time: string;
     }>(
-      `SELECT ai_summary_enabled, chatbot_enabled, grouping_enabled, actions_enabled, retention_days
+      `SELECT ai_summary_enabled, chatbot_enabled, grouping_enabled, actions_enabled, retention_days,
+              summary_time
          FROM global_settings WHERE id = true`,
     );
     const row = s.rows[0];
@@ -58,6 +60,7 @@ export class PolicyStore {
         groupingEnabled: row?.grouping_enabled ?? true,
         actionsEnabled: row?.actions_enabled ?? true,
         retentionDays: row?.retention_days ?? 30,
+        summaryTime: row?.summary_time ?? "08:00",
       },
     };
   }
@@ -159,6 +162,7 @@ export class PolicyStore {
       groupingEnabled: "grouping_enabled",
       actionsEnabled: "actions_enabled",
       retentionDays: "retention_days",
+      summaryTime: "summary_time",
     };
     const sets: string[] = [];
     const vals: unknown[] = [];

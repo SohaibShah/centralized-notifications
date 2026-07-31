@@ -31,10 +31,15 @@ const controlClass =
 
 <template>
   <div class="flex flex-col gap-1.5">
-    <label :for="fieldId" class="text-[13px] font-medium text-text">
-      {{ field.label }}
-      <span v-if="field.required" class="text-danger" aria-hidden="true">*</span>
-    </label>
+    <div>
+      <label :for="fieldId" class="text-[12.5px] font-semibold text-text">
+        {{ field.label }}
+        <span v-if="field.required" class="text-danger" aria-hidden="true">*</span>
+      </label>
+      <p v-if="field.hint" class="mt-0.5 text-[11px] leading-relaxed text-faint">
+        {{ field.hint }}
+      </p>
+    </div>
 
     <textarea
       v-if="isTextarea"

@@ -49,6 +49,25 @@ function isVisible(field: FormSchema["fields"][number]): boolean {
 }
 const visibleFields = computed(() => props.schema.fields.filter(isVisible));
 
+// Flatten the visible fields into a render list, inserting a section heading whenever the `group`
+// changes. A group's heading only appears if at least one of its fields is visible (an all-hidden
+// group — e.g. AI settings while AI summary is off — contributes no orphan heading).
+type RenderItem =
+  | { kind: "heading"; label: string; key: string }
+  | { kind: "field"; field: FormSchema["fields"][number]; key: string };
+const renderItems = computed<RenderItem[]>(() => {
+  const items: RenderItem[] = [];
+  let lastGroup: string | undefined;
+  for (const field of visibleFields.value) {
+    if (field.group && field.group !== lastGroup) {
+      items.push({ kind: "heading", label: field.group, key: `group-${field.group}` });
+    }
+    items.push({ kind: "field", field, key: field.name });
+    lastGroup = field.group;
+  }
+  return items;
+});
+
 function handleSubmit() {
   for (const key of Object.keys(errors)) delete errors[key];
   const result = buildSchema(props.schema).safeParse(values);
@@ -70,20 +89,34 @@ function handleSubmit() {
 
 <template>
   <form ref="formEl" novalidate class="flex flex-col gap-4" @submit.prevent="handleSubmit">
-    <template v-for="field in visibleFields" :key="field.name">
-      <SwitchField
-        v-if="field.type === 'switch'"
-        v-model="values[field.name]"
-        :field="field"
-        :error="errors[field.name]"
-      />
-      <SelectField
-        v-else-if="field.type === 'select'"
-        v-model="values[field.name]"
-        :field="field"
-        :error="errors[field.name]"
-      />
-      <TextField v-else v-model="values[field.name]" :field="field" :error="errors[field.name]" />
+    <template v-for="item in renderItems" :key="item.key">
+      <p
+        v-if="item.kind === 'heading'"
+        data-test="form-group-heading"
+        class="mt-1 border-t border-line pt-4 font-mono text-[11px] font-semibold uppercase tracking-wide text-faint first:mt-0 first:border-t-0 first:pt-0"
+      >
+        {{ item.label }}
+      </p>
+      <template v-else>
+        <SwitchField
+          v-if="item.field.type === 'switch'"
+          v-model="values[item.field.name]"
+          :field="item.field"
+          :error="errors[item.field.name]"
+        />
+        <SelectField
+          v-else-if="item.field.type === 'select'"
+          v-model="values[item.field.name]"
+          :field="item.field"
+          :error="errors[item.field.name]"
+        />
+        <TextField
+          v-else
+          v-model="values[item.field.name]"
+          :field="item.field"
+          :error="errors[item.field.name]"
+        />
+      </template>
     </template>
 
     <p v-if="error" role="alert" aria-live="polite" class="text-[13px] text-danger">{{ error }}</p>
