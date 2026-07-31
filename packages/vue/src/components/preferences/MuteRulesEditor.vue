@@ -105,9 +105,9 @@ async function resume(row: Row): Promise<void> {
       :key="group.title"
       class="flex flex-col gap-1"
     >
-      <p class="font-mono text-[11px] font-semibold uppercase tracking-wide text-faint">
-        {{ group.title }}
-      </p>
+      <!-- Sub-heading under the "Snooze & mute" section — deliberately lighter/smaller than a section
+           heading so the Modules/Categories grouping reads as subordinate. -->
+      <p class="text-[12px] font-semibold text-faint">{{ group.title }}</p>
       <ul class="flex flex-col divide-y divide-line">
         <li
           v-for="row in group.rows"

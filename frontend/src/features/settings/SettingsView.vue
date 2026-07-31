@@ -45,6 +45,7 @@ const timezoneForm = computed<FormSchema>(() => ({
   ],
   submitLabel: "Save timezone",
   submittingLabel: "Saving…",
+  submitAlign: "end",
 }));
 
 // The snooze/mute targets (modules + categories) with the user's priority mix, from a dedicated
@@ -107,7 +108,7 @@ const preferencesInitial = computed<FormValues>(() => ({
 </script>
 
 <template>
-  <div class="mx-auto max-w-2xl px-8 py-10">
+  <div class="mx-auto max-w-3xl px-8 py-10">
     <header class="mb-8">
       <h1 class="font-display text-[24px] font-semibold text-text">Settings</h1>
       <p class="mt-1 text-[13px] text-muted">
@@ -141,10 +142,10 @@ const preferencesInitial = computed<FormValues>(() => ({
 
       <!-- Snooze & mute (library) -->
       <section>
-        <p class="mb-3 font-mono text-[11px] font-semibold uppercase tracking-wide text-faint">
+        <p class="font-mono text-[11px] font-semibold uppercase tracking-wide text-muted">
           Snooze &amp; mute
         </p>
-        <p class="mb-4 text-[12px] leading-relaxed text-muted">
+        <p class="mb-4 mt-1 text-[12px] leading-relaxed text-muted">
           Snoozed or muted modules and categories are hidden from your feed. Critical notifications
           always come through.
         </p>

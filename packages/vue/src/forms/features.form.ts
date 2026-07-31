@@ -44,4 +44,5 @@ export const featuresForm: FormSchema = {
   ],
   submitLabel: "Save changes",
   submittingLabel: "Saving…",
+  submitAlign: "end",
 };

@@ -38,6 +38,9 @@ export interface FormSchema {
   submitLabel?: string;
   /** Label shown on the submit button while the request is in flight (ends with …). */
   submittingLabel?: string;
+  /** Submit button placement. "full" (default) = full-width (e.g. login). "end" = wraps its content
+   *  and right-aligns (settings/admin forms, where a full-width button reads as heavy). */
+  submitAlign?: "full" | "end";
 }
 
 export type FieldValue = string | number | boolean | undefined;

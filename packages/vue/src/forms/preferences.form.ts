@@ -35,4 +35,5 @@ export const preferencesForm: FormSchema = {
   ],
   submitLabel: "Save preferences",
   submittingLabel: "Saving…",
+  submitAlign: "end",
 };
