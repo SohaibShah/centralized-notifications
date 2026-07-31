@@ -25,14 +25,16 @@ const connectSse = props.config.connectSse ?? ((opts) => defaultConnectSse(baseU
 const toast = createToastState();
 const settings = createSettingsState({ transport });
 // When a snooze/mute rule is persisted, reconnect the live stream (so its server-side rule snapshot
-// is current) and re-read the feed + counts — the change takes effect with no page reload. `feed` is
-// declared just below; the callback only runs on later user action, by which point it's initialized.
+// is current — otherwise the hub keeps pushing a just-muted module's items until the next heartbeat,
+// which `addFront` would prepend right back after a reload) and hard-reload the feed + counts. The
+// change then takes effect with no page reload. `feed` is declared just below; the callback only runs
+// on later user action, by which point it's initialized.
 const preferences = createPreferencesState({
   transport,
   onRulesChanged: () => {
-    // Hard-reload (not merge) so a just-muted module's items actually leave the feed; `reload` also
-    // refreshes the dataset-wide counts.
-    void feed.reload();
+    feed.disconnect();
+    feed.connect(); // re-subscribe so the SSE handler re-reads the mute rules at connect time
+    void feed.reload(); // hard-clear + refetch + counts (unlike the merging load())
   },
 });
 const summary = createSummaryState({ transport });

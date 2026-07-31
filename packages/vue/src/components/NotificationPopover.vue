@@ -2,8 +2,7 @@
 import { computed, nextTick, onMounted, ref } from "vue";
 import { Search, Sparkles, X } from "@lucide/vue";
 import Icon from "../ui/Icon.vue";
-import { useFeed } from "../provider/context";
-import { useSettings } from "../provider/context";
+import { useFeed, useSettings } from "../provider/context";
 import FilterMenu from "./components/FilterMenu.vue";
 import InboxTab from "./panel/InboxTab.vue";
 import AssistantTab from "./panel/AssistantTab.vue";

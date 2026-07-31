@@ -127,8 +127,10 @@ async function resume(row: Row): Promise<void> {
             </p>
           </div>
 
-          <!-- The user's own priority mix for this target (same treatment as the admin Modules page). -->
+          <!-- The user's own priority mix for this target (same treatment as the admin Modules page).
+               Hidden when the user has had nothing from this target (avoids a bare "0 other"). -->
           <div
+            v-if="row.total > 0"
             data-test="mute-mix"
             class="hidden shrink-0 font-mono text-[10px] tabular-nums sm:block"
           >
