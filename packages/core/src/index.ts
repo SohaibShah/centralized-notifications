@@ -39,4 +39,5 @@ export type {
   MuteTargetKind,
 } from "@notifications/shared";
 export { createPreferencesStore } from "./preferences/store";
+export { muteWhere, isSuppressed } from "./preferences/mute";
 export type { ChatContextItem } from "./ai/retrieve";
