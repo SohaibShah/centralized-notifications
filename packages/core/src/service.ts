@@ -1,5 +1,13 @@
 import type { Pool } from "pg";
-import type { FeedSort, NotificationCounts, NotificationPage } from "@notifications/shared";
+import type {
+  FeedSort,
+  MuteRule,
+  MuteTargetKind,
+  NotificationCounts,
+  NotificationPage,
+  PreferencesPatch,
+  UserPreferences,
+} from "@notifications/shared";
 import { createDb } from "./db";
 import { DeliveryHub } from "./delivery/hub";
 import { ingest } from "./pipeline/ingest";
@@ -10,6 +18,7 @@ import { list } from "./read/feed";
 import { markRead, markReadBulk, markUnread } from "./read/read-state";
 import { SummaryEngine } from "./ai/summarize";
 import { createSummaryStore } from "./ai/summary-store";
+import { createPreferencesStore } from "./preferences/store";
 import { AnswerEngine, type AnswerChunk, type ChatTurn } from "./ai/answer";
 import { dispatchAction } from "./action/dispatch";
 import type {
@@ -93,6 +102,29 @@ export interface NotificationService {
     history: ChatTurn[];
   }): AsyncIterable<AnswerChunk>;
 
+  /** The caller's scalar preferences (grouping / summary opt-out / toast). Column defaults when unset. */
+  getPreferences(args: { principal: Principal }): Promise<UserPreferences>;
+  /** Partial-update the caller's scalar preferences; returns the merged result. */
+  updatePreferences(args: {
+    principal: Principal;
+    patch: PreferencesPatch;
+  }): Promise<UserPreferences>;
+  /** The caller's active snooze/mute rules. */
+  listMuteRules(args: { principal: Principal }): Promise<MuteRule[]>;
+  /** Upsert a snooze/mute rule for the caller. `until` null = mute; ISO datetime = snooze-until. */
+  putMuteRule(args: {
+    principal: Principal;
+    targetKind: MuteTargetKind;
+    target: string;
+    until: string | null;
+  }): Promise<void>;
+  /** Remove a snooze/mute rule for the caller. Returns whether a row was deleted. */
+  deleteMuteRule(args: {
+    principal: Principal;
+    targetKind: MuteTargetKind;
+    target: string;
+  }): Promise<boolean>;
+
   /** In-process delivery hub — the SSE transport subscribes here with a principal. */
   readonly delivery: DeliveryHub;
   /** Role that gates admin operations (module toggle, settings). */
@@ -124,6 +156,7 @@ export function createNotificationService(opts: {
     provider: opts.config.ai?.provider,
   });
   const summaryStore = createSummaryStore(query);
+  const preferences = createPreferencesStore(query);
 
   return {
     delivery: hub,
@@ -162,5 +195,12 @@ export function createNotificationService(opts: {
       return { summary: r.summary, basedOn: r.basedOn, generatedAt };
     },
     answer: (args) => answerEngine.answer(args),
+    getPreferences: (args) => preferences.getPreferences(args.principal.userKey),
+    updatePreferences: (args) => preferences.updatePreferences(args.principal.userKey, args.patch),
+    listMuteRules: (args) => preferences.listRules(args.principal.userKey),
+    putMuteRule: (args) =>
+      preferences.putRule(args.principal.userKey, args.targetKind, args.target, args.until),
+    deleteMuteRule: (args) =>
+      preferences.deleteRule(args.principal.userKey, args.targetKind, args.target),
   };
 }
