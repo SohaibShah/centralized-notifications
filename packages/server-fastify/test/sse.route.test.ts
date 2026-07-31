@@ -93,6 +93,39 @@ test("a subscribed principal receives a matching global notification as an SSE f
   controller.abort();
 });
 
+test("a muted module's snoozable notification is not streamed, but a non-snoozable one is", async () => {
+  // Mute module 'dsr' for this user BEFORE connecting, so the rule is loaded at connect time.
+  const principal = { userKey: "mutestreamer", roles: [], teamKeys: [] } as const;
+  await svc.putMuteRule({ principal, targetKind: "module", target: "dsr", until: null });
+
+  const controller = new AbortController();
+  const res = await fetch(`${baseUrl}/sse`, {
+    headers: { "x-test-user": principal.userKey },
+    signal: controller.signal,
+  });
+  const reader = res.body!.getReader();
+  await readUntil(reader, (b) => b.includes(": connected"));
+
+  const suffix = Date.now();
+  const snoozableId = `sse-muted-${suffix}`;
+  const criticalId = `sse-crit-${suffix}`;
+  const base = {
+    module: "dsr",
+    title: "t",
+    description: "",
+    audience: { scope: "global" },
+  } as const;
+  await svc.ingest({ ...base, id: snoozableId, priority: "normal", snoozable: true });
+  await svc.ingest({ ...base, id: criticalId, priority: "critical", snoozable: false });
+
+  // The non-snoozable one arrives; by then the suppressed snoozable one has already been filtered.
+  const stream = await readUntil(reader, (b) => b.includes(criticalId));
+  expect(stream).toContain(criticalId);
+  expect(stream).not.toContain(snoozableId);
+
+  controller.abort();
+});
+
 test("GET /sse without auth → 401", async () => {
   const res = await fetch(`${baseUrl}/sse`);
   expect(res.status).toBe(401);
