@@ -4,6 +4,7 @@ import Fastify, { type FastifyInstance, type FastifyRequest } from "fastify";
 import { SHARED_PACKAGE } from "@notifications/shared";
 import { notificationFastifyPlugin } from "@notifications/server-fastify";
 import { authRoutes } from "./auth/routes";
+import { meRoutes } from "./auth/me";
 import { getSessionUser } from "./auth/guards";
 import { getUserWithRolesTeams } from "./auth/repository";
 import { registerSession } from "./auth/session";
@@ -55,6 +56,7 @@ export async function buildServer(): Promise<FastifyInstance> {
   await app.register(rateLimit, { global: false });
   await registerSession(app);
   await app.register(authRoutes);
+  await app.register(meRoutes);
 
   await app.register(notificationFastifyPlugin, {
     service,
