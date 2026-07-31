@@ -230,4 +230,34 @@ describe("InboxTab", () => {
     await wrapper.get('[data-test="ai-summary-retry"]').trigger("click");
     expect(summaryState.refresh).toHaveBeenCalled();
   });
+
+  it("shows the opted-out prompt (not a summary fetch) when the user opted out", async () => {
+    const ctx = makeCtx();
+    ctx.preferences.prefs.summaryOptOut = true;
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
+    expect(wrapper.get('[data-test="ai-summary-optedout"]').text()).toContain("turned off");
+    expect(summaryState.fetchStored).not.toHaveBeenCalled(); // no fetch while opted out
+  });
+
+  it("re-enabling the summary from the panel updates the pref and fetches it", async () => {
+    const ctx = makeCtx();
+    ctx.preferences.prefs.summaryOptOut = true;
+    const updatePref = vi.spyOn(ctx.preferences, "updatePref").mockResolvedValue();
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
+    await wrapper.get('[data-test="ai-summary-enable"]').trigger("click");
+    expect(updatePref).toHaveBeenCalledWith({ summaryOptOut: false });
+    expect(summaryState.fetchStored).toHaveBeenCalled();
+  });
+
+  it("shows a spinner + 'Generating…' on the first-time Generate button while refreshing", async () => {
+    summaryState.status = "empty";
+    summaryState.refreshing = true;
+    const wrapper = mountWithProvider(InboxTab, { context: makeCtx() });
+    await wrapper.find('button[aria-controls="ai-summary-detail"]').trigger("click");
+    const btn = wrapper.get('[data-test="ai-summary-empty"] [data-test="ai-summary-reload"]');
+    expect(btn.text()).toContain("Generating…");
+    expect(btn.find(".motion-safe\\:animate-spin").exists()).toBe(true);
+  });
 });
