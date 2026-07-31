@@ -6,6 +6,7 @@ import { createFeedState } from "../state/feed";
 import { createChatState } from "../state/chat";
 import { createSummaryState } from "../state/summary";
 import { createSettingsState } from "../state/settings";
+import { createPreferencesState } from "../state/preferences";
 import { createToastState } from "../state/toast";
 import { createPanelState } from "../state/panel";
 import { createNotificationActions } from "../state/actions";
@@ -23,6 +24,7 @@ const connectSse = props.config.connectSse ?? ((opts) => defaultConnectSse(baseU
 // Build the state once. Order: leaf state first, then the coordinators that depend on siblings.
 const toast = createToastState();
 const settings = createSettingsState({ transport });
+const preferences = createPreferencesState({ transport });
 const summary = createSummaryState({ transport });
 const feed = createFeedState({ transport, connectSse });
 const chat = createChatState({ baseUrl });
@@ -34,6 +36,7 @@ const ctx: NotificationsContext = {
   chat,
   summary,
   settings,
+  preferences,
   toast,
   panel,
   actions,

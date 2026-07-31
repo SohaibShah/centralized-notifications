@@ -208,12 +208,13 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     await load(); // load() flushes session reads and refetches the newest page in the new order
   }
 
-  // Critical-arrival subscribers (the toast listens here). Fired only with items that
-  // are genuinely new to the feed this batch, so a duplicate delivery never re-toasts.
-  const criticalSubs = new Set<(items: FeedNotification[]) => void>();
-  function onLiveCritical(cb: (items: FeedNotification[]) => void): () => void {
-    criticalSubs.add(cb);
-    return () => criticalSubs.delete(cb);
+  // Live alert subscribers (the toast listens here). Fired with genuinely-new high+critical items
+  // this batch (the toastable set); the toast viewport narrows further by the user's toast preference.
+  // Only fresh items are emitted, so a duplicate delivery never re-toasts.
+  const alertSubs = new Set<(items: FeedNotification[]) => void>();
+  function onLiveAlert(cb: (items: FeedNotification[]) => void): () => void {
+    alertSubs.add(cb);
+    return () => alertSubs.delete(cb);
   }
 
   /** Handle one coalesced SSE burst: prepend new notifications, then notify critical subs. */
@@ -229,9 +230,9 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
       (n) => !seen.has(n.id) && !batchSeen.has(n.id) && batchSeen.add(n.id),
     );
     for (const n of fresh) adjustCount(n.priority, +1);
-    const freshCriticals = fresh.filter((n) => n.priority === "critical");
+    const freshAlerts = fresh.filter((n) => n.priority === "critical" || n.priority === "high");
     addFront(incoming); // dedupes on `seen` internally
-    if (freshCriticals.length > 0) for (const cb of criticalSubs) cb(freshCriticals);
+    if (freshAlerts.length > 0) for (const cb of alertSubs) cb(freshAlerts);
   }
 
   function connect(): void {
@@ -469,7 +470,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     setActions,
     flushSessionReads,
     markAllReadInScope,
-    onLiveCritical,
+    onLiveAlert,
     togglePriority,
     toggleModule,
     toggleUnreadOnly,

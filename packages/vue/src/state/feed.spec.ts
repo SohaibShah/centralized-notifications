@@ -368,25 +368,26 @@ describe("feed store", () => {
     expect(feed.items.every((n) => n.read === false)).toBe(true);
   });
 
-  it("onLiveCritical fires with only newly-arrived critical items", async () => {
+  it("onLiveAlert fires with only newly-arrived high+critical items", async () => {
     const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "old-crit", priority: "critical" })], null));
     feed.connect();
     await feed.load();
 
     const seen: string[][] = [];
-    const off = feed.onLiveCritical((items) => seen.push(items.map((n) => n.id)));
+    const off = feed.onLiveAlert((items) => seen.push(items.map((n) => n.id)));
 
     sseState.onBatch!([
       liveNotif({ id: "x", priority: "critical" }),
-      liveNotif({ id: "y", priority: "normal" }), // not critical → excluded
+      liveNotif({ id: "h", priority: "high" }), // high → included (toastable set)
+      liveNotif({ id: "y", priority: "normal" }), // not high/critical → excluded
       liveNotif({ id: "old-crit", priority: "critical" }), // already loaded → excluded
     ]);
-    expect(seen).toEqual([["x"]]);
+    expect(seen).toEqual([["x", "h"]]);
 
     off();
     sseState.onBatch!([liveNotif({ id: "z", priority: "critical" })]);
-    expect(seen).toEqual([["x"]]); // unsubscribed → no further calls
+    expect(seen).toEqual([["x", "h"]]); // unsubscribed → no further calls
   });
 
   const counts = (

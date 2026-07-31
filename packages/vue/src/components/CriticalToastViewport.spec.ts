@@ -18,7 +18,7 @@ describe("CriticalToastViewport", () => {
   afterEach(() => vi.useRealTimers());
 
   function mountWithCapture() {
-    vi.spyOn(ctx.feed, "onLiveCritical").mockImplementation((cb) => {
+    vi.spyOn(ctx.feed, "onLiveAlert").mockImplementation((cb) => {
       fire = cb;
       return () => {};
     });
@@ -30,6 +30,17 @@ describe("CriticalToastViewport", () => {
     const toast = ctx.toast;
     fire!([feedItem({ id: "a", priority: "critical" })]);
     expect(toast.visible.map((t) => t.id)).toEqual(["a"]);
+  });
+
+  it("respects the toast preference: 'off' suppresses, 'high' allows a high arrival", () => {
+    ctx.preferences.prefs.toastMinPriority = "off";
+    mountWithCapture();
+    fire!([feedItem({ id: "c", priority: "critical" })]);
+    expect(ctx.toast.visible).toEqual([]); // 'off' → nothing pops
+
+    ctx.preferences.prefs.toastMinPriority = "high";
+    fire!([feedItem({ id: "h", priority: "high" })]);
+    expect(ctx.toast.visible.map((t) => t.id)).toEqual(["h"]); // 'high' → high arrival pops
   });
 
   it("suppresses the toast when the panel is already open", () => {

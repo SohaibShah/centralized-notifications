@@ -21,6 +21,7 @@ export {
   useChat,
   useSummary,
   useSettings,
+  usePreferences,
   useToast,
   usePanel,
   useActions,

@@ -1,5 +1,23 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AUTO_DISMISS_MS, createToastState } from "./toast";
+import { AUTO_DISMISS_MS, createToastState, shouldToast } from "./toast";
+
+describe("shouldToast", () => {
+  it("'off' suppresses every priority", () => {
+    expect(shouldToast("critical", "off")).toBe(false);
+    expect(shouldToast("high", "off")).toBe(false);
+  });
+  it("'critical' allows only critical", () => {
+    expect(shouldToast("critical", "critical")).toBe(true);
+    expect(shouldToast("high", "critical")).toBe(false);
+    expect(shouldToast("normal", "critical")).toBe(false);
+  });
+  it("'high' allows high and critical, but not normal/low", () => {
+    expect(shouldToast("critical", "high")).toBe(true);
+    expect(shouldToast("high", "high")).toBe(true);
+    expect(shouldToast("normal", "high")).toBe(false);
+    expect(shouldToast("low", "high")).toBe(false);
+  });
+});
 
 function crit(id: string) {
   return { id, title: `Critical ${id}`, module: "DSAR" };
