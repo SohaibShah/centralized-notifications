@@ -20,7 +20,7 @@ describe("shouldToast", () => {
 });
 
 function crit(id: string) {
-  return { id, title: `Critical ${id}`, module: "DSAR" };
+  return { id, title: `Critical ${id}`, module: "DSAR", priority: "critical" as const };
 }
 
 describe("toast state", () => {

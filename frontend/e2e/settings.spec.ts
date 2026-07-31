@@ -54,10 +54,11 @@ test.describe("per-user settings", () => {
     await page.getByRole("link", { name: "Dashboard" }).click();
     await expect(page.getByRole("heading", { name: "Dashboard" })).toBeVisible();
 
-    // Seed two DSR notifications while on the dashboard — they arrive live over SSE.
-    const snoozTitle = `Snoozable DSR ${Date.now()}`;
+    // Seed two DSR notifications while on the dashboard — they arrive live over SSE. Include a
+    // non-snoozable CRITICAL one to prove muting hides everything from the module, not just snoozables.
+    const normalTitle = `Normal DSR ${Date.now()}`;
     const critTitle = `Critical DSR ${Date.now()}`;
-    expect((await publish(request, token, snoozTitle, { snoozable: true })).ok()).toBeTruthy();
+    expect((await publish(request, token, normalTitle, { snoozable: true })).ok()).toBeTruthy();
     expect(
       (await publish(request, token, critTitle, { snoozable: false, priority: "critical" })).ok(),
     ).toBeTruthy();
@@ -65,7 +66,7 @@ test.describe("per-user settings", () => {
     // Both are visible in the feed to start.
     await page.getByRole("button", { name: /Notifications/ }).click();
     const dialog = page.getByRole("dialog", { name: "Notifications" });
-    await expect(dialog.getByText(snoozTitle)).toBeVisible();
+    await expect(dialog.getByText(normalTitle)).toBeVisible();
     await expect(dialog.getByText(critTitle)).toBeVisible();
     await page.keyboard.press("Escape"); // close the panel
 
@@ -75,21 +76,21 @@ test.describe("per-user settings", () => {
     await dsrRow.locator('[data-test="mute-toggle"]').click();
     await expect(dsrRow.locator('[data-test="mute-status"]')).toHaveText("Muted");
 
-    // Back to the dashboard via in-app nav; the feed already reflects the mute (no reload) — the
-    // snoozable notif is gone, the critical (non-snoozable) one remains.
+    // Back to the dashboard via in-app nav; the feed already reflects the mute (no reload) — BOTH the
+    // snoozable and the critical/non-snoozable DSR notifications are gone (the user's mute wins).
     await page.getByRole("link", { name: "Dashboard" }).click();
     await page.getByRole("button", { name: /Notifications/ }).click();
-    await expect(dialog.getByText(critTitle)).toBeVisible();
-    await expect(dialog.getByText(snoozTitle)).toHaveCount(0);
+    await expect(dialog.getByText(normalTitle)).toHaveCount(0);
+    await expect(dialog.getByText(critTitle)).toHaveCount(0);
     await page.keyboard.press("Escape");
 
-    // Un-mute (in-app) → the snoozable notif reappears in the feed without a reload.
+    // Un-mute (in-app) → the DSR notifications reappear without a reload.
     await page.getByRole("link", { name: "Settings" }).click();
     await dsrRow.locator('[data-test="mute-toggle"]').click(); // "Muted" → resume
     await expect(dsrRow.locator('[data-test="mute-status"]')).toHaveText("Active");
     await page.getByRole("link", { name: "Dashboard" }).click();
     await page.getByRole("button", { name: /Notifications/ }).click();
-    await expect(dialog.getByText(snoozTitle)).toBeVisible();
+    await expect(dialog.getByText(critTitle)).toBeVisible();
   });
 
   test("an invalid timezone surfaces an inline error", async ({ page }) => {

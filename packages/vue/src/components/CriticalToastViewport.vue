@@ -28,6 +28,7 @@ onMounted(() => {
         title: n.title,
         description: n.description,
         module: n.module,
+        priority: n.priority,
       })),
     );
   });

@@ -450,15 +450,14 @@ store), and [`packages/core/src/preferences/mute.ts`](../../packages/core/src/pr
 A **snooze/mute rule** hides matching notifications from the caller **everywhere a read is
 audience-scoped**: the [feed](#get-notifications), the [unread counts](#get-notificationscounts),
 the live [SSE stream](./sse.md), and the AI [summary](#post-notificationssummaryrefresh) /
-[chat](#post-notificationschat) grounding sets. A notification is hidden when **all** hold:
-
-- the notification is **`snoozable: true`** _and_ **not `priority: 'critical'`** (see the
-  [contract](#schema)) — **non-snoozable notifications, and all critical-priority notifications
-  (even snoozable ones), always pass through regardless of any rule**; and
-- the caller has an **active** rule whose `targetKind`/`target` matches the notification's
-  `module` or `category`. A rule is active when `mutedUntil` is `null` (muted indefinitely)
-  **or** a future timestamp (snoozed, not yet elapsed); an elapsed snooze stops hiding
-  automatically.
+[chat](#post-notificationschat) grounding sets. A notification is hidden when the caller has an
+**active** rule whose `targetKind`/`target` matches the notification's `module` or `category` —
+**regardless of the notification's `priority` or `snoozable` flag**. The user's mute/snooze is
+authoritative: muting a module hides everything from it, including `high`/`critical` items and ones
+a publisher marked `snoozable: false`. A rule is active when `mutedUntil` is `null` (muted
+indefinitely) **or** a future timestamp (snoozed, not yet elapsed); an elapsed snooze stops hiding
+automatically. (`snoozable` is reserved for a future per-notification snooze; it does not gate this
+module/category mute.)
 
 The SQL predicate (feed/counts/AI grounding) and the in-memory twin (delivery hub / SSE) are
 kept lockstep-identical, so "what your feed shows" always equals "what the live stream

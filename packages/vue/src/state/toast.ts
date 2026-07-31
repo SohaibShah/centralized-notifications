@@ -14,6 +14,8 @@ export interface ToastItem {
   title: string;
   description?: string;
   module: string;
+  /** The notification's priority — drives the toast's label + colour (critical vs high). */
+  priority: NotificationPriority;
 }
 
 export const AUTO_DISMISS_MS = 6000;
