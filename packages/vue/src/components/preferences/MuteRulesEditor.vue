@@ -107,7 +107,7 @@ async function resume(row: Row): Promise<void> {
     >
       <!-- Sub-heading under the "Snooze & mute" section — deliberately lighter/smaller than a section
            heading so the Modules/Categories grouping reads as subordinate. -->
-      <p class="text-[12px] font-semibold text-faint">{{ group.title }}</p>
+      <p class="text-[11px] font-semibold text-faint">{{ group.title }}</p>
       <ul class="flex flex-col divide-y divide-line">
         <li
           v-for="row in group.rows"
@@ -128,11 +128,14 @@ async function resume(row: Row): Promise<void> {
           </div>
 
           <!-- The user's own priority mix for this target (same treatment as the admin Modules page).
-               Hidden when the user has had nothing from this target (avoids a bare "0 other"). -->
+               Hidden when the user has had nothing from this target (avoids a bare "0 other").
+               NB: no responsive `hidden sm:block` here — a host Tailwind build that never uses
+               `sm:block` won't emit it, so the library's `.hidden` would win and hide it at all
+               widths. The settings column is wide (max-w-3xl); always showing it is safe. -->
           <div
             v-if="row.total > 0"
             data-test="mute-mix"
-            class="hidden shrink-0 font-mono text-[10px] tabular-nums sm:block"
+            class="shrink-0 font-mono text-[10px] tabular-nums"
           >
             <span v-if="row.byPriority.critical" class="mr-1.5 text-danger"
               >{{ row.byPriority.critical }} crit</span

@@ -17,6 +17,7 @@ const user = { userKey: `mute-user-${stamp}`, roles: [], teamKeys: [] };
 
 const snoozableId = `mute-snoozable-${stamp}`;
 const criticalId = `mute-critical-${stamp}`;
+const snoozableCriticalId = `mute-snoozcrit-${stamp}`;
 
 const notif = (
   id: string,
@@ -35,6 +36,7 @@ const notif = (
 beforeAll(async () => {
   await persist(query, notif(snoozableId, true, "normal"), false);
   await persist(query, notif(criticalId, false, "critical"), false);
+  await persist(query, notif(snoozableCriticalId, true, "critical"), false); // snoozable + critical
 });
 
 async function feedIds(): Promise<string[]> {
@@ -56,9 +58,10 @@ test("muting the module hides its snoozable notif from feed + counts but not the
   const ids = await feedIds();
   expect(ids).not.toContain(snoozableId); // snoozable → hidden
   expect(ids).toContain(criticalId); // non-snoozable → always through
+  expect(ids).toContain(snoozableCriticalId); // critical always through, even when snoozable
 
   const after = await counts(query, { principal: user });
-  expect(after.unread).toBe(before.unread - 1); // only the snoozable one dropped from the count
+  expect(after.unread).toBe(before.unread - 1); // only the snoozable non-critical one dropped
 });
 
 test("an expired snooze reveals the notification again", async () => {

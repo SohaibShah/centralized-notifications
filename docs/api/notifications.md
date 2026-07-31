@@ -452,8 +452,9 @@ audience-scoped**: the [feed](#get-notifications), the [unread counts](#get-noti
 the live [SSE stream](./sse.md), and the AI [summary](#post-notificationssummaryrefresh) /
 [chat](#post-notificationschat) grounding sets. A notification is hidden when **all** hold:
 
-- the notification is **`snoozable: true`** (see the [contract](#schema)) — **non-snoozable
-  notifications, e.g. `critical`, always pass through regardless of any rule**; and
+- the notification is **`snoozable: true`** _and_ **not `priority: 'critical'`** (see the
+  [contract](#schema)) — **non-snoozable notifications, and all critical-priority notifications
+  (even snoozable ones), always pass through regardless of any rule**; and
 - the caller has an **active** rule whose `targetKind`/`target` matches the notification's
   `module` or `category`. A rule is active when `mutedUntil` is `null` (muted indefinitely)
   **or** a future timestamp (snoozed, not yet elapsed); an elapsed snooze stops hiding

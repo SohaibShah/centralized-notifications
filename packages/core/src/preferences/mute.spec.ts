@@ -6,12 +6,26 @@ const now = new Date("2026-07-31T12:00:00.000Z");
 const future = "2026-07-31T18:00:00.000Z";
 const past = "2026-07-31T06:00:00.000Z";
 
-const snoozableDsr = { snoozable: true, module: "dsr", category: "audit" as string | null };
+const snoozableDsr = {
+  snoozable: true,
+  priority: "normal",
+  module: "dsr",
+  category: "audit" as string | null,
+};
 
 describe("isSuppressed", () => {
   it("never suppresses a non-snoozable notification", () => {
     const rules: MuteRule[] = [{ targetKind: "module", target: "dsr", mutedUntil: null }];
-    expect(isSuppressed(rules, { snoozable: false, module: "dsr" }, now)).toBe(false);
+    expect(isSuppressed(rules, { snoozable: false, priority: "normal", module: "dsr" }, now)).toBe(
+      false,
+    );
+  });
+
+  it("never suppresses a critical notification, even a snoozable one under an active rule", () => {
+    const rules: MuteRule[] = [{ targetKind: "module", target: "dsr", mutedUntil: null }];
+    expect(isSuppressed(rules, { snoozable: true, priority: "critical", module: "dsr" }, now)).toBe(
+      false,
+    );
   });
 
   it("suppresses a muted module (mutedUntil null)", () => {
@@ -28,16 +42,24 @@ describe("isSuppressed", () => {
 
   it("matches a category rule across any module", () => {
     const rules: MuteRule[] = [{ targetKind: "category", target: "audit", mutedUntil: null }];
-    expect(isSuppressed(rules, { snoozable: true, module: "other", category: "audit" }, now)).toBe(
-      true,
-    );
+    expect(
+      isSuppressed(
+        rules,
+        { snoozable: true, priority: "normal", module: "other", category: "audit" },
+        now,
+      ),
+    ).toBe(true);
   });
 
   it("does not suppress a notification with no category under a category rule", () => {
     const rules: MuteRule[] = [{ targetKind: "category", target: "audit", mutedUntil: null }];
-    expect(isSuppressed(rules, { snoozable: true, module: "dsr", category: null }, now)).toBe(
-      false,
-    );
+    expect(
+      isSuppressed(
+        rules,
+        { snoozable: true, priority: "normal", module: "dsr", category: null },
+        now,
+      ),
+    ).toBe(false);
   });
 
   it("does not suppress when there are no rules", () => {
@@ -52,6 +74,7 @@ describe("muteWhere", () => {
     expect(params).toEqual(["existing", "user-1"]);
     expect(sql).toContain("$2::text");
     expect(sql).toContain("n.snoozable = false");
+    expect(sql).toContain("n.priority = 'critical'");
     expect(sql).toContain("now()");
   });
 });
