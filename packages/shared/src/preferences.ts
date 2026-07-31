@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { NotificationPriority } from "./notification";
 
 /**
  * Per-user preference contract — the cross-boundary shapes the settings page reads/writes and the
@@ -50,3 +51,26 @@ export const preferencesResponseSchema = userPreferencesSchema.extend({
   rules: z.array(muteRuleSchema),
 });
 export type PreferencesResponse = z.infer<typeof preferencesResponseSchema>;
+
+/**
+ * A snooze/mute target (a module or a category) with the caller's own priority mix — the counts the
+ * settings page shows per row, the same shape the admin Modules page uses but scoped to this user.
+ * `total` is the sum across priorities. Counts ignore the mute filter, so an already-muted target
+ * still reports its mix (and stays visible so the user can un-mute it).
+ */
+export interface MuteTargetCounts {
+  byPriority: Record<NotificationPriority, number>;
+  total: number;
+}
+export interface ModuleMuteTarget extends MuteTargetCounts {
+  id: string;
+  label: string;
+}
+export interface CategoryMuteTarget extends MuteTargetCounts {
+  name: string;
+}
+/** GET /notifications/mute-targets response — the modules + categories the user can snooze/mute. */
+export interface MuteTargetsResponse {
+  modules: ModuleMuteTarget[];
+  categories: CategoryMuteTarget[];
+}

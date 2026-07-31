@@ -40,14 +40,40 @@ afterAll(async () => {
 
 const asUser = (u: string) => ({ "x-test-user": u });
 
-test("GET /notifications/modules returns the id+label catalog for any user", async () => {
+test("GET /notifications/mute-targets returns catalog modules (with a priority mix) + categories", async () => {
   const res = await app.inject({
     method: "GET",
-    url: "/notifications/modules",
+    url: "/notifications/mute-targets",
     headers: asUser(user()),
   });
   expect(res.statusCode).toBe(200);
-  expect(res.json()).toContainEqual({ id: "dsr", label: "DSR" });
+  const body = res.json() as {
+    modules: { id: string; label: string; total: number; byPriority: Record<string, number> }[];
+    categories: { name: string; total: number }[];
+  };
+  const dsr = body.modules.find((m) => m.id === "dsr");
+  expect(dsr).toBeTruthy();
+  expect(dsr!.label).toBe("DSR");
+  expect(typeof dsr!.total).toBe("number");
+  expect(dsr!.byPriority).toHaveProperty("critical");
+  expect(Array.isArray(body.categories)).toBe(true);
+});
+
+test("mute-targets keeps a muted category visible even with no current notifications", async () => {
+  const u = `pref-catvis-${stamp}`;
+  await app.inject({
+    method: "POST",
+    url: "/notifications/mutes/category/ghost-category",
+    headers: asUser(u),
+    payload: { until: null },
+  });
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications/mute-targets",
+    headers: asUser(u),
+  });
+  const body = res.json() as { categories: { name: string }[] };
+  expect(body.categories.some((c) => c.name === "ghost-category")).toBe(true);
 });
 
 test("GET returns defaults and an empty rule list for a fresh user", async () => {

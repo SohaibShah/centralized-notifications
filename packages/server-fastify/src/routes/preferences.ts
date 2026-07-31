@@ -32,12 +32,13 @@ export function notificationPreferencesRoutes(
 ): void {
   const { service, requirePrincipal } = deps;
 
-  // The module catalog (id + label only), readable by any authenticated user so the settings page
-  // can list modules to snooze/mute. Not the admin view — no per-module stats or state are exposed.
-  app.get("/notifications/modules", { preHandler: requirePrincipal }, async (req, reply) => {
-    if (!req.principal) return reply.code(401).send({ error: "authentication required" });
-    const modules = (await service.listModules()).map((m) => ({ id: m.id, label: m.label }));
-    return reply.code(200).send(modules);
+  // The modules + categories the caller can snooze/mute, each with the caller's own priority mix.
+  // Scoped to the authenticated principal (no other user's data). Categories always include any the
+  // user has already muted so they stay un-mutable even with no current notifications.
+  app.get("/notifications/mute-targets", { preHandler: requirePrincipal }, async (req, reply) => {
+    const principal = req.principal;
+    if (!principal) return reply.code(401).send({ error: "authentication required" });
+    return reply.code(200).send(await service.getMuteTargets({ principal }));
   });
 
   app.get("/notifications/preferences", { preHandler: requirePrincipal }, async (req, reply) => {

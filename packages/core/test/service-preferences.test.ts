@@ -1,4 +1,5 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
+import type { Notification } from "@notifications/shared";
 import { createNotificationService, type NotificationService } from "../src/service";
 import { testPool } from "./harness";
 
@@ -26,6 +27,43 @@ test("preferences round-trip through the service", async () => {
   const updated = await svc.updatePreferences({ principal, patch: { summaryOptOut: true } });
   expect(updated.summaryOptOut).toBe(true);
   expect((await svc.getPreferences({ principal })).summaryOptOut).toBe(true);
+});
+
+test("getMuteTargets reports catalog modules with the user's priority mix + categories", async () => {
+  const mtUser = { userKey: `svc-mt-${stamp}`, roles: [], teamKeys: [] };
+  const notif: Notification = {
+    id: `mt-${stamp}`,
+    module: "dsr",
+    title: "mt",
+    description: "",
+    priority: "high",
+    snoozable: true,
+    category: "reports",
+    audience: { scope: "user", id: mtUser.userKey },
+  };
+  await svc.ingest(notif);
+
+  const t = await svc.getMuteTargets({ principal: mtUser });
+  const dsr = t.modules.find((m) => m.id === "dsr");
+  expect(dsr).toBeTruthy();
+  expect(dsr!.label).toBe("DSR"); // catalog label, not the slug
+  expect(dsr!.byPriority.high).toBeGreaterThanOrEqual(1);
+  expect(dsr!.total).toBeGreaterThanOrEqual(1);
+  expect(t.categories.some((c) => c.name === "reports")).toBe(true);
+});
+
+test("getMuteTargets keeps a muted category visible with zero counts", async () => {
+  const mtUser = { userKey: `svc-mtcat-${stamp}`, roles: [], teamKeys: [] };
+  await svc.putMuteRule({
+    principal: mtUser,
+    targetKind: "category",
+    target: "phantom",
+    until: null,
+  });
+  const t = await svc.getMuteTargets({ principal: mtUser });
+  const phantom = t.categories.find((c) => c.name === "phantom");
+  expect(phantom).toBeTruthy();
+  expect(phantom!.total).toBe(0);
 });
 
 test("mute rules round-trip through the service", async () => {

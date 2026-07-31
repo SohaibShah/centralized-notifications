@@ -1,13 +1,17 @@
 import type { Pool } from "pg";
 import type {
+  CategoryMuteTarget,
   FeedSort,
   MuteRule,
   MuteTargetKind,
+  MuteTargetsResponse,
   NotificationCounts,
   NotificationPage,
+  NotificationPriority,
   PreferencesPatch,
   UserPreferences,
 } from "@notifications/shared";
+import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import { createDb } from "./db";
 import { DeliveryHub } from "./delivery/hub";
 import { ingest } from "./pipeline/ingest";
@@ -15,6 +19,7 @@ import type { IngestResult } from "./pipeline/boundary";
 import { PolicyStore } from "./policy/store";
 import { counts } from "./read/counts";
 import { list } from "./read/feed";
+import { muteTargetCounts } from "./read/mute-targets";
 import { markRead, markReadBulk, markUnread } from "./read/read-state";
 import { SummaryEngine } from "./ai/summarize";
 import { createSummaryStore } from "./ai/summary-store";
@@ -125,6 +130,11 @@ export interface NotificationService {
     target: string;
   }): Promise<boolean>;
 
+  /** The modules + categories the caller can snooze/mute, each with their own priority mix. Modules
+   *  come from the host catalog; categories are every category in the caller's notifications plus any
+   *  they've already muted (so a muted target stays visible to un-mute). */
+  getMuteTargets(args: { principal: Principal }): Promise<MuteTargetsResponse>;
+
   /** In-process delivery hub — the SSE transport subscribes here with a principal. */
   readonly delivery: DeliveryHub;
   /** Role that gates admin operations (module toggle, settings). */
@@ -202,5 +212,35 @@ export function createNotificationService(opts: {
       preferences.putRule(args.principal.userKey, args.targetKind, args.target, args.until),
     deleteMuteRule: (args) =>
       preferences.deleteRule(args.principal.userKey, args.targetKind, args.target),
+    getMuteTargets: async (args) => {
+      const [countsByTarget, rules] = await Promise.all([
+        muteTargetCounts(query, args.principal),
+        preferences.listRules(args.principal.userKey),
+      ]);
+      const zero = (): Record<NotificationPriority, number> =>
+        Object.fromEntries(NOTIFICATION_PRIORITIES.map((p) => [p, 0])) as Record<
+          NotificationPriority,
+          number
+        >;
+      // Modules: the host catalog (clean labels), each with this user's mix (0 when they've had none).
+      const modules = opts.config.modules.map((m) => {
+        const c = countsByTarget.modules[m.id];
+        return {
+          id: m.id,
+          label: m.label,
+          byPriority: c?.byPriority ?? zero(),
+          total: c?.total ?? 0,
+        };
+      });
+      // Categories: every category present in the user's notifications, PLUS any they've already muted
+      // (a muted category with no current items would otherwise vanish and be impossible to un-mute).
+      const names = new Set<string>(Object.keys(countsByTarget.categories));
+      for (const r of rules) if (r.targetKind === "category") names.add(r.target);
+      const categories: CategoryMuteTarget[] = [...names].sort().map((name) => {
+        const c = countsByTarget.categories[name];
+        return { name, byPriority: c?.byPriority ?? zero(), total: c?.total ?? 0 };
+      });
+      return { modules, categories };
+    },
   };
 }

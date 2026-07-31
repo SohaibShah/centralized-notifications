@@ -37,6 +37,9 @@ export type {
   PreferencesPatch,
   MuteRule,
   MuteTargetKind,
+  MuteTargetsResponse,
+  ModuleMuteTarget,
+  CategoryMuteTarget,
 } from "@notifications/shared";
 export { createPreferencesStore } from "./preferences/store";
 export { muteWhere, isSuppressed } from "./preferences/mute";

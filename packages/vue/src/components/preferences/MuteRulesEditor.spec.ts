@@ -14,9 +14,14 @@ describe("MuteRulesEditor", () => {
     vi.spyOn(ctx.preferences, "clearMute").mockResolvedValue();
   });
 
+  const zero = { critical: 0, high: 0, normal: 0, low: 0 };
   const mountEditor = () =>
     mount(MuteRulesEditor, {
-      props: { modules: [{ id: "dsr", label: "DSR" }], categories: ["marketing"], timezone: "UTC" },
+      props: {
+        modules: [{ id: "dsr", label: "DSR", byPriority: { ...zero, high: 2 }, total: 2 }],
+        categories: [{ name: "marketing", byPriority: { ...zero }, total: 0 }],
+        timezone: "UTC",
+      },
       global: { provide: { [NOTIFICATIONS_KEY]: ctx } },
     });
 
@@ -27,6 +32,12 @@ describe("MuteRulesEditor", () => {
       "module:dsr",
       "category:marketing",
     ]);
+  });
+
+  it("shows the per-target priority mix", () => {
+    const w = mountEditor();
+    const mix = w.get('[data-target="module:dsr"] [data-test="mute-mix"]');
+    expect(mix.text()).toContain("2 high");
   });
 
   it("shows Active by default, then Muted once a rule exists", async () => {

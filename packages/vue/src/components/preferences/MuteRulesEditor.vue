@@ -1,20 +1,27 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { BellOff, ChevronDown, Clock, RotateCcw } from "@lucide/vue";
-import type { MuteRule, MuteTargetKind } from "@notifications/shared";
+import type {
+  CategoryMuteTarget,
+  ModuleMuteTarget,
+  MuteRule,
+  MuteTargetKind,
+  NotificationPriority,
+} from "@notifications/shared";
 import { usePreferences } from "../../provider/context";
 import { muteStatusLabel, resolveSnoozeUntil, SNOOZE_OPTIONS } from "../../preferences/snooze";
 import Icon from "../../ui/Icon.vue";
 
 /**
- * Per-user snooze/mute editor. Lists the host's module catalog and the categories currently in play;
- * each row lets the user snooze (for a preset duration, in their own timezone) or mute a
- * module/category. Reads/writes through the preferences store; non-snoozable (e.g. critical)
+ * Per-user snooze/mute editor. Lists the host's module catalog and the user's categories (from
+ * /notifications/mute-targets, which always includes anything already muted). Each row shows the
+ * user's own priority mix and lets them snooze (for a preset duration, in their own timezone) or mute
+ * that module/category. Reads/writes through the preferences store; non-snoozable (e.g. critical)
  * notifications are unaffected by these rules and always get through.
  */
 const props = defineProps<{
-  modules: { id: string; label: string }[];
-  categories: string[];
+  modules: ModuleMuteTarget[];
+  categories: CategoryMuteTarget[];
   /** The user's IANA timezone — used to resolve "tomorrow morning". Defaults to the browser's. */
   timezone?: string;
 }>();
@@ -28,12 +35,26 @@ interface Row {
   kind: MuteTargetKind;
   target: string;
   label: string;
+  byPriority: Record<NotificationPriority, number>;
+  total: number;
 }
 const moduleRows = computed<Row[]>(() =>
-  props.modules.map((m) => ({ kind: "module", target: m.id, label: m.label })),
+  props.modules.map((m) => ({
+    kind: "module",
+    target: m.id,
+    label: m.label,
+    byPriority: m.byPriority,
+    total: m.total,
+  })),
 );
 const categoryRows = computed<Row[]>(() =>
-  props.categories.map((c) => ({ kind: "category", target: c, label: c })),
+  props.categories.map((c) => ({
+    kind: "category",
+    target: c.name,
+    label: c.name,
+    byPriority: c.byPriority,
+    total: c.total,
+  })),
 );
 
 function ruleFor(kind: MuteTargetKind, target: string): MuteRule | undefined {
@@ -95,7 +116,7 @@ async function resume(row: Row): Promise<void> {
           :data-target="`${row.kind}:${row.target}`"
           class="flex items-center justify-between gap-3 py-2.5"
         >
-          <div class="min-w-0">
+          <div class="min-w-0 flex-1">
             <p class="truncate text-[13px] font-medium text-text">{{ row.label }}</p>
             <p
               data-test="mute-status"
@@ -104,6 +125,20 @@ async function resume(row: Row): Promise<void> {
             >
               {{ status(row) }}
             </p>
+          </div>
+
+          <!-- The user's own priority mix for this target (same treatment as the admin Modules page). -->
+          <div
+            data-test="mute-mix"
+            class="hidden shrink-0 font-mono text-[10px] tabular-nums sm:block"
+          >
+            <span v-if="row.byPriority.critical" class="mr-1.5 text-danger"
+              >{{ row.byPriority.critical }} crit</span
+            >
+            <span v-if="row.byPriority.high" class="mr-1.5 text-warning"
+              >{{ row.byPriority.high }} high</span
+            >
+            <span class="text-faint">{{ row.byPriority.normal + row.byPriority.low }} other</span>
           </div>
 
           <div class="flex shrink-0 items-center gap-1">

@@ -6,11 +6,10 @@ import {
   preferencesForm,
   usePreferences,
   useTransport,
-  useFeed,
   type FormSchema,
   type FormValues,
 } from "@notifications/vue";
-import type { ToastMinPriority } from "@notifications/shared";
+import type { MuteTargetsResponse, ToastMinPriority } from "@notifications/shared";
 import { useSessionStore } from "@/stores/session";
 
 // Host-owned settings page. It composes library pieces: the notification preference form + the
@@ -18,7 +17,6 @@ import { useSessionStore } from "@/stores/session";
 // because identity/timezone lives in the host, and it saves to the host's own /me/timezone endpoint.
 const transport = useTransport();
 const preferences = usePreferences();
-const feed = useFeed();
 const session = useSessionStore();
 
 const browserTz = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
@@ -49,12 +47,10 @@ const timezoneForm = computed<FormSchema>(() => ({
   submittingLabel: "Saving…",
 }));
 
-const modules = ref<{ id: string; label: string }[]>([]);
-const categories = computed(() =>
-  Array.from(
-    new Set(feed.visibleItems.map((n) => n.category).filter((c): c is string => Boolean(c))),
-  ).sort(),
-);
+// The snooze/mute targets (modules + categories) with the user's priority mix, from a dedicated
+// endpoint — NOT derived from the currently-loaded/filtered feed, so it lists every category the user
+// has (and always includes ones they've already muted).
+const muteTargets = ref<MuteTargetsResponse>({ modules: [], categories: [] });
 
 const savingTz = ref(false);
 const savingPrefs = ref(false);
@@ -65,9 +61,9 @@ onMounted(async () => {
   await preferences.load();
   currentTz.value = session.user?.timezone ?? browserTz;
   try {
-    modules.value = await transport.get<{ id: string; label: string }[]>("/notifications/modules");
+    muteTargets.value = await transport.get<MuteTargetsResponse>("/notifications/mute-targets");
   } catch {
-    modules.value = [];
+    muteTargets.value = { modules: [], categories: [] };
   }
 });
 
@@ -152,7 +148,11 @@ const preferencesInitial = computed<FormValues>(() => ({
           Snoozed or muted modules and categories are hidden from your feed. Critical notifications
           always come through.
         </p>
-        <MuteRulesEditor :modules="modules" :categories="categories" :timezone="currentTz" />
+        <MuteRulesEditor
+          :modules="muteTargets.modules"
+          :categories="muteTargets.categories"
+          :timezone="currentTz"
+        />
       </section>
     </div>
   </div>
