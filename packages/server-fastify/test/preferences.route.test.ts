@@ -76,10 +76,10 @@ test("PATCH with an empty body is 400", async () => {
   expect(res.statusCode).toBe(400);
 });
 
-test("PUT a module mute then GET reflects it; DELETE removes it", async () => {
+test("POST a module mute then GET reflects it; DELETE removes it", async () => {
   const u = `pref-mute-${stamp}`;
   const put = await app.inject({
-    method: "PUT",
+    method: "POST",
     url: "/notifications/mutes/module/dsr",
     headers: asUser(u),
     payload: { until: null },
@@ -111,10 +111,10 @@ test("PUT a module mute then GET reflects it; DELETE removes it", async () => {
   expect(after.json().rules).toEqual([]);
 });
 
-test("PUT a category snooze with a future time succeeds", async () => {
+test("POST a category snooze with a future time succeeds", async () => {
   const future = new Date(Date.now() + 3_600_000).toISOString();
   const res = await app.inject({
-    method: "PUT",
+    method: "POST",
     url: "/notifications/mutes/category/marketing",
     headers: asUser(`pref-cat-${stamp}`),
     payload: { until: future },
@@ -122,10 +122,10 @@ test("PUT a category snooze with a future time succeeds", async () => {
   expect(res.statusCode).toBe(204);
 });
 
-test("PUT rejects an unknown kind, an unknown module, and a past until", async () => {
+test("POST rejects an unknown kind, an unknown module, and a past until", async () => {
   const u = user();
   const badKind = await app.inject({
-    method: "PUT",
+    method: "POST",
     url: "/notifications/mutes/team/eng",
     headers: asUser(u),
     payload: { until: null },
@@ -133,7 +133,7 @@ test("PUT rejects an unknown kind, an unknown module, and a past until", async (
   expect(badKind.statusCode).toBe(400);
 
   const badModule = await app.inject({
-    method: "PUT",
+    method: "POST",
     url: "/notifications/mutes/module/does-not-exist",
     headers: asUser(u),
     payload: { until: null },
@@ -142,7 +142,7 @@ test("PUT rejects an unknown kind, an unknown module, and a past until", async (
 
   const past = new Date(Date.now() - 1000).toISOString();
   const badTime = await app.inject({
-    method: "PUT",
+    method: "POST",
     url: "/notifications/mutes/module/dsr",
     headers: asUser(u),
     payload: { until: past },
@@ -154,7 +154,7 @@ test("all preference endpoints are 401 without auth", async () => {
   for (const [method, url] of [
     ["GET", "/notifications/preferences"],
     ["PATCH", "/notifications/preferences"],
-    ["PUT", "/notifications/mutes/module/dsr"],
+    ["POST", "/notifications/mutes/module/dsr"],
     ["DELETE", "/notifications/mutes/module/dsr"],
   ] as const) {
     const res = await app.inject({ method, url, payload: method === "GET" ? undefined : {} });

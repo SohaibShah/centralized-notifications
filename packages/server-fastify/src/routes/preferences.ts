@@ -47,7 +47,7 @@ export function notificationPreferencesRoutes(
     return reply.code(200).send(updated);
   });
 
-  app.put(
+  app.post(
     "/notifications/mutes/:kind/:target",
     { preHandler: requirePrincipal },
     async (req, reply) => {

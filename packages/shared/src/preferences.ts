@@ -38,7 +38,7 @@ export const muteRuleSchema = z.object({
 });
 export type MuteRule = z.infer<typeof muteRuleSchema>;
 
-/** PUT /notifications/mutes/:kind/:target body. `until` null = mute; ISO datetime = snooze-until
+/** POST /notifications/mutes/:kind/:target body. `until` null = mute; ISO datetime = snooze-until
  *  (the route additionally rejects a non-null value that is not in the future). */
 export const putMuteBodySchema = z.object({
   until: z.string().datetime({ offset: true }).nullable(),
