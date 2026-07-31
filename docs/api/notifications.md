@@ -428,6 +428,264 @@ Zero or more inserts into `notification_reads` — one per id in the batch that 
 to an existing notification **within the caller's [audience](#audience-scoping)** (keyed by
 the authenticated user). No events published.
 
+## Per-user preferences & snooze/mute rules
+
+The authenticated caller's own notification preferences — scalar toggles (grouping, summary
+opt-out, toast threshold) plus a list of **snooze/mute rules** that hide notifications by
+module or category. Every read and write below is **scoped to the caller's `user_key`**
+(`req.principal.userKey`); a user can only ever see or change their own preferences. There is
+no cross-user or admin view here — these are self-service settings, not the admin module policy.
+
+Source of truth:
+[`packages/server-fastify/src/routes/preferences.ts`](../../packages/server-fastify/src/routes/preferences.ts)
+(the routes),
+[`packages/shared/src/preferences.ts`](../../packages/shared/src/preferences.ts) (the shared
+zod shapes, validated on both the frontend and backend),
+[`packages/core/src/preferences/store.ts`](../../packages/core/src/preferences/store.ts) (the
+store), and [`packages/core/src/preferences/mute.ts`](../../packages/core/src/preferences/mute.ts)
+(the enforcement filter).
+
+### Enforcement — where mute/snooze rules take effect
+
+A **snooze/mute rule** hides matching notifications from the caller **everywhere a read is
+audience-scoped**: the [feed](#get-notifications), the [unread counts](#get-notificationscounts),
+the live [SSE stream](./sse.md), and the AI [summary](#post-notificationssummaryrefresh) /
+[chat](#post-notificationschat) grounding sets. A notification is hidden when **all** hold:
+
+- the notification is **`snoozable: true`** (see the [contract](#schema)) — **non-snoozable
+  notifications, e.g. `critical`, always pass through regardless of any rule**; and
+- the caller has an **active** rule whose `targetKind`/`target` matches the notification's
+  `module` or `category`. A rule is active when `mutedUntil` is `null` (muted indefinitely)
+  **or** a future timestamp (snoozed, not yet elapsed); an elapsed snooze stops hiding
+  automatically.
+
+The SQL predicate (feed/counts/AI grounding) and the in-memory twin (delivery hub / SSE) are
+kept lockstep-identical, so "what your feed shows" always equals "what the live stream
+delivers". Per the [global-vs-per-user precedence rule](#design-decisions), these per-user rules
+can only **further** restrict delivery — they never re-enable something an admin has suppressed.
+
+## GET /notifications/modules
+
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
+
+The **module catalog** (`id` + `label` only), readable by **any** authenticated user so the
+settings page can list modules to snooze/mute. This is **not** the admin view — no per-module
+stats, suppressed state, or `base_url` is exposed here.
+
+### Request
+
+No parameters.
+
+### Response `200`
+
+A JSON array of `{ id, label }`:
+
+```json
+[
+  { "id": "dsr", "label": "DSR" },
+  { "id": "access-governance", "label": "Access Governance" },
+  { "id": "data-mapping", "label": "Data Mapping" },
+  { "id": "assessments", "label": "Assessments" }
+]
+```
+
+| Field   | Type   | Notes                                                                   |
+| ------- | ------ | ----------------------------------------------------------------------- |
+| `id`    | string | The module's registry id — the value a `module`-kind mute rule targets. |
+| `label` | string | Human-readable name for the settings UI.                                |
+
+### Errors
+
+| Status | Body                                     | Reason                   |
+| ------ | ---------------------------------------- | ------------------------ |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie. |
+
+### Side effects
+
+None — read-only.
+
+## GET /notifications/preferences
+
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
+
+Returns the caller's scalar preferences plus their list of active snooze/mute [rules](#the-rule-shape).
+Read-only. When the user has never changed anything, the scalars are the stored column defaults
+and `rules` is `[]`.
+
+### Request
+
+No parameters.
+
+### Response `200`
+
+A [`PreferencesResponse`](../../packages/shared/src/preferences.ts) — the scalars plus the rule list:
+
+```json
+{
+  "groupingEnabled": true,
+  "summaryOptOut": false,
+  "toastMinPriority": "critical",
+  "rules": [
+    { "targetKind": "module", "target": "dsr", "mutedUntil": null },
+    { "targetKind": "category", "target": "audit", "mutedUntil": "2026-08-01T08:00:00.000Z" }
+  ]
+}
+```
+
+| Field              | Type                             | Notes                                                                                                                  |
+| ------------------ | -------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| `groupingEnabled`  | boolean                          | Whether the feed threads related notifications by their correlation key.                                               |
+| `summaryOptOut`    | boolean                          | When `true`, the AI [summary](#get-notificationssummary) is suppressed for this user (see below).                      |
+| `toastMinPriority` | `'off' \| 'critical' \| 'high'`  | Which priorities pop the bottom-right toast. `off` = none; `critical` = critical only; `high` = high **and** critical. |
+| `rules`            | array of [rule](#the-rule-shape) | The caller's active snooze/mute rules.                                                                                 |
+
+#### The rule shape
+
+Each entry in `rules` (and the shape written by the mute endpoints below) is a
+[`MuteRule`](../../packages/shared/src/preferences.ts):
+
+| Field        | Type                        | Notes                                                                                                               |
+| ------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `targetKind` | `'module' \| 'category'`    | Whether the rule targets a module (by registry `id`) or a category (free-form string).                              |
+| `target`     | string (1–100 chars)        | The module id or category string being muted.                                                                       |
+| `mutedUntil` | string (ISO 8601) \| `null` | `null` = muted **indefinitely**; an ISO datetime = **snoozed until** that time (after which the rule stops hiding). |
+
+### Errors
+
+| Status | Body                                     | Reason                   |
+| ------ | ---------------------------------------- | ------------------------ |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie. |
+
+### Side effects
+
+None — read-only.
+
+## PATCH /notifications/preferences
+
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
+
+Partial update of the **scalar** preferences (the rules are managed by the mute endpoints
+below, not here). The body is any **non-empty subset** of `groupingEnabled`, `summaryOptOut`,
+`toastMinPriority`; an omitted field keeps its stored value. Returns the **merged** preferences
+(scalars only — no `rules` array).
+
+### Request
+
+Body ([`preferencesPatchSchema`](../../packages/shared/src/preferences.ts) — the scalar shape,
+`.partial()`, refined to reject an empty object):
+
+| Field              | Type                            | Required | Notes                                  |
+| ------------------ | ------------------------------- | -------- | -------------------------------------- |
+| `groupingEnabled`  | boolean                         | no\*     | Enable/disable feed threading.         |
+| `summaryOptOut`    | boolean                         | no\*     | Opt in/out of the AI summary.          |
+| `toastMinPriority` | `'off' \| 'critical' \| 'high'` | no\*     | Toast threshold; other values → `400`. |
+
+\* Each field is individually optional, but the body must contain **at least one** — an empty
+`{}` is rejected with `400`.
+
+```json
+{ "summaryOptOut": true, "toastMinPriority": "high" }
+```
+
+### Response `200`
+
+The merged scalar preferences (no `rules`):
+
+```json
+{ "groupingEnabled": true, "summaryOptOut": true, "toastMinPriority": "high" }
+```
+
+### Errors
+
+| Status | Body                                     | Reason                                                                                            |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid request body" }`    | Empty body (no fields to update), an unknown field type, or a `toastMinPriority` not in the enum. |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                          |
+
+### Side effects
+
+One upsert into the caller's `user_preferences` row. No events published.
+
+## POST /notifications/mutes/:kind/:target
+
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
+
+Creates or updates (**upsert**) a single snooze/mute rule for the caller. Muting a
+module/category that is already muted just overwrites the existing rule's `until`, so this is
+safe to call repeatedly. See [Enforcement](#enforcement--where-mutesnooze-rules-take-effect)
+for what a rule actually does.
+
+### Request
+
+Path parameters:
+
+| Param    | Type                     | Required | Notes                                                                                                                                                                                                   |
+| -------- | ------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `kind`   | `'module' \| 'category'` | yes      | Any other value → `400`.                                                                                                                                                                                |
+| `target` | string (1–100 chars)     | yes      | For `module`, must be a real module id from the [catalog](#get-notificationsmodules) — an unknown id → `400`. For `category`, any non-empty string (categories are free-form; only shape is validated). |
+
+Body ([`putMuteBodySchema`](../../packages/shared/src/preferences.ts)):
+
+| Field   | Type                        | Required | Notes                                                                                                                                                    |
+| ------- | --------------------------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `until` | string (ISO 8601) \| `null` | yes      | `null` = mute **indefinitely**; an ISO datetime = **snooze until** that time. A non-null value **must be in the future** — a past/now timestamp → `400`. |
+
+```json
+{ "until": "2026-08-01T08:00:00.000Z" }
+```
+
+### Response `204`
+
+`204 No Content` — no body.
+
+### Errors
+
+| Status | Body                                         | Reason                                                                    |
+| ------ | -------------------------------------------- | ------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid mute target" }`         | `kind` is not `module`/`category`, or `target` is empty / over 100 chars. |
+| `400`  | `{ "error": "invalid request body" }`        | `until` is missing or not a valid ISO datetime (or `null`).               |
+| `400`  | `{ "error": "until must be in the future" }` | A non-null `until` is at or before now.                                   |
+| `400`  | `{ "error": "unknown module" }`              | `kind` is `module` but `target` is not a registered module id.            |
+| `401`  | `{ "error": "authentication required" }`     | No valid session cookie.                                                  |
+
+### Side effects
+
+One upsert into the caller's `user_mute_rules`. No events published.
+
+## DELETE /notifications/mutes/:kind/:target
+
+**Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
+
+Removes a snooze/mute rule (un-mute / un-snooze). **Idempotent** — removing a rule that isn't
+there still returns `204`, and unlike the `POST` there is **no** module-existence check (you can
+always clear a rule, even for a target that's since been removed from the catalog).
+
+### Request
+
+Path parameters:
+
+| Param    | Type                     | Required | Notes                                 |
+| -------- | ------------------------ | -------- | ------------------------------------- |
+| `kind`   | `'module' \| 'category'` | yes      | Any other value → `400`.              |
+| `target` | string (1–100 chars)     | yes      | The module id or category to un-mute. |
+
+**No request body.**
+
+### Response `204`
+
+`204 No Content` — no body.
+
+### Errors
+
+| Status | Body                                     | Reason                                                                    |
+| ------ | ---------------------------------------- | ------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid mute target" }`     | `kind` is not `module`/`category`, or `target` is empty / over 100 chars. |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                  |
+
+### Side effects
+
+At most one delete from the caller's `user_mute_rules` — zero rows if no such rule existed. No events published.
+
 ## GET /notifications/summary
 
 **Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
@@ -436,7 +694,9 @@ Returns the caller's **persisted AI triage digest** — a short couple-of-senten
 
 Source of truth: [`packages/server-fastify/src/routes/summary.ts`](../../packages/server-fastify/src/routes/summary.ts) (the route + status mapping) and `NotificationService.getStoredSummary` in [`packages/core/src/service.ts`](../../packages/core/src/service.ts).
 
-> **Gated by a feature flag.** The digest is only available when the `aiSummaryEnabled` [setting](../../packages/core/src/types.ts) is on (see the [Admin API](./admin.md) feature flags). With it off the endpoint returns `404`, so a disabled feature is indistinguishable from a route that doesn't exist.
+> **Per-user opt-out.** When the caller's [`summaryOptOut` preference](#get-notificationspreferences) is `true`, the endpoint short-circuits **before** reading the stored summary and returns the **empty shape with `optedOut: true`** (see below). The panel renders an "off" state instead of the digest + reload button.
+
+> **Feature-flag gating is the consumer's concern here.** Unlike the [refresh endpoint](#post-notificationssummaryrefresh), this **read** does **not** call the `AiProvider` and does **not** return `404` when `aiSummaryEnabled` is off — it just reads the stored slot. Hiding the whole summary section when the feature is off is the caller's (panel's) responsibility, via the [feature-flags read endpoint](./admin.md).
 
 ### Request
 
@@ -444,10 +704,13 @@ No parameters. There are no query params, filters, or body.
 
 ### Response `200`
 
-When the caller has a stored summary:
+Every response carries a top-level **`optedOut`** boolean alongside the stored-summary shape.
+
+When the caller has a stored summary and is **not** opted out:
 
 ```json
 {
+  "optedOut": false,
   "summary": "2 critical items need attention: a DSR is 3 days from SLA breach and an access request is awaiting your approval. The rest can wait.",
   "basedOn": 2,
   "generatedAt": "2026-07-30T06:00:00.000Z"
@@ -457,21 +720,27 @@ When the caller has a stored summary:
 When the caller has no stored summary yet (no generation has run for them):
 
 ```json
-{ "summary": null, "basedOn": 0, "generatedAt": null }
+{ "optedOut": false, "summary": null, "basedOn": 0, "generatedAt": null }
 ```
 
-| Field         | Type                | Notes                                                                                                                                                                                                                                         |
-| ------------- | ------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `summary`     | string \| null      | The stored (trimmed) triage text, or `null` when nothing has been generated for the caller yet.                                                                                                                                              |
-| `basedOn`     | number              | How many unread notifications informed the stored summary. `0` when there is no summary yet, **and also** when the summary is a "caught up" marker (see below).                                                                              |
+When the caller has **opted out** — the summary is suppressed regardless of what's stored:
+
+```json
+{ "optedOut": true, "summary": null, "basedOn": 0, "generatedAt": null }
+```
+
+| Field         | Type                      | Notes                                                                                                                                                                                                                                             |
+| ------------- | ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `optedOut`    | boolean                   | `true` when the caller's `summaryOptOut` preference is set — the digest is suppressed and the other three fields are always the empty shape (`null`/`0`/`null`), never a real summary.                                                            |
+| `summary`     | string \| null            | The stored (trimmed) triage text, or `null` when nothing has been generated for the caller yet (or when opted out).                                                                                                                               |
+| `basedOn`     | number                    | How many unread notifications informed the stored summary. `0` when there is no summary yet, **and also** when the summary is a "caught up" marker (see below).                                                                                   |
 | `generatedAt` | string (ISO 8601) \| null | When the stored summary was produced (scheduled or manual refresh). `null` only when there is no stored summary. **`basedOn` of `0` with a _non-null_ `generatedAt` is the "caught up" marker** — a summary was generated but nothing was unread. |
 
 ### Errors
 
-| Status | Body                                     | Reason                                                                                                   |
-| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| `401`  | `{ "error": "authentication required" }` | No valid session cookie / the host `auth` adapter resolved no `Principal`.                               |
-| `404`  | `{ "error": "ai summary disabled" }`     | The `aiSummaryEnabled` feature flag is off — the feature is turned off for everyone (`AiDisabledError`). |
+| Status | Body                                     | Reason                                                                     |
+| ------ | ---------------------------------------- | -------------------------------------------------------------------------- |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie / the host `auth` adapter resolved no `Principal`. |
 
 ### Side effects
 
@@ -487,7 +756,9 @@ Generation reads the same set the [counts](#get-notificationscounts) do (audienc
 
 Source of truth: [`packages/server-fastify/src/routes/summary.ts`](../../packages/server-fastify/src/routes/summary.ts) (the route + status mapping), [`packages/core/src/ai/summarize.ts`](../../packages/core/src/ai/summarize.ts) (`SummaryEngine` — gating, rate limit, provider call), and [`packages/core/src/ai/errors.ts`](../../packages/core/src/ai/errors.ts) (the error → status contract).
 
-> **Gated by the same feature flag.** With `aiSummaryEnabled` off, this returns `404` (`AiDisabledError`), same as the read endpoint.
+> **Gated by the same feature flag.** With `aiSummaryEnabled` off, this returns `404` (`AiDisabledError`) — see the error table below.
+
+> **Per-user opt-out short-circuits generation.** When the caller's [`summaryOptOut` preference](#get-notificationspreferences) is `true`, the endpoint returns `200 { "optedOut": true, "summary": null, "basedOn": 0, "generatedAt": null }` **without** calling the `AiProvider` — the opt-out check runs before the flag/provider/rate-limit gates, so an opted-out user never triggers a generation.
 
 ### Request
 
@@ -495,21 +766,29 @@ No parameters. The endpoint always regenerates from the caller's full audience-s
 
 ### Response `200`
 
-Same shape as the read endpoint returns for a stored summary — the freshly generated summary, now persisted:
+Like the read endpoint, every response carries a top-level **`optedOut`** boolean. For a caller who is **not** opted out, the freshly generated summary (now persisted) is returned:
 
 ```json
 {
+  "optedOut": false,
   "summary": "2 critical items need attention: a DSR is 3 days from SLA breach and an access request is awaiting your approval. The rest can wait.",
   "basedOn": 2,
   "generatedAt": "2026-07-30T14:22:09.117Z"
 }
 ```
 
-| Field         | Type              | Notes                                                                                                            |
-| ------------- | ----------------- | -------------------------------------------------------------------------------------------------------------- |
-| `summary`     | string            | The model-produced (trimmed) triage text. A provider that returns empty content is treated as a `502`, never a blank summary. |
-| `basedOn`     | number            | Size of the (capped, ≤ 25) unread set fed to the model. `0` when nothing was unread ("caught up" marker).       |
-| `generatedAt` | string (ISO 8601) | The just-now generation time this refresh persisted.                                                            |
+For an **opted-out** caller, no generation runs and the empty shape is returned:
+
+```json
+{ "optedOut": true, "summary": null, "basedOn": 0, "generatedAt": null }
+```
+
+| Field         | Type                      | Notes                                                                                                                                                |
+| ------------- | ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `optedOut`    | boolean                   | `true` when the caller's `summaryOptOut` preference is set — no generation ran and the other three fields are the empty shape.                       |
+| `summary`     | string \| null            | The model-produced (trimmed) triage text. A provider that returns empty content is treated as a `502`, never a blank summary. `null` when opted out. |
+| `basedOn`     | number                    | Size of the (capped, ≤ 25) unread set fed to the model. `0` when nothing was unread ("caught up" marker) or when opted out.                          |
+| `generatedAt` | string (ISO 8601) \| null | The just-now generation time this refresh persisted. `null` when opted out (nothing was generated).                                                  |
 
 ### Rate limit
 
@@ -524,13 +803,13 @@ To produce the summary, the caller's unread notification **titles and descriptio
 
 ### Errors
 
-| Status | Body                                     | Reason                                                                                                                   |
-| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `401`  | `{ "error": "authentication required" }` | No valid session cookie / the host `auth` adapter resolved no `Principal`.                                               |
-| `404`  | `{ "error": "ai summary disabled" }`     | The `aiSummaryEnabled` feature flag is off — the feature is turned off for everyone (`AiDisabledError`).                 |
+| Status | Body                                                                    | Reason                                                                                                                         |
+| ------ | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| `401`  | `{ "error": "authentication required" }`                                | No valid session cookie / the host `auth` adapter resolved no `Principal`.                                                     |
+| `404`  | `{ "error": "ai summary disabled" }`                                    | The `aiSummaryEnabled` feature flag is off — the feature is turned off for everyone (`AiDisabledError`).                       |
 | `429`  | `{ "error": "rate limited" }` _or_ `@fastify/rate-limit`'s default body | Per-recipient model limit (`AiRateLimitError`) or the route-level 10/min limit was exceeded (see [Rate limit](#rate-limit-1)). |
-| `501`  | `{ "error": "ai not configured" }`       | No `AiProvider` was injected by the host — the feature is enabled but no model is wired (`AiNotConfiguredError`).        |
-| `502`  | `{ "error": "summary unavailable" }`     | The injected provider failed — timeout, non-2xx, or empty completion (e.g. the local model is down) (`AiProviderError`). |
+| `501`  | `{ "error": "ai not configured" }`                                      | No `AiProvider` was injected by the host — the feature is enabled but no model is wired (`AiNotConfiguredError`).              |
+| `502`  | `{ "error": "summary unavailable" }`                                    | The injected provider failed — timeout, non-2xx, or empty completion (e.g. the local model is down) (`AiProviderError`).       |
 
 ### Side effects
 
