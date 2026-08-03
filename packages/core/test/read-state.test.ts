@@ -2,7 +2,7 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import type { Notification } from "@notifications/shared";
 import { createDb } from "../src/db";
 import { persist } from "../src/pipeline/persist";
-import { markRead, markReadBulk, markUnread } from "../src/read/read-state";
+import { markRead, markReadBulk, markReadGroup, markUnread } from "../src/read/read-state";
 import { testPool } from "./harness";
 
 const pool = testPool();
@@ -60,4 +60,26 @@ test("markReadBulk marks only in-audience ids", async () => {
 test("markUnread removes the caller's read row", async () => {
   await markUnread(query, { principal, id: visibleId });
   expect(await readCount(visibleId)).toBe(0);
+});
+
+test("markReadGroup marks all in-audience members of a group, idempotently, and nothing else", async () => {
+  const g1 = `rs-g1-${stamp}`;
+  const g2 = `rs-g2-${stamp}`;
+  const other = `rs-other-${stamp}`;
+  const hiddenG = `rs-hg-${stamp}`; // same group key, but out-of-audience (team "secret")
+  await persist(query, notif(g1, { scope: "global" }), false, { key: "dsr:#G", label: "G" });
+  await persist(query, notif(g2, { scope: "global" }), false, { key: "dsr:#G", label: "G" });
+  await persist(query, notif(other, { scope: "global" }), false, { key: "dsr:#OTHER", label: "O" });
+  await persist(query, notif(hiddenG, { scope: "team", id: "secret" }), false, {
+    key: "dsr:#G",
+    label: "G",
+  });
+
+  await markReadGroup(query, { principal, group: "dsr:#G" });
+  await markReadGroup(query, { principal, group: "dsr:#G" }); // idempotent — no duplicate rows
+
+  expect(await readCount(g1)).toBe(1);
+  expect(await readCount(g2)).toBe(1);
+  expect(await readCount(other)).toBe(0); // a different group is untouched
+  expect(await readCount(hiddenG)).toBe(0); // an out-of-audience member is never marked
 });

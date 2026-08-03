@@ -64,6 +64,17 @@ describe("StackRow", () => {
     expect(w.emitted("see-all")?.[0]).toEqual(["dsr:#1042", "DSAR #1042"]);
   });
 
+  it("emits mark-all-read with the group key from an unread stack", async () => {
+    const get = vi.fn().mockResolvedValue({ items: [], nextCursor: null });
+    const w = mount(StackRow, {
+      props: { entry: entry({ read: false }), transport: { get } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await w.get('[data-test="stack-mark-all"]').trigger("click");
+    expect(w.emitted("mark-all-read")?.[0]).toEqual(["dsr:#1042"]);
+  });
+
   it("shows an error state with retry when the peek fetch fails", async () => {
     const get = vi.fn().mockRejectedValue(new Error("network"));
     const w = mount(StackRow, {

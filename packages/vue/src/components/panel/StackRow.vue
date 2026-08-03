@@ -25,6 +25,7 @@ const emit = defineEmits<{
   open: [notification: FeedNotification];
   action: [action: NotificationAction, notification: FeedNotification, index: number];
   unread: [notification: FeedNotification];
+  "mark-all-read": [key: string];
   "see-all": [key: string, label: string];
 }>();
 
@@ -108,6 +109,17 @@ async function toggle(): Promise<void> {
     </button>
 
     <div v-if="open" :id="peekId" data-test="stack-peek" class="bg-surface">
+      <!-- Whole-group "Mark all read" — only meaningful on an unread stack. -->
+      <div v-if="!entry.read" class="flex justify-end border-t border-line px-4 py-1.5">
+        <button
+          type="button"
+          data-test="stack-mark-all"
+          class="text-[12px] font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          @click="emit('mark-all-read', entry.groupKey ?? '')"
+        >
+          Mark all read
+        </button>
+      </div>
       <div v-if="loading" class="flex items-center gap-2 px-11 py-3 text-[12px] text-muted">
         <Spinner :size="12" /> Loading…
       </div>

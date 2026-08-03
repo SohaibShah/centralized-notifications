@@ -193,6 +193,37 @@ test("marking read is audience-scoped: out-of-audience id → 404", async () => 
   expect(res.statusCode).toBe(404);
 });
 
+test("POST /notifications/read with { group } marks the whole group read", async () => {
+  const gUser = { "x-test-user": `route-grpread-${stamp}` };
+  const key = `grpread-${stamp}`;
+  await svc.ingest({ ...notif(`gr-a-${stamp}`, { scope: "global" }), metadata: { groupKey: key } });
+  await svc.ingest({ ...notif(`gr-b-${stamp}`, { scope: "global" }), metadata: { groupKey: key } });
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/notifications/read",
+    headers: gUser,
+    payload: { group: `dsr:${key}` },
+  });
+  expect(res.statusCode).toBe(204);
+
+  const feed = await app.inject({ method: "GET", url: "/notifications?limit=100", headers: gUser });
+  const items = (feed.json() as { items: { id: string; read: boolean }[] }).items;
+  const mine = items.filter((i) => i.id.startsWith("gr-"));
+  expect(mine.length).toBeGreaterThanOrEqual(2);
+  expect(mine.every((i) => i.read)).toBe(true);
+});
+
+test("POST /notifications/read with neither ids nor group → 400", async () => {
+  const res = await app.inject({
+    method: "POST",
+    url: "/notifications/read",
+    headers: { "x-test-user": "priya" },
+    payload: {},
+  });
+  expect(res.statusCode).toBe(400);
+});
+
 const dispatchUser = { "x-test-user": `dispatch-caller-${stamp}` };
 
 test("dispatch action: 401 without a principal", async () => {

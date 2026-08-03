@@ -19,6 +19,7 @@ const emit = defineEmits<{
   open: [notification: FeedNotification];
   action: [action: NotificationAction, notification: FeedNotification, index: number];
   unread: [notification: FeedNotification];
+  "mark-all-read": [key: string];
   "see-all": [key: string, label: string];
 }>();
 
@@ -70,6 +71,7 @@ onBeforeUnmount(() => observer?.disconnect());
         @open="(x) => emit('open', x)"
         @action="(a, x, i) => emit('action', a, x, i)"
         @unread="(x) => emit('unread', x)"
+        @mark-all-read="(k) => emit('mark-all-read', k)"
         @see-all="(k, l) => emit('see-all', k, l)"
       />
     </section>

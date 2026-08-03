@@ -35,6 +35,27 @@ export async function markRead(
   return { ok: true };
 }
 
+/**
+ * Mark every member of one group read for a principal — the "Mark all read" on a stack. One row per
+ * member the caller can actually see (the audience gate + suppressed filter drop the rest silently,
+ * same as `markReadBulk`). Per-user, idempotent (ON CONFLICT DO NOTHING), and parameterized. Only
+ * unread members do anything; already-read ones conflict out. Bounded implicitly by the group size.
+ */
+export async function markReadGroup(
+  query: QueryFn,
+  args: { principal: Principal; group: string },
+): Promise<void> {
+  const params: unknown[] = [args.principal.userKey, args.group];
+  const audience = audienceWhere(args.principal, params);
+  await query(
+    `INSERT INTO notification_reads (user_key, notification_id)
+       SELECT $1, n.id FROM notifications n
+        WHERE n.group_key = $2::text AND n.suppressed = false AND ${audience}
+       ON CONFLICT (user_key, notification_id) DO NOTHING`,
+    params,
+  );
+}
+
 /** Undo a read for a principal. Idempotent; per-user; never touches another user's state. */
 export async function markUnread(
   query: QueryFn,

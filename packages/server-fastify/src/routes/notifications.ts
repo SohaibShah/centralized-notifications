@@ -26,7 +26,12 @@ const listQuerySchema = z.object({
 });
 
 const readParamsSchema = z.object({ id: z.string().min(1).max(200) });
-const bulkReadSchema = z.object({ ids: z.array(z.string().min(1).max(200)).min(1).max(500) });
+// Bulk mark-read is either a list of ids ("Mark all read" over the loaded feed) or a whole group
+// ("Mark all read" on a stack) — never both.
+const bulkReadSchema = z.union([
+  z.object({ ids: z.array(z.string().min(1).max(200)).min(1).max(500) }),
+  z.object({ group: z.string().min(1).max(300) }),
+]);
 
 const dispatchParamsSchema = z.object({
   id: z.string().min(1).max(200),
@@ -103,7 +108,9 @@ export function notificationReadRoutes(
     if (!principal) return reply.code(401).send({ error: "authentication required" });
     const parsed = bulkReadSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request body" });
-    await service.markReadBulk({ principal, ids: parsed.data.ids });
+    if ("group" in parsed.data)
+      await service.markReadGroup({ principal, group: parsed.data.group });
+    else await service.markReadBulk({ principal, ids: parsed.data.ids });
     return reply.code(204).send();
   });
 

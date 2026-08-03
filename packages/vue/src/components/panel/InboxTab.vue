@@ -388,6 +388,7 @@ async function onAction(
         @open="(n) => feed.markRead(n.id)"
         @action="onAction"
         @unread="(n) => feed.markUnread(n.id)"
+        @mark-all-read="(key) => feed.markAllReadInGroup(key)"
         @see-all="(key, label) => feed.enterGroup(key, label)"
       />
 

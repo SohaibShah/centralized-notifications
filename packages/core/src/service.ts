@@ -24,7 +24,7 @@ import { counts } from "./read/counts";
 import { list } from "./read/feed";
 import { listGrouped } from "./read/grouped";
 import { muteTargetCounts } from "./read/mute-targets";
-import { markRead, markReadBulk, markUnread } from "./read/read-state";
+import { markRead, markReadBulk, markReadGroup, markUnread } from "./read/read-state";
 import { SummaryEngine } from "./ai/summarize";
 import { createSummaryStore } from "./ai/summary-store";
 import { createPreferencesStore } from "./preferences/store";
@@ -79,6 +79,8 @@ export interface NotificationService {
   counts(args: { principal: Principal }): Promise<NotificationCounts>;
   markRead(args: { principal: Principal; id: string }): Promise<void>;
   markReadBulk(args: { principal: Principal; ids: string[] }): Promise<void>;
+  /** Mark every visible member of one group read (a stack's "Mark all read"). */
+  markReadGroup(args: { principal: Principal; group: string }): Promise<void>;
   markUnread(args: { principal: Principal; id: string }): Promise<void>;
 
   /** Forward a user's `dispatch` action to its owning module and relay the module's response. Throws
@@ -203,6 +205,7 @@ export function createNotificationService(opts: {
       if (!result.ok) throw new NotFoundError();
     },
     markReadBulk: (args) => markReadBulk(query, args),
+    markReadGroup: (args) => markReadGroup(query, args),
     markUnread: (args) => markUnread(query, args),
     dispatchAction: (args) =>
       dispatchAction({ query, policy, dispatcher: opts.config.actionDispatcher }, args),

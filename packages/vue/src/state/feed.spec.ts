@@ -234,6 +234,15 @@ describe("feed store", () => {
     expect(String(call![0])).toContain("sort=priority-high");
   });
 
+  it("markAllReadInGroup posts { group } and refetches the stacks", async () => {
+    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.markAllReadInGroup("dsr:#1042");
+    expect(postMock).toHaveBeenCalledWith("/notifications/read", { group: "dsr:#1042" });
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
+  });
+
   it("enterGroup loads that group's members flat; exitGroup clears it", async () => {
     const feed = makeFeed();
     getMock.mockResolvedValue(page([feedItem({ id: "m1" }), feedItem({ id: "m2" })], null));

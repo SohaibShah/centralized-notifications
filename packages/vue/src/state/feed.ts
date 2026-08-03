@@ -491,6 +491,21 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     }
   }
 
+  /**
+   * Mark an entire group read (a stack's "Mark all read"). The server owns the grouped aggregates, so
+   * rather than optimistically reshuffle stacks, persist and refetch — the unread stack collapses and
+   * the same subject's read stack in Earlier absorbs it. `loadGrouped` also refreshes the counts.
+   */
+  async function markAllReadInGroup(key: string): Promise<void> {
+    if (!key) return;
+    try {
+      await deps.transport.post("/notifications/read", { group: key });
+      await loadGrouped();
+    } catch {
+      console.warn("[feed] mark-group-read failed");
+    }
+  }
+
   // --- filtering + grouping -------------------------------------------------
   const availableModules = computed(() =>
     [...new Set(items.value.map((n) => n.module))].sort((a, b) => a.localeCompare(b)),
@@ -629,6 +644,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     setActions,
     flushSessionReads,
     markAllReadInScope,
+    markAllReadInGroup,
     onLiveAlert,
     togglePriority,
     toggleModule,
