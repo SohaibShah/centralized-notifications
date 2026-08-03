@@ -108,14 +108,14 @@ The match runs in SQL against the principal's arrays passed as bound parameters 
 
 Query parameters:
 
-| Param     | Type                           | Required | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               |
-| --------- | ------------------------------ | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `limit`   | integer                        | no       | Page size. Default `25`, min `1`, max `100`. Coerced from the query string; out-of-range or non-numeric → `400`.                                                                                                                                                                                                                                                                                                                                                                                                    |
-| `cursor`  | string (opaque)                | no       | The `nextCursor` from a previous page. **Opaque** — only ever pass back a value the server handed out; a malformed/undecodable cursor → `400`. **Sort- and view-scoped** (see below): a cursor is only valid under the same `sort` and `view` it was issued for.                                                                                                                                                                                                                                                    |
-| `sort`    | enum                           | no       | Feed ordering. One of `newest`, `oldest`, `priority-high`, `priority-low`. Default `newest` (the prior behavior). Any other value → `400`. See the ordering table below.                                                                                                                                                                                                                                                                                                                                            |
-| `view`    | enum                           | no       | Which slice of the audience-scoped feed to return. One of `active` (default) or `muted`. `active` is the normal feed — notifications the caller can see with their [mute/snooze rules](#enforcement--where-mutesnooze-rules-take-effect) applied. `muted` returns **only** the notifications currently hidden by those rules — i.e. rows that are `snoozable: true` **and** match an active mute/snooze rule on their `module` or `category`. Any other value → `400`. See [Views](#views) below.                   |
-| `grouped` | `"true"` \| `"false"` (string) | no       | Default `"false"`. When `"true"`, returns the **collapsed grouped feed** — one entry per stack (or standalone notification) instead of the flat list. The response shape changes to a [`GroupedPage`](#grouping), not the flat `{ items, nextCursor }`. Audience-scoped and mute-filtered exactly like the flat feed, keyset-paginated newest-activity-first. Any value other than `"true"`/`"false"` → `400 invalid query parameters`. **Mutually exclusive with `group`** (see below). See [Grouping](#grouping). |
-| `group`   | string (1–300 chars)           | no       | The **"See all" drill-in**: restricts the flat feed to a single group's members, identified by the group's [`groupKey`](#grouping). Reuses the normal flat feed shape (`{ items, nextCursor }`) and pagination. **Mutually exclusive with `grouped=true`** (see below). See [Grouping](#grouping).                                                                                                                                                                                                                  |
+| Param     | Type                           | Required | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| --------- | ------------------------------ | -------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit`   | integer                        | no       | Page size. Default `25`, min `1`, max `100`. Coerced from the query string; out-of-range or non-numeric → `400`.                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| `cursor`  | string (opaque)                | no       | The `nextCursor` from a previous page. **Opaque** — only ever pass back a value the server handed out; a malformed/undecodable cursor → `400`. **Sort- and view-scoped** (see below): a cursor is only valid under the same `sort` and `view` it was issued for.                                                                                                                                                                                                                                                                                          |
+| `sort`    | enum                           | no       | Feed ordering. One of `newest`, `oldest`, `priority-high`, `priority-low`. Default `newest` (the prior behavior). Any other value → `400`. See the ordering table below.                                                                                                                                                                                                                                                                                                                                                                                  |
+| `view`    | enum                           | no       | Which slice of the audience-scoped feed to return. One of `active` (default) or `muted`. `active` is the normal feed — notifications the caller can see with their [mute/snooze rules](#enforcement--where-mutesnooze-rules-take-effect) applied. `muted` returns **only** the notifications currently hidden by those rules — i.e. rows that are `snoozable: true` **and** match an active mute/snooze rule on their `module` or `category`. Any other value → `400`. See [Views](#views) below.                                                         |
+| `grouped` | `"true"` \| `"false"` (string) | no       | Default `"false"`. When `"true"`, returns the **collapsed grouped feed** — one entry per stack (or standalone notification) instead of the flat list. The response shape changes to a [`GroupedPage`](#grouping), not the flat `{ items, nextCursor }`. Audience-scoped, mute-filtered, and **ordered by the same [`sort`](#request) param** as the flat feed (default `newest`), keyset-paginated. Any value other than `"true"`/`"false"` → `400 invalid query parameters`. **Mutually exclusive with `group`** (see below). See [Grouping](#grouping). |
+| `group`   | string (1–300 chars)           | no       | The **"See all" drill-in**: restricts the flat feed to a single group's members, identified by the group's [`groupKey`](#grouping). Reuses the normal flat feed shape (`{ items, nextCursor }`) and pagination. **Mutually exclusive with `grouped=true`** (see below). See [Grouping](#grouping).                                                                                                                                                                                                                                                        |
 
 **Ordering & pagination.** Keyset-paginated — there is **no `OFFSET`** (NFR-2), so a deep page costs the same as the first, and deliberately **no total count** (keyset paging never scans to one). The `sort` param selects the ordering:
 
@@ -126,7 +126,7 @@ Query parameters:
 | `priority-high` | Priority high→low: `critical`, then `high`, then `normal`, then `low`. Within a single priority level, newest first. |
 | `priority-low`  | Priority low→high: `low`, then `normal`, then `high`, then `critical`. Within a single priority level, newest first. |
 
-**Sort-, view-, and group-scoped cursor.** `cursor` is an opaque base64url token encoding the last returned row's ordering key **and the `sort`, `view`, and `group` it was issued under**; clients must treat it as opaque. The keyset predicate is sort-specific, the `view` selects a different row set, and the `group` filter narrows to one stack's members, so a cursor is only valid when replayed under the same `sort`, `view`, **and** `group` — passing a cursor issued under one `sort`/`view`/`group` with a different value (e.g. a cursor issued under one `group` replayed under another) returns `400 { "error": "invalid cursor" }`, the same response as a malformed/undecodable cursor. In normal use this never happens: when the user changes sort, view, or drills into a group, the client refetches page 1 (no cursor) rather than reusing the previous page's cursor. The [grouped feed](#grouping) (`grouped=true`) uses its **own** cursor, valid only for the grouped read.
+**Sort-, view-, and group-scoped cursor.** `cursor` is an opaque base64url token encoding the last returned row's ordering key **and the `sort`, `view`, and `group` it was issued under**; clients must treat it as opaque. The keyset predicate is sort-specific, the `view` selects a different row set, and the `group` filter narrows to one stack's members, so a cursor is only valid when replayed under the same `sort`, `view`, **and** `group` — passing a cursor issued under one `sort`/`view`/`group` with a different value (e.g. a cursor issued under one `group` replayed under another) returns `400 { "error": "invalid cursor" }`, the same response as a malformed/undecodable cursor. In normal use this never happens: when the user changes sort, view, or drills into a group, the client refetches page 1 (no cursor) rather than reusing the previous page's cursor. The [grouped feed](#grouping) (`grouped=true`) uses its **own** cursor, valid only for the grouped read and **sort-scoped** the same way (a grouped cursor issued under one `sort` is rejected under another).
 
 #### Views
 
@@ -143,7 +143,7 @@ A **non-`snoozable` notification is never in the `muted` view** — the `snoozab
 
 The feed can be read in two grouping modes, selected by the [`grouped`](#request) and [`group`](#request) query params. The two are **mutually exclusive** — passing `grouped=true` together with `group=<key>` returns `400 { "error": "grouped and group are mutually exclusive" }`.
 
-- **`grouped=true` — the collapsed grouped feed.** Returns one entry per stack (or standalone notification) instead of the flat list, keyset-paginated newest-activity-first. Audience-scoped and mute-filtered exactly like the flat feed. The response is a **`GroupedPage`** (not the flat `{ items, nextCursor }`):
+- **`grouped=true` — the collapsed grouped feed.** Returns one entry per stack (or standalone notification) instead of the flat list, keyset-paginated. Audience-scoped and mute-filtered exactly like the flat feed. **Honors the same [`sort`](#request) param as the flat feed** (`newest` | `oldest` | `priority-high` | `priority-low`, default `newest`) — see [ordering](#grouped-ordering) below. The response is a **`GroupedPage`** (not the flat `{ items, nextCursor }`):
 
   ```json
   {
@@ -162,7 +162,6 @@ The feed can be read in two grouping modes, selected by the [`grouped`](#request
         "groupKey": "dsr-1234",
         "groupLabel": "DSR #1234",
         "groupTotal": 4,
-        "groupUnread": 2,
         "topPriority": "critical"
       }
     ],
@@ -170,15 +169,22 @@ The feed can be read in two grouping modes, selected by the [`grouped`](#request
   }
   ```
 
-  A **`GroupedEntry`** is a normal [feed item](#feednotification) — the group's most-recent "representative" member — **plus** three group-summary fields:
+  A **`GroupedEntry`** is a normal [feed item](#feednotification) — the group's most-recent "representative" member for this entry's read-state — **plus** two group-summary fields:
 
-  | Field         | Type                                        | Notes                                                                                                          |
-  | ------------- | ------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-  | `groupTotal`  | integer (≥ 1)                               | Number of members in the stack. A standalone (ungrouped) notification is a group of `1`.                       |
-  | `groupUnread` | integer                                     | Number of unread members in the stack (per the requesting user's read state).                                  |
-  | `topPriority` | `'critical' \| 'high' \| 'normal' \| 'low'` | The highest-severity priority present anywhere in the stack — may differ from the representative's `priority`. |
+  | Field         | Type                                        | Notes                                                                                                                                                                         |
+  | ------------- | ------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `groupTotal`  | integer (≥ 1)                               | Number of members in **this (group, read-state) partition** — see [read-state split](#grouped-read-state-split). A standalone (ungrouped) notification is a partition of `1`. |
+  | `topPriority` | `'critical' \| 'high' \| 'normal' \| 'low'` | The highest-severity priority present in **this partition** — may differ from the representative's `priority`.                                                                |
 
-  `nextCursor` is the grouped feed's **own** cursor, valid only for a subsequent `grouped=true` read (see the [cursor note](#request) above); it is not interchangeable with the flat feed's cursor.
+  There is **no `groupUnread` field** — that field was removed. Because entries are split by read-state (below), unread vs. read counts are read directly off the two entries a subject produces rather than from a single blended entry.
+
+  <a id="grouped-read-state-split"></a>
+  **Read-state split.** A `GroupedEntry` is scoped to **one read-state**. A subject (`groupKey`) with _both_ read and unread members returns **two entries** — one for its unread members (`read: false`) and one for its read members (`read: true`) — not a single blended entry. Consequently, every per-entry field is computed **within that read-state partition**, not over the whole subject: `groupTotal` counts only the members sharing this entry's `read` value, `topPriority` is the most-severe priority among them, and the representative (the `id`/`title`/`createdAt`/etc. carried at top level) is the most-recent member of that partition. A subject whose members are all read (or all unread) produces a single entry, as before. Standalone (ungrouped) rows are each their own entry, partitioned by `id`.
+
+  <a id="grouped-ordering"></a>
+  **Ordering.** The `sort` param orders the entries the same way it orders the flat feed. Under `newest`/`oldest`, entries are ordered by their representative's `createdAt` (the group's latest member). Under `priority-high`/`priority-low`, each entry is ranked by its **most-severe member** (`topPriority`), newest-first within a priority level. Default is `newest`.
+
+  `nextCursor` is the grouped feed's **own** cursor, valid only for a subsequent `grouped=true` read; it is **sort-scoped** like the flat feed's — a grouped cursor issued under one `sort` replayed under a different `sort` returns `400 { "error": "invalid cursor" }`. It is not interchangeable with the flat feed's cursor. In normal use this never happens: changing sort refetches page 1 with no cursor.
 
 - **`group=<key>` — the "See all" drill-in.** Restricts the (flat) feed to a single group's members, identified by the group's `groupKey`. Reuses the normal flat feed shape (`{ items, nextCursor }`) and the same ordering and pagination; the cursor is additionally scoped to the `group` filter (see the [cursor note](#request) above).
 
@@ -438,23 +444,32 @@ Per the [notifications domain rules](../../.claude/rules/notifications-domain.md
 
 **Auth:** required — the host `auth` adapter must resolve a `Principal` (`requirePrincipal`; `401` if it returns `null`). In the reference app that means a valid `session` cookie.
 
-Bulk mark-read for the current user — what the panel's "mark all read" calls. Marks each
-id in the batch read **for the caller**; read state is per-user, so this only ever affects
+Bulk mark-read for the current user — what the panel's "mark all read" calls. Accepts
+**one of two** request bodies: an explicit **`ids` list** ("mark all read" over the loaded
+feed) **or** a **`group` key** ("mark all read" on a stack, which marks every
+audience-visible member of that group). Read state is per-user, so this only ever affects
 the caller's own `notification_reads` rows, same as the single-id endpoint above.
 
 Source of truth: [`packages/server-fastify/src/routes/notifications.ts`](../../packages/server-fastify/src/routes/notifications.ts) (the route) and [`packages/core/src/read/`](../../packages/core/src/read/) (the query logic).
 
 ### Request
 
-Body:
+Body — a **union** of two mutually-exclusive shapes ([`bulkReadSchema`](../../packages/server-fastify/src/routes/notifications.ts)); send **exactly one** of `ids` or `group`. A body with **neither** (or one that matches neither shape) → `400 { "error": "invalid request body" }`.
 
-| Field | Type       | Required | Notes                                                                                                                    |
-| ----- | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `ids` | `string[]` | yes      | 1–500 ids per request (batch capped so one call can't ask to write an unbounded set). Each id is 1–200 chars, non-empty. |
+| Field   | Type       | Required       | Notes                                                                                                                                                                            |
+| ------- | ---------- | -------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ids`   | `string[]` | one of the two | 1–500 ids per request (batch capped so one call can't ask to write an unbounded set). Each id is 1–200 chars, non-empty. Marks each listed id read.                              |
+| `group` | string     | one of the two | A group's [`groupKey`](#grouping) (1–300 chars). Marks **every audience-visible member of that group** read — the server resolves the members, the client doesn't enumerate ids. |
 
 ```json
 { "ids": ["dsr-1234-sla-warning-72h", "scan-run-556-sensitive-found"] }
 ```
+
+```json
+{ "group": "dsr-1234" }
+```
+
+**The `group` form is audience-scoped and idempotent too.** It marks read only the group members that fall within the caller's [audience](#audience-scoping) — a member addressed to someone else is never touched, and the same `INSERT … ON CONFLICT DO NOTHING` mechanism means marking an already-read group (or replaying the call) is a no-op. A `group` key that resolves to no visible members simply writes nothing and still returns `204`.
 
 **Unknown and out-of-audience ids are silently skipped.** Unlike the single-id endpoint
 (which 404s for an id it can't see), the bulk endpoint filters the batch down to ids that
@@ -474,21 +489,22 @@ never creates duplicate rows.
 ### Response `204`
 
 `204 No Content` — no body. A subsequent [`GET /notifications`](#get-notifications) then
-returns `read: true` for every id in the batch that existed **and was in the caller's
-audience**, for this user.
+returns `read: true` for every id in the batch (`ids` form) or every audience-visible member
+of the group (`group` form) that existed **and was in the caller's audience**, for this user.
 
 ### Errors
 
-| Status | Body                                     | Reason                                                                                                        |
-| ------ | ---------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `400`  | `{ "error": "invalid request body" }`    | `ids` is missing, empty, has more than 500 entries, or contains an id that is empty or longer than 200 chars. |
-| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                                      |
+| Status | Body                                     | Reason                                                                                                                                                                             |
+| ------ | ---------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | `{ "error": "invalid request body" }`    | The body matches **neither** union shape: `ids` and `group` both absent; `ids` empty, over 500 entries, or containing an id empty/over 200 chars; or `group` empty/over 300 chars. |
+| `401`  | `{ "error": "authentication required" }` | No valid session cookie.                                                                                                                                                           |
 
 ### Side effects
 
-Zero or more inserts into `notification_reads` — one per id in the batch that corresponds
-to an existing notification **within the caller's [audience](#audience-scoping)** (keyed by
-the authenticated user). No events published.
+Zero or more inserts into `notification_reads` (keyed by the authenticated user) — for the
+`ids` form, one per id in the batch that corresponds to an existing notification **within the
+caller's [audience](#audience-scoping)**; for the `group` form, one per audience-visible
+member of the named group. No events published.
 
 ## Per-user preferences & snooze/mute rules
 
