@@ -211,7 +211,6 @@ describe("feed store", () => {
           groupKey: "dsr:#1",
           groupLabel: "DSAR #1",
           groupTotal: 3,
-          groupUnread: 2,
           topPriority: "high",
         },
       ],

@@ -21,8 +21,10 @@ const emit = defineEmits<{
   "see-all": [key: string, label: string];
 }>();
 
-const needsAction = computed(() => props.entries.filter((e) => e.groupUnread > 0));
-const earlier = computed(() => props.entries.filter((e) => e.groupUnread === 0));
+// Each entry is read-state-homogeneous (the grouped read partitions by read), so an unread stack
+// lands in Needs action and a read stack in Earlier — split on the entry's own read flag.
+const needsAction = computed(() => props.entries.filter((e) => !e.read));
+const earlier = computed(() => props.entries.filter((e) => e.read));
 const showEarlier = ref(true);
 
 const scroller = ref<HTMLElement | null>(null);

@@ -9,7 +9,6 @@ const entry = (over: Partial<GroupedEntry> = {}): GroupedEntry => ({
   groupKey: "dsr:#1042",
   groupLabel: "DSAR #1042",
   groupTotal: 4,
-  groupUnread: 2,
   topPriority: "high",
   ...over,
 });

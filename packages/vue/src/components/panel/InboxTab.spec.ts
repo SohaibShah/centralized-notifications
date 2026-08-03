@@ -118,7 +118,6 @@ describe("InboxTab", () => {
             groupKey: "dsr:#1042",
             groupLabel: "DSAR #1042",
             groupTotal: 3,
-            groupUnread: 2,
             topPriority: "high",
           },
         ],

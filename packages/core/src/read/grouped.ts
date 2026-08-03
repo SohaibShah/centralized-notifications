@@ -47,7 +47,6 @@ interface GroupedRow {
   group_key: string | null;
   group_label: string | null;
   group_total: number;
-  group_unread: number;
   top_priority: NotificationPriority;
 }
 
@@ -83,16 +82,17 @@ function toEntry(row: GroupedRow): GroupedEntry {
     ...(row.group_key != null ? { groupKey: row.group_key } : {}),
     ...(row.group_label != null ? { groupLabel: row.group_label } : {}),
     groupTotal: row.group_total,
-    groupUnread: row.group_unread,
     topPriority: row.top_priority,
   };
 }
 
 /**
- * One collapsed entry per group (its most-recent member = representative), annotated with per-group
- * total / unread / top priority via window aggregates. Standalone rows (group_key IS NULL) are their
- * own entries (partitioned by id). Keyset-paginated by the representative (created_at, id); NFR-2 (no
- * OFFSET, no total). Audience-scoped + mute-filtered, mirroring the flat feed.
+ * One collapsed entry per (group, read-state) — a subject with both read and unread members yields
+ * two entries (an unread stack → Needs action, a read stack → Earlier), each with its own most-recent
+ * member as representative and its own `group_total` / `top_priority` window aggregates. Standalone
+ * rows (group_key IS NULL) are their own entries (partitioned by id). Keyset-paginated by the
+ * representative (created_at, id); NFR-2 (no OFFSET, no total). Audience-scoped + mute-filtered,
+ * mirroring the flat feed.
  */
 export async function listGrouped(query: QueryFn, args: GroupedArgs): Promise<GroupedResult> {
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
@@ -123,17 +123,15 @@ export async function listGrouped(query: QueryFn, args: GroupedArgs): Promise<Gr
      ),
      ranked AS (
        SELECT *,
-         row_number() OVER (PARTITION BY entry_key ORDER BY created_at DESC, id DESC) AS rn,
-         count(*)                             OVER (PARTITION BY entry_key) AS group_total,
-         count(*) FILTER (WHERE read = false) OVER (PARTITION BY entry_key) AS group_unread,
-         first_value(priority) OVER (PARTITION BY entry_key ORDER BY priority_rank ASC
+         row_number() OVER (PARTITION BY entry_key, read ORDER BY created_at DESC, id DESC) AS rn,
+         count(*)              OVER (PARTITION BY entry_key, read) AS group_total,
+         first_value(priority) OVER (PARTITION BY entry_key, read ORDER BY priority_rank ASC
                                      ROWS BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) AS top_priority
          FROM scoped
      )
      SELECT id, module, title, description, priority, snoozable, category,
             audience_scope, audience_id, actions, metadata, source_ts,
-            group_key, group_label, group_total::int AS group_total,
-            group_unread::int AS group_unread, top_priority,
+            group_key, group_label, group_total::int AS group_total, top_priority,
             to_char(created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.USZ') AS created_iso,
             read
        FROM ranked

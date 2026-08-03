@@ -27,6 +27,7 @@ beforeAll(async () => {
     ["b", "DSAR #1042 overdue", "critical"], // same group, higher severity, newest
     ["c", "Weekly report ready", "high"], // kind group of 1
     ["d", "2026-02-02 09:00", "high"], // null group_key (template empties) — standalone via COALESCE
+    ["e", "DSAR #1042 acknowledged", "high"], // same subject, but read → its own read-state stack
   ];
   for (const [sfx, title, p] of rows) {
     const n = mk(`${user.userKey}-${sfx}`, title, p);
@@ -34,16 +35,25 @@ beforeAll(async () => {
     // both in the within-group row_number() and the outer keyset — so "b" wins its group regardless.
     await persist(query, n, false, strat.keyFor(n));
   }
+  // "e" is read: it must split off into a separate read-state stack, not fold into the unread one.
+  await query(`INSERT INTO notification_reads (user_key, notification_id) VALUES ($1, $2)`, [
+    user.userKey,
+    `${user.userKey}-e`,
+  ]);
 });
 
-test("one entry per group; aggregates + topPriority correct; standalone as total 1", async () => {
+test("a subject with read + unread yields two entries, each counted by section", async () => {
   const res = await listGrouped(query, { principal: user, limit: 50 });
   if (!res.ok) throw new Error(res.error);
-  const dsar = res.page.entries.find((e) => e.groupKey === "dsr:#1042")!;
-  expect(dsar.groupTotal).toBe(2);
-  expect(dsar.groupUnread).toBe(2);
-  expect(dsar.topPriority).toBe("critical"); // min priority_rank in the group
-  expect(dsar.title).toContain("overdue"); // representative = most recent member
+  const stacks = res.page.entries.filter((e) => e.groupKey === "dsr:#1042");
+  expect(stacks.length).toBe(2); // one unread stack, one read stack
+  const unread = stacks.find((e) => !e.read)!;
+  const read = stacks.find((e) => e.read)!;
+  expect(unread.groupTotal).toBe(2); // a + b, both unread
+  expect(unread.topPriority).toBe("critical"); // min priority_rank in the unread partition
+  expect(unread.title).toContain("overdue"); // representative = most recent member
+  expect(read.groupTotal).toBe(1); // e, read
+  expect("groupUnread" in unread).toBe(false); // per-section count replaces the unread aggregate
   // A kind-group with a single member renders as its own entry (total 1).
   const solo = res.page.entries.find((e) => e.title.includes("Weekly"))!;
   expect(solo.groupTotal).toBe(1);
@@ -59,12 +69,13 @@ test("keyset-paginates the grouped feed with no overlap or skip", async () => {
   for (let i = 0; i < 10; i++) {
     const res = await listGrouped(query, { principal: user, limit: 1, cursor });
     if (!res.ok) throw new Error(res.error);
-    for (const e of res.page.entries) seen.push(e.groupKey ?? e.id);
+    for (const e of res.page.entries) seen.push(e.id); // representative id is unique per (group, read) entry
     if (!res.page.nextCursor) break;
     cursor = res.page.nextCursor;
   }
-  // Three distinct entries: the dsr:#1042 stack, the Weekly kind-group-of-1, the null-key standalone.
-  expect(seen.length).toBe(3);
+  // Four distinct entries: dsr:#1042 unread stack, dsr:#1042 read stack, Weekly kind-group-of-1,
+  // null-key standalone — the read-split turns the one subject into two.
+  expect(seen.length).toBe(4);
   expect(new Set(seen).size).toBe(seen.length); // no dupes across pages
 });
 

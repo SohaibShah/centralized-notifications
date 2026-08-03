@@ -91,16 +91,16 @@ async function toggle(): Promise<void> {
       <span class="min-w-0 flex-1 truncate font-display text-[13px] font-semibold text-text">
         {{ entry.groupLabel }}
       </span>
-      <span
-        v-if="entry.groupUnread > 0"
-        data-test="stack-unread"
-        :aria-label="`${entry.groupUnread} unread`"
-        class="shrink-0 rounded-full bg-accent/10 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-accent"
-        >{{ entry.groupUnread }}</span
+      <time
+        data-test="stack-time"
+        :datetime="entry.createdAt"
+        :title="entry.createdAt"
+        class="shrink-0 font-mono text-[11px] tabular-nums text-faint"
+        >{{ relativeTime(entry.createdAt) }}</time
       >
       <span
         data-test="stack-total"
-        :aria-label="`${entry.groupTotal} total`"
+        :aria-label="`${entry.groupTotal} in this group`"
         class="shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted"
         >{{ entry.groupTotal }}</span
       >
