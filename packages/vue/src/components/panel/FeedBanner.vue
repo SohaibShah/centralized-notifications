@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Component } from "vue";
+import { X } from "@lucide/vue";
 import Icon from "../../ui/Icon.vue";
 
 // A compact feed-mode banner: an icon + label, optionally a one-click exit. Used by the muted view
@@ -22,7 +23,7 @@ defineEmits<{ exit: [] }>();
       class="ml-auto inline-flex items-center gap-1 rounded-md border border-line px-2 py-0.5 text-[11px] font-semibold text-muted hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       @click="$emit('exit')"
     >
-      ✕ {{ exitLabel }}
+      <Icon :icon="X" :size="11" aria-hidden="true" /> {{ exitLabel }}
     </button>
   </div>
 </template>

@@ -348,7 +348,9 @@ async function onAction(
         title="Couldn't load your notifications"
         :description="feed.error ?? 'Check your connection and try again.'"
       >
-        <Button variant="secondary" size="sm" @click="feed.load()">Try again</Button>
+        <Button variant="secondary" size="sm" @click="showStacks ? feed.loadGrouped() : feed.load()"
+          >Try again</Button
+        >
       </StatePanel>
 
       <StatePanel

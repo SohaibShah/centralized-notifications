@@ -192,6 +192,18 @@ exactly as today. No new persistence — both toggles already exist.
 - Redis-stream / notifications-domain rules unaffected (grouping is a read/presentation concern;
   ingest still idempotent, mute/audience unchanged).
 
+## Known cost characteristic (grouped read)
+
+The `grouped=true` collapsed read aggregates whole groups (window functions over the caller's full
+audience-scoped, un-muted set) before the outer keyset `LIMIT` trims the output — so a grouped **page's
+cost scales with the user's total visible notification count, not the page size**. This is inherent to
+collapsed grouping (you must see all of a group's members to count/rank them) and does not apply to the
+flat feed or the `?group=` drill-in (both keyset-bounded, and the drill-in is served by the
+`notifications_group_key_idx` partial index). It's an accepted trade-off of the server-assisted design;
+**flag for a mentor sanity-check on the expected per-user volume ceiling** before it matters at scale.
+A future optimization (materialized per-group summaries, or a `group_key`-anchored index strategy) can
+reduce it without changing the API.
+
 ## Dependency / sequencing
 
 The "See all" group view reuses the **muted-view banner + one-click-exit** pattern. `feat/muted-view`

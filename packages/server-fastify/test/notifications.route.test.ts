@@ -140,8 +140,15 @@ test("grouped=true returns collapsed entries with per-group totals", async () =>
     headers: { "x-test-user": "priya", "x-test-teams": "eng" },
   });
   expect(res.statusCode).toBe(200);
-  const body = res.json() as { entries: unknown[] };
+  const body = res.json() as { entries: { groupTotal: number; topPriority: string }[] };
   expect(Array.isArray(body.entries)).toBe(true);
+  expect(body.entries.length).toBeGreaterThan(0);
+  // Every collapsed entry carries the per-group aggregates.
+  for (const e of body.entries) {
+    expect(typeof e.groupTotal).toBe("number");
+    expect(e.groupTotal).toBeGreaterThanOrEqual(1);
+    expect(typeof e.topPriority).toBe("string");
+  }
 });
 
 test("grouped + group together → 400", async () => {

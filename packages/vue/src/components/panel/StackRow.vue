@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { ChevronRight } from "@lucide/vue";
+import { computed, ref } from "vue";
+import { ArrowRight, ChevronRight } from "@lucide/vue";
 import type {
   FeedNotification,
   GroupedEntry,
@@ -31,22 +31,30 @@ const PEEK = 3;
 const open = ref(false);
 const peek = ref<FeedNotification[] | null>(null);
 const loading = ref(false);
+const peekError = ref(false);
+
+// A stable id so the header's aria-controls can point at the expanded peek region.
+const peekId = computed(() => `stack-peek-${props.entry.groupKey ?? props.entry.id}`);
+
+async function fetchPeek(): Promise<void> {
+  if (!props.entry.groupKey) return;
+  loading.value = true;
+  peekError.value = false;
+  try {
+    const page = await props.transport.get<NotificationPage>(
+      `/notifications?group=${encodeURIComponent(props.entry.groupKey)}&limit=${PEEK}`,
+    );
+    peek.value = Array.isArray(page?.items) ? page.items : [];
+  } catch {
+    peekError.value = true; // distinct from an empty group — surfaced with a retry
+  } finally {
+    loading.value = false;
+  }
+}
 
 async function toggle(): Promise<void> {
   open.value = !open.value;
-  if (open.value && peek.value === null && props.entry.groupKey) {
-    loading.value = true;
-    try {
-      const page = await props.transport.get<NotificationPage>(
-        `/notifications?group=${encodeURIComponent(props.entry.groupKey)}&limit=${PEEK}`,
-      );
-      peek.value = page.items;
-    } catch {
-      peek.value = [];
-    } finally {
-      loading.value = false;
-    }
-  }
+  if (open.value && peek.value === null && !loading.value) await fetchPeek();
 }
 </script>
 
@@ -65,15 +73,18 @@ async function toggle(): Promise<void> {
       data-test="stack-header"
       class="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-sunken/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       :aria-expanded="open"
+      :aria-controls="peekId"
       @click="toggle"
     >
       <Icon
         :icon="ChevronRight"
         :size="14"
+        aria-hidden="true"
         class="shrink-0 text-faint transition-transform"
         :class="{ 'rotate-90': open }"
       />
       <span
+        aria-hidden="true"
         class="mt-1 size-2 shrink-0 rounded-full"
         :class="priorityDotClass[entry.topPriority]"
       />
@@ -83,19 +94,35 @@ async function toggle(): Promise<void> {
       <span
         v-if="entry.groupUnread > 0"
         data-test="stack-unread"
+        :aria-label="`${entry.groupUnread} unread`"
         class="shrink-0 rounded-full bg-accent/10 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-accent"
         >{{ entry.groupUnread }}</span
       >
       <span
         data-test="stack-total"
+        :aria-label="`${entry.groupTotal} total`"
         class="shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted"
         >{{ entry.groupTotal }}</span
       >
     </button>
 
-    <div v-if="open" data-test="stack-peek" class="bg-surface">
+    <div v-if="open" :id="peekId" data-test="stack-peek" class="bg-surface">
       <div v-if="loading" class="flex items-center gap-2 px-11 py-3 text-[12px] text-muted">
         <Spinner :size="12" /> Loading…
+      </div>
+      <div
+        v-else-if="peekError"
+        data-test="stack-peek-error"
+        class="flex items-center gap-2 px-11 py-3 text-[12px] text-muted"
+      >
+        <span>Couldn't load these.</span>
+        <button
+          type="button"
+          class="font-semibold text-accent underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          @click="fetchPeek()"
+        >
+          Try again
+        </button>
       </div>
       <ul v-else>
         <li
@@ -109,7 +136,7 @@ async function toggle(): Promise<void> {
             aria-hidden="true"
           />
           <div class="min-w-0 flex-1">
-            <p class="truncate text-[12.5px] font-medium text-text">{{ m.title }}</p>
+            <p class="truncate text-[12px] font-medium text-text">{{ m.title }}</p>
             <p class="mt-0.5 font-mono text-[11px] text-faint">
               {{ m.module }} · {{ relativeTime(m.createdAt) }}
             </p>
@@ -119,10 +146,11 @@ async function toggle(): Promise<void> {
       <button
         type="button"
         data-test="stack-see-all"
-        class="w-full border-t border-line px-4 py-2 text-center text-[12px] font-semibold text-accent transition-colors hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        class="flex w-full items-center justify-center gap-1 border-t border-line px-4 py-2 text-center text-[12px] font-semibold text-accent transition-colors hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         @click="emit('see-all', entry.groupKey ?? '', entry.groupLabel ?? '')"
       >
-        See all {{ entry.groupTotal }} in this group →
+        See all {{ entry.groupTotal }} in this group
+        <Icon :icon="ArrowRight" :size="13" aria-hidden="true" />
       </button>
     </div>
   </div>

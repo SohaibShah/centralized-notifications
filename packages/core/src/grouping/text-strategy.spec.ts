@@ -59,4 +59,12 @@ describe("TextGroupingStrategy", () => {
     s.keyFor(n({ title: "a".repeat(500) }));
     expect(Date.now() - t0).toBeLessThan(100);
   });
+  it("bounds the key length so it stays drill-in-able and index-safe", () => {
+    // A very long title (kind template) must not produce an unbounded group_key.
+    const key = s.keyFor(n({ title: "word ".repeat(120).trim() }))?.key ?? "";
+    expect(key.length).toBeLessThanOrEqual(200);
+    // A long module-provided key is capped too.
+    const metaKey = s.keyFor(n({ title: "x", metadata: { groupKey: "g".repeat(400) } }))?.key ?? "";
+    expect(metaKey.length).toBeLessThanOrEqual(200);
+  });
 });

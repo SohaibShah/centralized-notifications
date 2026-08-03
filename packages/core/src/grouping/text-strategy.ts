@@ -41,26 +41,44 @@ function capitalize(s: string): string {
   return s.length === 0 ? s : s.charAt(0).toUpperCase() + s.slice(1);
 }
 
+// Bound the persisted key: keeps it under the route's `?group=` cap (300) and well under Postgres's
+// btree tuple limit for the (group_key, created_at, id) index, even for a maximally-long/multibyte
+// title. Truncation can only merge two very-long same-prefix keys — a benign over-grouping, never a
+// leak — and is far better than an un-drill-into-able (400) group or a failing INSERT.
+const KEY_MAX = 200;
+function capKey(key: string): string {
+  return key.length > KEY_MAX ? key.slice(0, KEY_MAX) : key;
+}
+
+// Keep stack headings to a consistent, sane length across all branches.
+const LABEL_MAX = 80;
+function capLabel(label: string): string {
+  return label.length > LABEL_MAX ? label.slice(0, LABEL_MAX) : label;
+}
+
 export function createTextGroupingStrategy(): GroupingStrategy {
   return {
     keyFor(n: Notification): GroupAssignment | null {
       // (1) explicit module-provided key
       const explicit = n.metadata?.["groupKey"];
       if (typeof explicit === "string" && explicit.trim() !== "") {
-        return { key: `${n.module}:${explicit.trim()}`, label: n.title };
+        return { key: capKey(`${n.module}:${explicit.trim()}`), label: capLabel(n.title) };
       }
       // (2) instance: earliest entity token in the title
       const ent = firstEntity(n.title);
       if (ent) {
         const norm = ent.text.toLowerCase().replace(/\s+/g, "");
-        return { key: `${n.module}:${norm}`, label: n.title.slice(0, ent.end).trim() };
+        return {
+          key: capKey(`${n.module}:${norm}`),
+          label: capLabel(n.title.slice(0, ent.end).trim()),
+        };
       }
       // (3) kind: normalized template
       const template = templateOf(n.title);
       if (template === "") return null;
       return {
-        key: `${n.module}:${n.category ?? "_"}:${template}`,
-        label: capitalize(template).slice(0, 60),
+        key: capKey(`${n.module}:${n.category ?? "_"}:${template}`),
+        label: capLabel(capitalize(template)),
       };
     },
   };
