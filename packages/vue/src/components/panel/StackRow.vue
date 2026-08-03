@@ -70,43 +70,62 @@ async function toggle(): Promise<void> {
   />
 
   <div v-else class="border-b border-line">
-    <button
-      type="button"
-      data-test="stack-header"
-      class="flex w-full items-center gap-2.5 px-4 py-3 text-left transition-colors hover:bg-sunken/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-      :aria-expanded="open"
-      :aria-controls="peekId"
-      @click="toggle"
-    >
-      <Icon
-        :icon="ChevronRight"
-        :size="14"
-        aria-hidden="true"
-        class="shrink-0 text-faint transition-transform"
-        :class="{ 'rotate-90': open }"
-      />
-      <span
-        aria-hidden="true"
-        class="mt-1 size-2 shrink-0 rounded-full"
-        :class="priorityDotClass[entry.topPriority]"
-      />
-      <span class="min-w-0 flex-1 truncate font-display text-[13px] font-semibold text-text">
-        {{ entry.groupLabel }}
-      </span>
-      <time
-        data-test="stack-time"
-        :datetime="entry.createdAt"
-        :title="entry.createdAt"
-        class="shrink-0 font-mono text-[11px] tabular-nums text-faint"
-        >{{ relativeTime(entry.createdAt) }}</time
+    <!-- Collapsed: an iOS/macOS-style stack — the representative card sits above one or two faux card
+         edges peeking beneath. Expanded: the edges recede and an accent rail marks "inside this group". -->
+    <div class="relative px-2 pt-1.5" :class="!open ? 'pb-3' : 'pb-1.5'">
+      <template v-if="!open">
+        <span
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-x-4 bottom-1.5 h-3 rounded-b-lg border border-t-0 border-line bg-sunken/60"
+        />
+        <span
+          aria-hidden="true"
+          class="pointer-events-none absolute inset-x-6 bottom-0.5 h-3 rounded-b-lg border border-t-0 border-line bg-sunken/30"
+        />
+      </template>
+      <button
+        type="button"
+        data-test="stack-header"
+        class="relative z-10 flex w-full items-center gap-2.5 rounded-lg border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        :class="
+          open
+            ? 'border-line-strong bg-sunken/40 shadow-[inset_2px_0_0_var(--color-accent)]'
+            : 'border-line bg-surface hover:bg-sunken/60'
+        "
+        :aria-expanded="open"
+        :aria-controls="peekId"
+        @click="toggle"
       >
-      <span
-        data-test="stack-total"
-        :aria-label="`${entry.groupTotal} in this group`"
-        class="shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted"
-        >{{ entry.groupTotal }}</span
-      >
-    </button>
+        <Icon
+          :icon="ChevronRight"
+          :size="14"
+          aria-hidden="true"
+          class="shrink-0 text-faint motion-safe:transition-transform"
+          :class="{ 'rotate-90': open }"
+        />
+        <span
+          aria-hidden="true"
+          class="mt-1 size-2 shrink-0 rounded-full"
+          :class="priorityDotClass[entry.topPriority]"
+        />
+        <span class="min-w-0 flex-1 truncate font-display text-[13px] font-semibold text-text">
+          {{ entry.groupLabel }}
+        </span>
+        <time
+          data-test="stack-time"
+          :datetime="entry.createdAt"
+          :title="entry.createdAt"
+          class="shrink-0 font-mono text-[11px] tabular-nums text-faint"
+          >{{ relativeTime(entry.createdAt) }}</time
+        >
+        <span
+          data-test="stack-total"
+          :aria-label="`${entry.groupTotal} in this group`"
+          class="shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted"
+          >{{ entry.groupTotal }}</span
+        >
+      </button>
+    </div>
 
     <div v-if="open" :id="peekId" data-test="stack-peek" class="bg-surface">
       <!-- Whole-group "Mark all read" — only meaningful on an unread stack. -->
@@ -155,7 +174,7 @@ async function toggle(): Promise<void> {
         class="flex w-full items-center justify-center gap-1 border-t border-line px-4 py-2 text-center text-[12px] font-semibold text-accent transition-colors hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
         @click="emit('see-all', entry.groupKey ?? '', entry.groupLabel ?? '')"
       >
-        See all {{ entry.groupTotal }} in this group
+        See all in this group
         <Icon :icon="ArrowRight" :size="13" aria-hidden="true" />
       </button>
     </div>
