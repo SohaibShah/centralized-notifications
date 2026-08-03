@@ -65,6 +65,7 @@ export interface NotificationService {
     limit?: number;
     sort?: FeedSort;
     view?: FeedView;
+    group?: string;
   }): Promise<NotificationPage>;
   counts(args: { principal: Principal }): Promise<NotificationCounts>;
   markRead(args: { principal: Principal; id: string }): Promise<void>;

@@ -38,3 +38,23 @@ test("feed items carry groupKey + groupLabel", async () => {
   expect(item.groupKey).toBe("dsr:#1042");
   expect(item.groupLabel).toBe("DSAR #1042");
 });
+
+test("group filter returns only that group's members", async () => {
+  const res = await list(query, { principal: user, group: "dsr:#1042", limit: 50 });
+  if (!res.ok) throw new Error(res.error);
+  expect(res.page.items.length).toBe(2);
+  expect(res.page.items.every((i) => i.groupKey === "dsr:#1042")).toBe(true);
+});
+
+test("a cursor is group-scoped: issued under one group, rejected under another", async () => {
+  const first = await list(query, { principal: user, group: "dsr:#1042", limit: 1 });
+  if (!first.ok) throw new Error(first.error);
+  expect(first.page.nextCursor).not.toBeNull();
+  const cross = await list(query, {
+    principal: user,
+    group: "dsr:other",
+    limit: 1,
+    cursor: first.page.nextCursor!,
+  });
+  expect(cross.ok).toBe(false);
+});

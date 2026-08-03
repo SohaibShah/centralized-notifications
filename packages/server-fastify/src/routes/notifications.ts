@@ -17,6 +17,7 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
   sort: z.enum(FEED_SORTS).default("newest"),
   view: z.enum(FEED_VIEWS).default("active"),
+  group: z.string().min(1).max(300).optional(),
 });
 
 const readParamsSchema = z.object({ id: z.string().min(1).max(200) });
