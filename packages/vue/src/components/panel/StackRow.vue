@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ArrowRight, ChevronRight } from "@lucide/vue";
+import { ArrowRight, Check, ChevronRight } from "@lucide/vue";
 import type {
   FeedNotification,
   GroupedEntry,
@@ -9,7 +9,7 @@ import type {
 } from "@notifications/shared";
 import Icon from "../../ui/Icon.vue";
 import Spinner from "../../ui/Spinner.vue";
-import { priorityDotClass } from "../../design/tokens";
+import { priorityDotClass, priorityLabel } from "../../design/tokens";
 import { relativeTime } from "../../lib/time";
 import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue";
 
@@ -86,14 +86,14 @@ async function toggle(): Promise<void> {
       <button
         type="button"
         data-test="stack-header"
-        class="relative z-10 flex w-full items-center gap-2.5 rounded-lg border px-4 py-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        class="relative z-10 flex w-full items-center gap-2.5 rounded-lg border px-4 py-3 text-left transition-colors"
         :class="
           open
             ? 'border-line-strong bg-sunken/40 shadow-[inset_2px_0_0_var(--color-accent)]'
             : 'border-line bg-surface hover:bg-sunken/60'
         "
         :aria-expanded="open"
-        :aria-controls="peekId"
+        :aria-controls="open ? peekId : undefined"
         @click="toggle"
       >
         <Icon
@@ -105,10 +105,12 @@ async function toggle(): Promise<void> {
         />
         <span
           aria-hidden="true"
-          class="mt-1 size-2 shrink-0 rounded-full"
+          class="size-2 shrink-0 rounded-full"
           :class="priorityDotClass[entry.topPriority]"
         />
-        <span class="min-w-0 flex-1 truncate font-display text-[13px] font-semibold text-text">
+        <!-- Priority is color-only in the dot above; carry the word for SR / color-blind users. -->
+        <span class="sr-only">{{ priorityLabel[entry.topPriority] }} priority</span>
+        <span class="min-w-0 flex-1 truncate font-sans text-[13px] font-semibold text-text">
           {{ entry.groupLabel }}
         </span>
         <time
@@ -133,10 +135,10 @@ async function toggle(): Promise<void> {
         <button
           type="button"
           data-test="stack-mark-all"
-          class="text-[12px] font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          class="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:bg-sunken"
           @click="emit('mark-all-read', entry.groupKey ?? '')"
         >
-          Mark all read
+          <Icon :icon="Check" :size="12" /> Mark all read
         </button>
       </div>
       <div v-if="loading" class="flex items-center gap-2 px-11 py-3 text-[12px] text-muted">
@@ -148,13 +150,12 @@ async function toggle(): Promise<void> {
         class="flex items-center gap-2 px-11 py-3 text-[12px] text-muted"
       >
         <span>Couldn't load these.</span>
-        <button
-          type="button"
-          class="font-semibold text-accent underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-          @click="fetchPeek()"
-        >
+        <button type="button" class="font-semibold text-accent underline" @click="fetchPeek()">
           Try again
         </button>
+      </div>
+      <div v-else-if="(peek ?? []).length === 0" class="px-11 py-3 text-[12px] text-muted">
+        Nothing left in this group.
       </div>
       <!-- Members are the real feed card — collapsed by default, expandable in place to their actions,
            exactly like the main feed (one card renderer, no divergent stack-only markup). -->
@@ -171,7 +172,7 @@ async function toggle(): Promise<void> {
       <button
         type="button"
         data-test="stack-see-all"
-        class="flex w-full items-center justify-center gap-1 border-t border-line px-4 py-2 text-center text-[12px] font-semibold text-accent transition-colors hover:bg-sunken focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        class="flex w-full items-center justify-center gap-1 border-t border-line px-4 py-2 text-center text-[12px] font-semibold text-accent transition-colors hover:bg-sunken"
         @click="emit('see-all', entry.groupKey ?? '', entry.groupLabel ?? '')"
       >
         See all in this group
