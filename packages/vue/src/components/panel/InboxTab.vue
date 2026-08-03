@@ -91,8 +91,18 @@ watch(
   showStacks,
   (on, prev) => {
     feed.grouped = on;
-    if (on) void feed.loadGrouped();
-    else if (prev && feed.activeGroup === null) void feed.load();
+    if (on) {
+      void feed.loadGrouped();
+    } else if (
+      feed.view === "active" &&
+      feed.activeGroup === null &&
+      (prev || feed.items.length === 0)
+    ) {
+      // Load the flat ACTIVE feed when leaving stacks for it — both on a live toggle (prev) and on a
+      // fresh mount where grouping is off but the flat list was never populated (e.g. after grouped
+      // mode). The muted view manages its own load via setView, so it's excluded here.
+      void feed.load();
+    }
   },
   { immediate: true },
 );

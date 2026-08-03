@@ -1,9 +1,30 @@
 import { describe, expect, it } from "vitest";
 import { notificationSchema } from "@notifications/shared";
-import { buildCustom, generateBurst, generatePreset, pickActions, PRESET_IDS } from "./generate";
+import {
+  buildCustom,
+  generateBurst,
+  generatePreset,
+  generateSubjectBurst,
+  pickActions,
+  PRESET_IDS,
+} from "./generate";
 import { lookupModule } from "./modules/registry";
 
 const MODULE_KEYS = ["dsr", "access-governance", "data-mapping", "assessments"];
+
+describe("generateSubjectBurst", () => {
+  it("emits notifications that all share one #<id> subject token", () => {
+    const burst = generateSubjectBurst(4, 123);
+    expect(burst).toHaveLength(4);
+    const subjects = burst.map((n) => n.title.match(/#\d+/)?.[0]);
+    expect(new Set(subjects).size).toBe(1); // one shared subject
+    expect(subjects[0]).toBeTruthy();
+    for (const n of burst) {
+      expect(notificationSchema.safeParse(n).success).toBe(true);
+      expect(n.module).toBe("dsr");
+    }
+  });
+});
 
 function expectActionable(notification: ReturnType<typeof buildCustom>): void {
   const parsed = notificationSchema.safeParse(notification);
