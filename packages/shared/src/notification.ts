@@ -250,6 +250,25 @@ export interface NotificationPage {
 }
 
 /**
+ * One collapsed stack in the grouped feed: the group's most-recent member (representative) plus
+ * per-group aggregates. A standalone notification is an entry with `groupTotal: 1` and no `groupKey`.
+ */
+export interface GroupedEntry extends FeedNotification {
+  /** Members in this stack (>= 1). A standalone entry is 1. */
+  groupTotal: number;
+  /** Unread members in this stack. */
+  groupUnread: number;
+  /** Highest-severity priority present in the stack. */
+  topPriority: NotificationPriority;
+}
+
+/** One keyset page of the grouped feed (one entry per stack/standalone). */
+export interface GroupedPage {
+  entries: GroupedEntry[];
+  nextCursor: string | null;
+}
+
+/**
  * Unread notification counts for the current user, aggregated server-side over the whole
  * dataset (not the loaded feed window). `unread` is the sum of `unreadByPriority`. Absolute
  * for now (ignores active filters); shaped to grow optional filter params later.

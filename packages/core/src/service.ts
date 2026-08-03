@@ -8,6 +8,7 @@ import type {
   MuteTargetsResponse,
   NotificationCounts,
   NotificationPage,
+  GroupedPage,
   NotificationPriority,
   PreferencesPatch,
   UserPreferences,
@@ -21,6 +22,7 @@ import type { IngestResult } from "./pipeline/boundary";
 import { PolicyStore } from "./policy/store";
 import { counts } from "./read/counts";
 import { list } from "./read/feed";
+import { listGrouped } from "./read/grouped";
 import { muteTargetCounts } from "./read/mute-targets";
 import { markRead, markReadBulk, markUnread } from "./read/read-state";
 import { SummaryEngine } from "./ai/summarize";
@@ -67,6 +69,12 @@ export interface NotificationService {
     view?: FeedView;
     group?: string;
   }): Promise<NotificationPage>;
+  /** The collapsed grouped feed: one entry per stack/standalone with per-group aggregates. */
+  listGrouped(args: {
+    principal: Principal;
+    cursor?: string;
+    limit?: number;
+  }): Promise<GroupedPage>;
   counts(args: { principal: Principal }): Promise<NotificationCounts>;
   markRead(args: { principal: Principal; id: string }): Promise<void>;
   markReadBulk(args: { principal: Principal; ids: string[] }): Promise<void>;
@@ -180,6 +188,11 @@ export function createNotificationService(opts: {
     ingest: (raw) => ingest(deps, raw),
     list: async (args) => {
       const result = await list(query, args);
+      if (!result.ok) throw new InvalidCursorError();
+      return result.page;
+    },
+    listGrouped: async (args) => {
+      const result = await listGrouped(query, args);
       if (!result.ok) throw new InvalidCursorError();
       return result.page;
     },

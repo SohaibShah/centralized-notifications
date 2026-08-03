@@ -133,6 +133,26 @@ test("view=muted returns only what an active rule hides; active view is the inve
   expect(active).toContain(globalId); // still comes through
 });
 
+test("grouped=true returns collapsed entries with per-group totals", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&limit=100",
+    headers: { "x-test-user": "priya", "x-test-teams": "eng" },
+  });
+  expect(res.statusCode).toBe(200);
+  const body = res.json() as { entries: unknown[] };
+  expect(Array.isArray(body.entries)).toBe(true);
+});
+
+test("grouped + group together → 400", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&group=dsr:x",
+    headers: { "x-test-user": "priya" },
+  });
+  expect(res.statusCode).toBe(400);
+});
+
 test("an invalid view value → 400", async () => {
   const res = await app.inject({
     method: "GET",

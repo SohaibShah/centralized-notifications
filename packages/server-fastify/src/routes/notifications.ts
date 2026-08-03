@@ -18,6 +18,11 @@ const listQuerySchema = z.object({
   sort: z.enum(FEED_SORTS).default("newest"),
   view: z.enum(FEED_VIEWS).default("active"),
   group: z.string().min(1).max(300).optional(),
+  // Query strings are text; z.coerce.boolean() would treat "false" as true, so parse explicitly.
+  grouped: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
 });
 
 const readParamsSchema = z.object({ id: z.string().min(1).max(200) });
@@ -41,7 +46,18 @@ export function notificationReadRoutes(
     if (!principal) return reply.code(401).send({ error: "authentication required" });
     const parsed = listQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: "invalid query parameters" });
+    // `grouped` lists stacks; `group` drills into one — they can't be combined.
+    if (parsed.data.grouped && parsed.data.group !== undefined)
+      return reply.code(400).send({ error: "grouped and group are mutually exclusive" });
     try {
+      if (parsed.data.grouped) {
+        const page = await service.listGrouped({
+          principal,
+          cursor: parsed.data.cursor,
+          limit: parsed.data.limit,
+        });
+        return reply.code(200).send(page);
+      }
       const page = await service.list({ principal, ...parsed.data });
       return reply.code(200).send(page);
     } catch (err) {

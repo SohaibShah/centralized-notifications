@@ -46,4 +46,5 @@ export { muteWhere, isSuppressed } from "./preferences/mute";
 export { createTextGroupingStrategy } from "./grouping/text-strategy";
 export type { GroupingStrategy, GroupAssignment } from "./grouping/types";
 export { backfillGroupKeys } from "./maintenance/backfill-group-keys";
+export { listGrouped } from "./read/grouped";
 export type { ChatContextItem } from "./ai/retrieve";
