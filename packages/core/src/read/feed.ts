@@ -5,11 +5,12 @@ import type {
   NotificationAction,
   NotificationPage,
 } from "@notifications/shared";
-import { actionSchema, FEED_SORTS } from "@notifications/shared";
+import { actionSchema, FEED_SORTS, FEED_VIEWS } from "@notifications/shared";
+import type { FeedView } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { Principal } from "../types";
 import { audienceWhere } from "../audience/match";
-import { muteWhere } from "../preferences/mute";
+import { muteWhere, mutedOnlyWhere } from "../preferences/mute";
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -20,6 +21,7 @@ const MAX_LIMIT = 100;
  */
 interface Cursor {
   s: FeedSort; // the sort this cursor was issued for — a cursor is only valid under its own sort
+  v: FeedView; // the view this cursor was issued for — active/muted select different row sets
   ts: string; // ISO created_at
   id: string;
   rank?: number; // priority_rank, only carried for the priority sorts
@@ -28,6 +30,7 @@ interface Cursor {
 const cursorSchema = z
   .object({
     s: z.enum(FEED_SORTS),
+    v: z.enum(FEED_VIEWS),
     ts: z.string().datetime({ offset: true }),
     id: z.string().min(1),
     rank: z.number().int().min(0).max(3).optional(),
@@ -70,8 +73,8 @@ interface FeedRow {
   read: boolean;
 }
 
-function cursorFor(s: FeedSort, row: FeedRow): Cursor {
-  const base: Cursor = { s, ts: row.created_iso, id: row.id };
+function cursorFor(s: FeedSort, v: FeedView, row: FeedRow): Cursor {
+  const base: Cursor = { s, v, ts: row.created_iso, id: row.id };
   return s === "priority-high" || s === "priority-low"
     ? { ...base, rank: row.priority_rank }
     : base;
@@ -116,6 +119,9 @@ export interface ListArgs {
   cursor?: string;
   limit?: number;
   sort?: FeedSort;
+  // "active" (default) is the normal feed; "muted" returns only what the user's snooze/mute rules
+  // are currently hiding (the inverse of the mute filter).
+  view?: FeedView;
 }
 
 export type ListResult =
@@ -129,13 +135,17 @@ export type ListResult =
 export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> {
   const { principal } = args;
   const sort: FeedSort = args.sort ?? "newest";
+  const view: FeedView = args.view ?? "active";
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   let cursor: Cursor | null = null;
   if (args.cursor !== undefined) {
     cursor = decodeCursor(args.cursor);
-    // A cursor is only valid under the sort it was issued for (the keyset predicate is sort-specific).
-    if (!cursor || cursor.s !== sort) return { ok: false, error: "invalid cursor" };
+    // A cursor is only valid under the sort AND view it was issued for: the sort fixes the keyset
+    // predicate, and the view selects a different row set (active vs. muted). Replaying across either
+    // would page from the wrong position, so reject it (the client always refetches page 1 on a change).
+    if (!cursor || cursor.s !== sort || cursor.v !== view)
+      return { ok: false, error: "invalid cursor" };
   }
 
   // $1 is always the user key (for the read LEFT JOIN). Cursor keyset params, then the audience
@@ -167,8 +177,11 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
   }
 
   where += ` AND ${audienceWhere(principal, params)}`;
-  // Hide snoozable notifications from a module/category the user has an active snooze/mute on.
-  where += ` AND ${muteWhere(principal.userKey, params)}`;
+  // Active view: hide snoozable notifications the user snoozed/muted. Muted view: show ONLY those
+  // (the inverse) so they can peek at what their rules are hiding. The two predicates partition the
+  // audience-scoped feed.
+  const mutePredicate = view === "muted" ? mutedOnlyWhere : muteWhere;
+  where += ` AND ${mutePredicate(principal.userKey, params)}`;
 
   params.push(limit + 1);
   const limitPlaceholder = `$${params.length}`;
@@ -193,7 +206,7 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
   const last = pageRows[pageRows.length - 1];
   const page: NotificationPage = {
     items: pageRows.map(toFeedNotification),
-    nextCursor: hasMore && last ? encodeCursor(cursorFor(sort, last)) : null,
+    nextCursor: hasMore && last ? encodeCursor(cursorFor(sort, view, last)) : null,
   };
   return { ok: true, page };
 }

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import InboxTab from "./InboxTab.vue";
 import { feedItem } from "../../test-support/feedItem";
 import { buildTestContext, mountWithProvider } from "../../test/provider-harness";
+// buildTestContext is used directly by the muted-view toggle test (custom transport).
 import type { NotificationsContext } from "../../provider/context";
 
 // The AI-summary slice is overridden with a fake so the disclosure's states are directly
@@ -66,6 +67,45 @@ describe("InboxTab", () => {
     const wrapper = mountWithProvider(InboxTab, { context: ctx });
     expect(feed.groups).toHaveLength(0);
     expect(wrapper.text()).toContain("No notifications match your filters");
+  });
+
+  it("renders a low-emphasis muted-view toggle (not pressed) with no banner by default", () => {
+    const ctx = makeCtx();
+    ctx.feed.status = "ready";
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    const toggle = wrapper.find('[data-test="muted-view-toggle"]');
+    expect(toggle.exists()).toBe(true);
+    expect(toggle.attributes("aria-pressed")).toBe("false");
+    expect(wrapper.find('[data-test="muted-view-banner"]').exists()).toBe(false);
+  });
+
+  it("clicking the toggle switches feed.view to muted and shows the banner", async () => {
+    // A transport whose feed GETs resolve an empty page, so setView's refetch doesn't error.
+    const transport = {
+      get: vi.fn(async () => ({ items: [], nextCursor: null })),
+      post: vi.fn(async () => ({})),
+      patch: vi.fn(async () => ({})),
+      del: vi.fn(async () => ({})),
+    } as unknown as NotificationsContext["transport"];
+    const ctx = buildTestContext({
+      transport,
+      summary: summaryState as unknown as NotificationsContext["summary"],
+    });
+    ctx.feed.status = "ready";
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    await wrapper.get('[data-test="muted-view-toggle"]').trigger("click");
+    expect(ctx.feed.view).toBe("muted");
+    expect(wrapper.get('[data-test="muted-view-toggle"]').attributes("aria-pressed")).toBe("true");
+    expect(wrapper.find('[data-test="muted-view-banner"]').exists()).toBe(true);
+  });
+
+  it("renders the 'Nothing muted' empty state in the muted view (not 'all caught up')", () => {
+    const ctx = makeCtx();
+    ctx.feed.view = "muted";
+    ctx.feed.status = "ready"; // no items
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    expect(wrapper.text()).toContain("Nothing muted");
+    expect(wrapper.text()).not.toContain("You're all caught up");
   });
 
   it("opens a new tab for a link action", async () => {

@@ -26,6 +26,9 @@ export const AUDIENCE_SCOPES = ["global", "team", "role", "user"] as const;
 export const ACTION_METHODS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 export const ACTION_KINDS = ["link", "dispatch"] as const;
 export const FEED_SORTS = ["newest", "oldest", "priority-high", "priority-low"] as const;
+// Which slice of the feed to read: the normal feed ("active") or the notifications currently hidden
+// by the user's snooze/mute rules ("muted") — the inverse of the mute filter (see `mutedOnlyWhere`).
+export const FEED_VIEWS = ["active", "muted"] as const;
 
 /**
  * Who a notification is for. `id` identifies the team/role/user for non-global
@@ -215,6 +218,7 @@ export type AudienceScope = (typeof AUDIENCE_SCOPES)[number];
 export type ActionMethod = (typeof ACTION_METHODS)[number];
 export type ActionKind = (typeof ACTION_KINDS)[number];
 export type FeedSort = (typeof FEED_SORTS)[number];
+export type FeedView = (typeof FEED_VIEWS)[number];
 
 /**
  * A notification as the feed *read* API returns it: the full publish contract plus

@@ -108,11 +108,12 @@ The match runs in SQL against the principal's arrays passed as bound parameters 
 
 Query parameters:
 
-| Param    | Type            | Required | Notes                                                                                                                                                                                                                                       |
-| -------- | --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `limit`  | integer         | no       | Page size. Default `25`, min `1`, max `100`. Coerced from the query string; out-of-range or non-numeric → `400`.                                                                                                                            |
-| `cursor` | string (opaque) | no       | The `nextCursor` from a previous page. **Opaque** — only ever pass back a value the server handed out; a malformed/undecodable cursor → `400`. **Sort-scoped** (see below): a cursor is only valid under the same `sort` it was issued for. |
-| `sort`   | enum            | no       | Feed ordering. One of `newest`, `oldest`, `priority-high`, `priority-low`. Default `newest` (the prior behavior). Any other value → `400`. See the ordering table below.                                                                    |
+| Param    | Type            | Required | Notes                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| -------- | --------------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit`  | integer         | no       | Page size. Default `25`, min `1`, max `100`. Coerced from the query string; out-of-range or non-numeric → `400`.                                                                                                                                                                                                                                                                                                                                                                                  |
+| `cursor` | string (opaque) | no       | The `nextCursor` from a previous page. **Opaque** — only ever pass back a value the server handed out; a malformed/undecodable cursor → `400`. **Sort- and view-scoped** (see below): a cursor is only valid under the same `sort` and `view` it was issued for.                                                                                                                                                                                                                                  |
+| `sort`   | enum            | no       | Feed ordering. One of `newest`, `oldest`, `priority-high`, `priority-low`. Default `newest` (the prior behavior). Any other value → `400`. See the ordering table below.                                                                                                                                                                                                                                                                                                                          |
+| `view`   | enum            | no       | Which slice of the audience-scoped feed to return. One of `active` (default) or `muted`. `active` is the normal feed — notifications the caller can see with their [mute/snooze rules](#enforcement--where-mutesnooze-rules-take-effect) applied. `muted` returns **only** the notifications currently hidden by those rules — i.e. rows that are `snoozable: true` **and** match an active mute/snooze rule on their `module` or `category`. Any other value → `400`. See [Views](#views) below. |
 
 **Ordering & pagination.** Keyset-paginated — there is **no `OFFSET`** (NFR-2), so a deep page costs the same as the first, and deliberately **no total count** (keyset paging never scans to one). The `sort` param selects the ordering:
 
@@ -123,7 +124,18 @@ Query parameters:
 | `priority-high` | Priority high→low: `critical`, then `high`, then `normal`, then `low`. Within a single priority level, newest first. |
 | `priority-low`  | Priority low→high: `low`, then `normal`, then `high`, then `critical`. Within a single priority level, newest first. |
 
-**Sort-scoped cursor.** `cursor` is an opaque base64url token encoding the last returned row's ordering key **and the `sort` it was issued under**; clients must treat it as opaque. Because the keyset predicate is sort-specific, a cursor is only valid when replayed under the same `sort` — passing a cursor issued under one sort with a different `sort` value returns `400 { "error": "invalid cursor" }`, the same response as a malformed/undecodable cursor. In normal use this never happens: when the user changes sort, the client refetches page 1 (no cursor) rather than reusing the previous page's cursor.
+**Sort- and view-scoped cursor.** `cursor` is an opaque base64url token encoding the last returned row's ordering key **and the `sort` and `view` it was issued under**; clients must treat it as opaque. The keyset predicate is sort-specific and the `view` selects a different row set, so a cursor is only valid when replayed under the same `sort` **and** `view` — passing a cursor issued under one `sort`/`view` with a different value returns `400 { "error": "invalid cursor" }`, the same response as a malformed/undecodable cursor. In normal use this never happens: when the user changes sort or view, the client refetches page 1 (no cursor) rather than reusing the previous page's cursor.
+
+#### Views
+
+The `view` param selects which slice of the caller's [audience-scoped](#audience-scoping) feed is returned. The two views **partition** that feed with no overlap — every audience-scoped notification is in exactly one of them:
+
+| `view`   | Returns                                                                                                                                                                                                                                                                                                              |
+| -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `active` | **Default.** The normal feed — the caller's audience-scoped notifications with their active mute/snooze rules applied (muted rows excluded). The prior behavior.                                                                                                                                                     |
+| `muted`  | **Only** the notifications currently hidden by the caller's active mute/snooze rules — rows that are `snoozable: true` **and** match an active mute/snooze rule on their `module` or `category` (see [Enforcement](#enforcement--where-mutesnooze-rules-take-effect)). The exact inverse of the default mute filter. |
+
+A **non-`snoozable` notification is never in the `muted` view** — the `snoozable: true` gate is what makes a rule able to hide a row, so a `snoozable: false` notification always comes through in `active` and never appears under `muted`, whatever its priority. The response shape is identical across views (`{ items, nextCursor }`) and the same ordering and pagination apply within either view — but the `cursor` is view-scoped (as well as sort-scoped): a cursor issued under one view is rejected if replayed under the other (see the cursor note above).
 
 ### Response `200`
 
@@ -180,11 +192,11 @@ Read state lives in its own table — `notification_reads(user_key, notification
 
 ### Errors
 
-| Status | Body                                      | Reason                                                                                                                             |
-| ------ | ----------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| `400`  | `{ "error": "invalid query parameters" }` | `limit` out of range (`< 1` or `> 100`) or non-numeric, or `sort` not one of `newest`/`oldest`/`priority-high`/`priority-low`.     |
-| `400`  | `{ "error": "invalid cursor" }`           | `cursor` is malformed, not a token the server issued, or was issued under a different `sort` than the one requested (sort-scoped). |
-| `401`  | `{ "error": "authentication required" }`  | No valid session cookie.                                                                                                           |
+| Status | Body                                      | Reason                                                                                                                                                             |
+| ------ | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `400`  | `{ "error": "invalid query parameters" }` | `limit` out of range (`< 1` or `> 100`) or non-numeric, `sort` not one of `newest`/`oldest`/`priority-high`/`priority-low`, or `view` not one of `active`/`muted`. |
+| `400`  | `{ "error": "invalid cursor" }`           | `cursor` is malformed, not a token the server issued, or was issued under a different `sort` or `view` than the one requested (sort- and view-scoped).             |
+| `401`  | `{ "error": "authentication required" }`  | No valid session cookie.                                                                                                                                           |
 
 ### Side effects
 

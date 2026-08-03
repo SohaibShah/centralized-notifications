@@ -184,7 +184,7 @@ describe("GET /notifications", () => {
     // handler must return no items and signal the end with a null cursor (this is how
     // the client knows to stop paging). Isolation-safe — independent of table size.
     const pastCursor = Buffer.from(
-      JSON.stringify({ s: "newest", ts: "1970-01-01T00:00:00.000Z", id: "0" }),
+      JSON.stringify({ s: "newest", v: "active", ts: "1970-01-01T00:00:00.000Z", id: "0" }),
     ).toString("base64url");
     const { body } = await list(`?cursor=${encodeURIComponent(pastCursor)}`);
     expect(body.items).toEqual([]);
@@ -317,7 +317,12 @@ describe("GET /notifications", () => {
 
     it("rejects a priority-sort cursor missing rank (400, not an empty page)", async () => {
       const bad = Buffer.from(
-        JSON.stringify({ s: "priority-high", ts: "2099-01-01T00:00:00.000Z", id: "x" }),
+        JSON.stringify({
+          s: "priority-high",
+          v: "active",
+          ts: "2099-01-01T00:00:00.000Z",
+          id: "x",
+        }),
       ).toString("base64url");
       const res = await list(`?limit=1&sort=priority-high&cursor=${encodeURIComponent(bad)}`);
       expect(res.statusCode).toBe(400);

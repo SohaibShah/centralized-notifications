@@ -148,6 +148,70 @@ describe("feed store", () => {
     expect(feed.items.map((n) => n.id)).toEqual(["z"]); // window replaced, not appended
   });
 
+  it("load() requests the active view by default", async () => {
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "a" })], null));
+    const feed = makeFeed();
+    await feed.load();
+    expect(feed.view).toBe("active");
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("view=active"))).toBe(true);
+  });
+
+  it("setView clears the loaded window and refetches page 1 with the new view", async () => {
+    getMock.mockResolvedValue(page([feedItem({ id: "a" })], null));
+    const feed = makeFeed();
+    await feed.load();
+    getMock.mockClear();
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "m" })], null));
+    await feed.setView("muted");
+    expect(feed.view).toBe("muted");
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("view=muted"))).toBe(true);
+    expect(feed.items.map((n) => n.id)).toEqual(["m"]); // window replaced, not merged
+  });
+
+  it("a live batch during the muted view updates counts/alerts but does NOT prepend into it", async () => {
+    getMock.mockResolvedValue(page([], null)); // muted view starts empty
+    const feed = makeFeed();
+    feed.connect();
+    await feed.load();
+    await feed.setView("muted");
+    const seen: string[][] = [];
+    feed.onLiveAlert((items) => seen.push(items.map((n) => n.id)));
+
+    sseState.onBatch!([liveNotif({ id: "live-1", priority: "critical" })]);
+
+    // The live (active) notif must not enter the muted list…
+    expect(feed.items.map((n) => n.id)).not.toContain("live-1");
+    expect(feed.items).toHaveLength(0);
+    // …but counts and toast alerts still reflect it (counts start at 0 — the empty page fails the
+    // counts-schema parse, so the snapshot stays at its default zero).
+    expect(feed.counts.unread).toBe(1);
+    expect(feed.counts.unreadByPriority.critical).toBe(1);
+    expect(seen).toEqual([["live-1"]]);
+  });
+
+  it("an at-least-once redelivery in the muted view does NOT double-count", async () => {
+    getMock.mockResolvedValue(page([], null));
+    const feed = makeFeed();
+    feed.connect();
+    await feed.load();
+    await feed.setView("muted");
+
+    sseState.onBatch!([liveNotif({ id: "live-1", priority: "critical" })]);
+    sseState.onBatch!([liveNotif({ id: "live-1", priority: "critical" })]); // duplicate delivery
+    // The id was recorded in `seen` on the first delivery, so the second is not fresh → counted once.
+    expect(feed.counts.unread).toBe(1);
+    expect(feed.counts.unreadByPriority.critical).toBe(1);
+  });
+
+  it("reset() returns to the active view", async () => {
+    getMock.mockResolvedValue(page([], null));
+    const feed = makeFeed();
+    await feed.setView("muted");
+    expect(feed.view).toBe("muted");
+    feed.reset();
+    expect(feed.view).toBe("active");
+  });
+
   it("markRead() optimistically flips the flag and POSTs (row stays put — sticky read)", async () => {
     const feed = makeFeed();
     getMock.mockResolvedValueOnce(page([feedItem({ id: "a", read: false })]));

@@ -49,6 +49,12 @@ async function feedIds(): Promise<string[]> {
   return res.page.items.map((i) => i.id);
 }
 
+async function mutedViewIds(): Promise<string[]> {
+  const res = await list(query, { principal: user, limit: 100, view: "muted" });
+  if (!res.ok) throw new Error(res.error);
+  return res.page.items.map((i) => i.id);
+}
+
 test("with no rules all notifications are visible", async () => {
   const ids = await feedIds();
   expect(ids).toContain(snoozableId);
@@ -73,4 +79,50 @@ test("an expired snooze reveals the notification again", async () => {
   const past = new Date(Date.now() - 60_000).toISOString();
   await store.putRule(user.userKey, "module", "dsr", past); // snooze already expired
   expect(await feedIds()).toContain(snoozableId);
+});
+
+test("the muted view returns exactly what an active rule hides (inverse of the active feed)", async () => {
+  await store.putRule(user.userKey, "module", "dsr", null); // mute the module indefinitely again
+
+  const muted = await mutedViewIds();
+  // Only the snoozable notifs the rule is actively hiding — any priority; the non-snoozable one is
+  // never muted, so it never appears in the muted view.
+  expect(muted).toContain(snoozableId);
+  expect(muted).toContain(snoozableCriticalId);
+  expect(muted).not.toContain(criticalId);
+
+  // The muted view is the exact complement of the active feed: no item appears in both.
+  const active = await feedIds();
+  expect(active.some((id) => muted.includes(id))).toBe(false);
+});
+
+test("with no active rule the muted view is empty", async () => {
+  const past = new Date(Date.now() - 60_000).toISOString();
+  await store.putRule(user.userKey, "module", "dsr", past); // expire the mute → nothing hidden
+  expect(await mutedViewIds()).toHaveLength(0);
+});
+
+test("a cursor is view-scoped: one issued under active is rejected when replayed under muted", async () => {
+  // Force a page boundary in the active view so we get a real nextCursor to replay.
+  const active = await list(query, { principal: user, limit: 1, view: "active" });
+  if (!active.ok) throw new Error(active.error);
+  expect(active.page.nextCursor).not.toBeNull();
+
+  const crossView = await list(query, {
+    principal: user,
+    limit: 1,
+    view: "muted",
+    cursor: active.page.nextCursor!,
+  });
+  expect(crossView.ok).toBe(false);
+  if (!crossView.ok) expect(crossView.error).toBe("invalid cursor");
+
+  // Sanity: replayed under the SAME view it was issued for, it's accepted.
+  const sameView = await list(query, {
+    principal: user,
+    limit: 1,
+    view: "active",
+    cursor: active.page.nextCursor!,
+  });
+  expect(sameView.ok).toBe(true);
 });

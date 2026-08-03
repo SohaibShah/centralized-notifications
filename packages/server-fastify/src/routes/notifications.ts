@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
-import { FEED_SORTS } from "@notifications/shared";
+import { FEED_SORTS, FEED_VIEWS } from "@notifications/shared";
 import {
   ActionsDisabledError,
   InvalidCursorError,
@@ -16,6 +16,7 @@ const listQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
   sort: z.enum(FEED_SORTS).default("newest"),
+  view: z.enum(FEED_VIEWS).default("active"),
 });
 
 const readParamsSchema = z.object({ id: z.string().min(1).max(200) });

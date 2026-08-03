@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ChevronDown, Inbox, RotateCw, SearchX, Sparkles, WifiOff } from "@lucide/vue";
+import { BellOff, ChevronDown, Inbox, RotateCw, SearchX, Sparkles, WifiOff } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Button from "../../ui/Button.vue";
 import Chip from "../../ui/Chip.vue";
@@ -53,11 +53,25 @@ function toggleSummary(): void {
     void summary.fetchStored();
 }
 
-// Empty vs filtered-empty are different states with different remedies.
-const isEmpty = computed(() => feed.status === "ready" && feed.items.length === 0);
+// Empty vs filtered-empty vs muted-empty are different states with different remedies. The
+// "all caught up" empty only applies to the active feed — an empty muted view means nothing is
+// currently muted, which is its own state.
+const isMutedView = computed(() => feed.view === "muted");
+const isEmpty = computed(
+  () => feed.view === "active" && feed.status === "ready" && feed.items.length === 0,
+);
+const isMutedEmpty = computed(
+  () => feed.view === "muted" && feed.status === "ready" && feed.items.length === 0,
+);
 const isFilteredEmpty = computed(
   () => feed.status === "ready" && feed.items.length > 0 && feed.groups.length === 0,
 );
+
+// Toggle the panel between the normal feed and the muted view (what the user's snooze/mute rules
+// are hiding). setView refetches the appropriate slice.
+function toggleMutedView(): void {
+  void feed.setView(isMutedView.value ? "active" : "muted");
+}
 
 // The action path is shared with the AI chat via useNotificationActions ("link" opens the url;
 // "dispatch" is the server-side proxy stub; either marks the notification read).
@@ -227,6 +241,31 @@ async function onAction(
           >{{ feed.counts.unreadByPriority.high }}</span
         >
       </Chip>
+
+      <!-- Low-emphasis toggle into the muted view (what your snooze/mute rules are hiding). Pushed
+           to the far right; highlighted while active. -->
+      <button
+        type="button"
+        data-test="muted-view-toggle"
+        class="ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        :class="isMutedView ? 'bg-sunken text-text' : 'text-faint hover:bg-sunken hover:text-muted'"
+        :aria-pressed="isMutedView"
+        :title="isMutedView ? 'Hide muted notifications' : 'Show muted notifications'"
+        :aria-label="isMutedView ? 'Hide muted notifications' : 'Show muted notifications'"
+        @click="toggleMutedView"
+      >
+        <Icon :icon="BellOff" :size="15" />
+      </button>
+    </div>
+
+    <!-- Mode banner: makes it unambiguous the feed body is now showing muted items, not the feed. -->
+    <div
+      v-if="isMutedView"
+      data-test="muted-view-banner"
+      class="flex shrink-0 items-center gap-1.5 px-3 pb-1 text-[11px] text-muted"
+    >
+      <Icon :icon="BellOff" :size="12" />
+      <span>Snoozed &amp; muted notifications</span>
     </div>
 
     <!-- Body: loading / error / empty / filtered-empty / populated -->
@@ -255,6 +294,13 @@ async function onAction(
         :icon="Inbox"
         title="You're all caught up"
         description="New notifications from your modules will appear here as they arrive — live."
+      />
+
+      <StatePanel
+        v-else-if="isMutedEmpty"
+        :icon="BellOff"
+        title="Nothing muted"
+        description="Notifications you've snoozed or muted will appear here. Manage your rules in Settings."
       />
 
       <StatePanel
