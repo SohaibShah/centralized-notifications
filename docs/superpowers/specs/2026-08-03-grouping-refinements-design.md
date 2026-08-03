@@ -97,10 +97,13 @@ progressively faded), reading as physical depth. Header carries: chevron, top-se
 - **Expanded (fanned) state:** the layers give way to the member peek (real cards, §3), an accent
   **left-rail on the header** signalling "you're inside this group", a **"Mark all read"** in the
   header (§4), and a **"See all in this group →"** footer.
-- **"See all" drills into the whole subject** (`?group=<key>`, unchanged — all read + unread), which
-  the temporary group view re-splits into its own Needs action / Earlier. The footer label therefore
-  **drops the hard number** ("See all in this group", not "See all 6") so it never contradicts the
-  section count. One group view per subject, reachable from either of its stacks.
+- **"See all" (and the peek) are scoped to the opened stack's read-state.** _(Revised after code
+  review — the original design drilled into the whole subject, but since a stack is read-homogeneous
+  that let an unread stack's peek/See-all show read members and disagree with its own badge.)_ The
+  drill-in adds an optional `read=true|false` filter (`?group=<key>&read=<state>`), threaded from
+  `entry.read`; the flat feed's keyset cursor is scoped to `read` too. An unread stack shows its
+  unread members, a read stack its read members — badge, representative, peek and See-all always
+  agree. The footer label still **drops the hard number** ("See all in this group").
 - Single-member entries (total 1) keep rendering as a plain card — no stack chrome, no fanned edges.
 - Respect `prefers-reduced-motion` for any fan/expand transition; the layered edges are static CSS,
   not animation-dependent.
@@ -137,5 +140,5 @@ sanity-check as the original grouping work:
 ## Out of scope
 
 - No change to how `group_key` is derived (the text strategy is unchanged).
-- No per-member drill-in read filter — "See all" is whole-group by design (§5).
-- No new grouping of the drill-in view — members render flat there, as today.
+- No re-grouping *inside* the drill-in — members render flat there (scoped to one read-state per §5,
+  revised).
