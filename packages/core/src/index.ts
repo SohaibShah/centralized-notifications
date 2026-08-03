@@ -31,5 +31,16 @@ export type {
 export { computeDueSummaries } from "./ai/schedule";
 export type { DueUser } from "./ai/schedule";
 export type { ChatTurn, AnswerChunk } from "./ai/answer";
-export type { ChatSource } from "@notifications/shared";
+export type {
+  ChatSource,
+  UserPreferences,
+  PreferencesPatch,
+  MuteRule,
+  MuteTargetKind,
+  MuteTargetsResponse,
+  ModuleMuteTarget,
+  CategoryMuteTarget,
+} from "@notifications/shared";
+export { createPreferencesStore } from "./preferences/store";
+export { muteWhere, isSuppressed } from "./preferences/mute";
 export type { ChatContextItem } from "./ai/retrieve";

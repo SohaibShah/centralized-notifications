@@ -3,6 +3,7 @@ import { ApiError } from "../transport/cookie-transport";
 import type { Transport } from "../transport/types";
 
 interface StoredSummaryResponse {
+  optedOut?: boolean;
   summary: string | null;
   basedOn: number;
   generatedAt: string | null;
@@ -11,10 +12,11 @@ interface StoredSummaryResponse {
 /**
  * The current user's persisted AI summary. Read on panel open via `fetchStored`; regenerated on
  * demand via `refresh` (the reload button), which updates the shared stored summary + timestamp
- * server-side. States: idle → loading → ready | empty | error; `refreshing` drives the reload button.
+ * server-side. States: idle → loading → ready | empty | opted-out | error; `refreshing` drives the
+ * reload button.
  */
 export function createSummaryState(deps: { transport: Transport }) {
-  const status = ref<"idle" | "loading" | "ready" | "empty" | "error">("idle");
+  const status = ref<"idle" | "loading" | "ready" | "empty" | "opted-out" | "error">("idle");
   const summary = ref("");
   const basedOn = ref(0);
   const generatedAt = ref<string | null>(null);
@@ -22,6 +24,13 @@ export function createSummaryState(deps: { transport: Transport }) {
   const error = ref<string | null>(null);
 
   function apply(res: StoredSummaryResponse): void {
+    if (res.optedOut) {
+      status.value = "opted-out";
+      summary.value = "";
+      basedOn.value = 0;
+      generatedAt.value = null;
+      return;
+    }
     if (!res.generatedAt) {
       status.value = "empty";
       summary.value = "";

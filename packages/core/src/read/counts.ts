@@ -3,6 +3,7 @@ import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { Principal } from "../types";
 import { audienceWhere } from "../audience/match";
+import { muteWhere } from "../preferences/mute";
 
 /**
  * Unread counts for a principal over the WHOLE visible dataset (not a page), so the bell badge /
@@ -16,12 +17,13 @@ export async function counts(
 ): Promise<NotificationCounts> {
   const params: unknown[] = [args.principal.userKey];
   const audience = audienceWhere(args.principal, params);
+  const mute = muteWhere(args.principal.userKey, params);
   const { rows } = await query<{ priority: NotificationPriority; n: number }>(
     `SELECT n.priority, count(*)::int AS n
        FROM notifications n
        LEFT JOIN notification_reads r
          ON r.notification_id = n.id AND r.user_key = $1
-      WHERE n.suppressed = false AND r.user_key IS NULL AND ${audience}
+      WHERE n.suppressed = false AND r.user_key IS NULL AND ${audience} AND ${mute}
       GROUP BY n.priority`,
     params,
   );

@@ -15,7 +15,8 @@ export async function runSummaryTick(deps: SchedulerDeps): Promise<void> {
   const settings = await deps.getSettings();
   if (!settings.aiSummaryEnabled) return;
   const now = (deps.now ?? (() => new Date()))();
-  const rows = await deps.listRows();
+  // Skip users who have opted out of their personal summary — never make a model call for them.
+  const rows = (await deps.listRows()).filter((r) => !r.summaryOptOut);
   const due = computeDueSummaries({ users: rows, now, summaryTime: settings.summaryTime });
   for (const row of due) {
     try {

@@ -93,7 +93,7 @@ function handleSubmit() {
       <p
         v-if="item.kind === 'heading'"
         data-test="form-group-heading"
-        class="mt-1 border-t border-line pt-4 font-mono text-[11px] font-semibold uppercase tracking-wide text-faint first:mt-0 first:border-t-0 first:pt-0"
+        class="mt-6 font-mono text-[11px] font-semibold uppercase tracking-wide text-muted first:mt-0"
       >
         {{ item.label }}
       </p>
@@ -121,9 +121,17 @@ function handleSubmit() {
 
     <p v-if="error" role="alert" aria-live="polite" class="text-[13px] text-danger">{{ error }}</p>
 
-    <Button type="submit" :disabled="submitting" class="mt-1 w-full">
-      <Spinner v-if="submitting" :size="15" />
-      {{ submitting ? (schema.submittingLabel ?? "Working…") : (schema.submitLabel ?? "Submit") }}
-    </Button>
+    <!-- "end": the button wraps its label and right-aligns (settings/admin). "full" (default): a
+         full-width button for prominent single-action forms like login. -->
+    <div :class="schema.submitAlign === 'end' ? 'mt-2 flex justify-end' : 'contents'">
+      <Button
+        type="submit"
+        :disabled="submitting"
+        :class="schema.submitAlign === 'end' ? '' : 'mt-1 w-full'"
+      >
+        <Spinner v-if="submitting" :size="15" />
+        {{ submitting ? (schema.submittingLabel ?? "Working…") : (schema.submitLabel ?? "Submit") }}
+      </Button>
+    </div>
   </form>
 </template>

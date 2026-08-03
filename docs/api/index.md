@@ -15,6 +15,8 @@ flag it.
   endpoints backed by encrypted cookie sessions.
 - [Intake](./intake.md) — the service-to-service publish endpoint (`POST /internal/publish`)
   where backend modules feed notifications into the ingestion pipeline.
+- [Me / Profile](./me.md) — host-owned self-service profile endpoints (`PATCH /me/timezone`),
+  separate from the notification preference contract.
 - [Module-sim](./module-sim.md) — the dev-only service that emulates modules' dispatch-action
   endpoints (`POST|GET /:module/actions/:name`); not a production API.
 - [Notifications](./notifications.md) — the notification contract every module publishes

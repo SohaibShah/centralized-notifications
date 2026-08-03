@@ -3,6 +3,7 @@ import { actionSchema, NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { Principal } from "../types";
 import { audienceWhere } from "../audience/match";
+import { muteWhere } from "../preferences/mute";
 
 export interface ChatContextItem {
   id: string;
@@ -82,12 +83,13 @@ const JOIN = `LEFT JOIN notification_reads r ON r.notification_id = n.id AND r.u
 async function retrieveStats(query: QueryFn, principal: Principal): Promise<ChatContextStats> {
   const params: unknown[] = [principal.userKey];
   const audience = audienceWhere(principal, params);
+  const mute = muteWhere(principal.userKey, params);
   const { rows } = await query<{ priority: NotificationPriority; total: number; unread: number }>(
     `SELECT n.priority,
             count(*)::int AS total,
             count(*) FILTER (WHERE r.user_key IS NULL)::int AS unread
        FROM notifications n ${JOIN}
-      WHERE n.suppressed = false AND ${audience}
+      WHERE n.suppressed = false AND ${audience} AND ${mute}
       GROUP BY n.priority`,
     params,
   );
@@ -122,10 +124,11 @@ export async function retrieveForAnswer(
   // 1) Full-text matches, ranked.
   const ftsParams: unknown[] = [principal.userKey, question];
   const ftsAudience = audienceWhere(principal, ftsParams);
+  const ftsMute = muteWhere(principal.userKey, ftsParams);
   const fts = await query<Row>(
     `SELECT ${COLS}
        FROM notifications n ${JOIN}
-      WHERE n.suppressed = false AND ${ftsAudience}
+      WHERE n.suppressed = false AND ${ftsAudience} AND ${ftsMute}
         AND n.search @@ websearch_to_tsquery('english', $2)
       ORDER BY ts_rank(n.search, websearch_to_tsquery('english', $2)) DESC, n.created_at DESC
       LIMIT ${FTS_LIMIT}`,
@@ -135,10 +138,11 @@ export async function retrieveForAnswer(
   // 2) Most urgent (so "what's most urgent?" always surfaces the top-priority items).
   const urgParams: unknown[] = [principal.userKey];
   const urgAudience = audienceWhere(principal, urgParams);
+  const urgMute = muteWhere(principal.userKey, urgParams);
   const urgent = await query<Row>(
     `SELECT ${COLS}
        FROM notifications n ${JOIN}
-      WHERE n.suppressed = false AND ${urgAudience}
+      WHERE n.suppressed = false AND ${urgAudience} AND ${urgMute}
       ORDER BY n.priority_rank ASC, n.created_at DESC
       LIMIT ${URGENCY_LIMIT}`,
     urgParams,
@@ -147,10 +151,11 @@ export async function retrieveForAnswer(
   // 3) Most recent, ANY priority (so normal/low items aren't crowded out by a block of criticals).
   const recParams: unknown[] = [principal.userKey];
   const recAudience = audienceWhere(principal, recParams);
+  const recMute = muteWhere(principal.userKey, recParams);
   const recent = await query<Row>(
     `SELECT ${COLS}
        FROM notifications n ${JOIN}
-      WHERE n.suppressed = false AND ${recAudience}
+      WHERE n.suppressed = false AND ${recAudience} AND ${recMute}
       ORDER BY n.created_at DESC
       LIMIT ${RECENCY_LIMIT}`,
     recParams,

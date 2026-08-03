@@ -8,6 +8,7 @@ import { createFeedState } from "../state/feed";
 import { createChatState } from "../state/chat";
 import { createSummaryState } from "../state/summary";
 import { createSettingsState } from "../state/settings";
+import { createPreferencesState } from "../state/preferences";
 import { createToastState } from "../state/toast";
 import { createPanelState } from "../state/panel";
 import { createNotificationActions } from "../state/actions";
@@ -35,6 +36,7 @@ export function buildTestContext(over: Partial<NotificationsContext> = {}): Noti
     chat: over.chat ?? createChatState({ baseUrl: "" }),
     summary: over.summary ?? createSummaryState({ transport }),
     settings,
+    preferences: over.preferences ?? createPreferencesState({ transport }),
     toast: over.toast ?? createToastState(),
     panel: over.panel ?? createPanelState(),
     // Wire actions to whatever `feed`/`settings` are in play (real or overridden) so runAction

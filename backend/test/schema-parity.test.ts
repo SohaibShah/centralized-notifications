@@ -24,6 +24,8 @@ const SHARED_TABLES = [
   "global_settings",
   "action_dispatches",
   "user_summaries",
+  "user_preferences",
+  "user_mute_rules",
 ];
 
 let libPool: pg.Pool;

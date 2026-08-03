@@ -3,23 +3,32 @@ import { onMounted, onBeforeUnmount } from "vue";
 import { useToast } from "../provider/context";
 import { usePanel } from "../provider/context";
 import { useFeed } from "../provider/context";
+import { usePreferences } from "../provider/context";
+import { shouldToast } from "../state/toast";
 import CriticalToast from "./CriticalToast.vue";
 
 const toasts = useToast();
 const panel = usePanel();
 const feed = useFeed();
+const preferences = usePreferences();
 let off: (() => void) | null = null;
 
 onMounted(() => {
-  off = feed.onLiveCritical((items) => {
+  off = feed.onLiveAlert((items) => {
     // Suppress the toast if the panel is already open — the user is already looking.
     if (panel.isOpen) return;
+    // Narrow the high+critical alert set to the user's toast preference ('off' shows nothing).
+    const toastable = items.filter((n) =>
+      shouldToast(n.priority, preferences.prefs.toastMinPriority),
+    );
+    if (toastable.length === 0) return;
     toasts.pushCritical(
-      items.map((n) => ({
+      toastable.map((n) => ({
         id: n.id,
         title: n.title,
         description: n.description,
         module: n.module,
+        priority: n.priority,
       })),
     );
   });

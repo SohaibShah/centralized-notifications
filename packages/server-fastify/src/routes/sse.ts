@@ -1,6 +1,6 @@
 import type { FastifyInstance, preHandlerHookHandler } from "fastify";
-import type { Notification } from "@notifications/shared";
-import { CoalescingBuffer, type NotificationService } from "@notifications/core";
+import type { MuteRule, Notification } from "@notifications/shared";
+import { CoalescingBuffer, isSuppressed, type NotificationService } from "@notifications/core";
 
 // Bursts within this window are delivered to a client as one batched SSE frame.
 const COALESCE_WINDOW_MS = 100;
@@ -64,12 +64,38 @@ export function notificationSseRoute(
       safeWrite(`event: notifications\ndata: ${JSON.stringify(batch)}\n\n`);
     });
 
+    // The user's active snooze/mute rules, checked before delivering each live notification so a
+    // snoozed/muted module's snoozable notifications never reach the stream (non-snoozable ones always
+    // pass — see `isSuppressed`). Loaded at connect and refreshed on the heartbeat, so a rule the user
+    // changes elsewhere takes effect within one heartbeat; the feed read is authoritative immediately.
+    let muteRules: MuteRule[] = [];
+    try {
+      muteRules = await service.listMuteRules({ principal });
+    } catch {
+      // Fail open (deliver everything) on a DB blip — the heartbeat refresh will correct within 25s.
+      // Guarded like the heartbeat path so a rejected read can't throw out of a hijacked socket
+      // before the cleanup/close handlers below are registered (which would leak the connection).
+      muteRules = [];
+    }
+
     const unsubscribe = service.delivery.subscribe({
       principal,
-      deliver: (notification) => buffer.push(notification),
+      deliver: (notification) => {
+        if (isSuppressed(muteRules, notification, new Date())) return;
+        buffer.push(notification);
+      },
     });
 
-    const heartbeat = setInterval(() => safeWrite(": heartbeat\n\n"), HEARTBEAT_MS);
+    const heartbeat = setInterval(() => {
+      safeWrite(": heartbeat\n\n");
+      // Best-effort refresh; a failed read keeps the last-known rules rather than dropping the stream.
+      void service
+        .listMuteRules({ principal })
+        .then((r) => {
+          muteRules = r;
+        })
+        .catch(() => {});
+    }, HEARTBEAT_MS);
     heartbeat.unref();
 
     safeWrite("retry: 3000\n\n"); // advise the client's reconnect backoff

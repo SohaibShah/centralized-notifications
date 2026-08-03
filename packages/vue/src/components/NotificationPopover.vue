@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { nextTick, onMounted, ref } from "vue";
+import { computed, nextTick, onMounted, ref } from "vue";
 import { Search, Sparkles, X } from "@lucide/vue";
 import Icon from "../ui/Icon.vue";
-import { useFeed } from "../provider/context";
+import { useFeed, useSettings } from "../provider/context";
 import FilterMenu from "./components/FilterMenu.vue";
 import InboxTab from "./panel/InboxTab.vue";
 import AssistantTab from "./panel/AssistantTab.vue";
@@ -10,7 +10,11 @@ import AssistantTab from "./panel/AssistantTab.vue";
 defineEmits<{ close: [] }>();
 
 const feed = useFeed();
+const settings = useSettings();
 const tab = ref<"inbox" | "assistant">("inbox");
+// When the chatbot is disabled admin-side, the Ask AI tab is hidden entirely; force the Inbox view so
+// a stale `tab === 'assistant'` can never render the assistant panel.
+const showAssistant = computed(() => settings.flags.chatbotEnabled && tab.value === "assistant");
 const inboxTabButton = ref<HTMLButtonElement | null>(null);
 const searchOpen = ref(false);
 const searchInput = ref<HTMLInputElement | null>(null);
@@ -56,6 +60,7 @@ onMounted(() => {
         Inbox
       </button>
       <button
+        v-if="settings.flags.chatbotEnabled"
         id="tab-assistant"
         type="button"
         role="tab"
@@ -109,10 +114,10 @@ onMounted(() => {
       id="notif-tabpanel"
       class="flex min-h-0 flex-1 flex-col"
       role="tabpanel"
-      :aria-labelledby="tab === 'inbox' ? 'tab-inbox' : 'tab-assistant'"
+      :aria-labelledby="showAssistant ? 'tab-assistant' : 'tab-inbox'"
     >
-      <InboxTab v-if="tab === 'inbox'" />
-      <AssistantTab v-else />
+      <AssistantTab v-if="showAssistant" />
+      <InboxTab v-else />
     </div>
   </div>
 </template>

@@ -3,6 +3,7 @@ import type { NotificationPriority } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { AiProvider, Principal, Settings } from "../types";
 import { audienceWhere } from "../audience/match";
+import { muteWhere } from "../preferences/mute";
 import { counts } from "../read/counts";
 import { AiDisabledError, AiNotConfiguredError, AiProviderError, AiRateLimitError } from "./errors";
 import { buildSummaryMessages } from "./prompt";
@@ -42,12 +43,13 @@ export async function buildSummaryContext(
 ): Promise<{ context: SummaryContext; ids: string[] }> {
   const params: unknown[] = [principal.userKey];
   const audience = audienceWhere(principal, params);
+  const mute = muteWhere(principal.userKey, params);
   params.push(cap);
   const { rows } = await query<Row>(
     `SELECT n.id, n.title, n.description, n.priority, n.module, n.category, n.actions, n.created_at
        FROM notifications n
        LEFT JOIN notification_reads r ON r.notification_id = n.id AND r.user_key = $1
-      WHERE n.suppressed = false AND r.user_key IS NULL AND ${audience}
+      WHERE n.suppressed = false AND r.user_key IS NULL AND ${audience} AND ${mute}
       ORDER BY n.priority_rank ASC, n.created_at ASC
       LIMIT $${params.length}`,
     params,

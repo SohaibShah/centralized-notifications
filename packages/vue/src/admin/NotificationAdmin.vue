@@ -30,7 +30,9 @@ const items: { id: Section; label: string; icon: typeof Boxes }[] = [
         type="button"
         class="mb-0.5 flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-[13px] font-medium transition-colors duration-100"
         :class="
-          section === it.id ? 'bg-accent/10 text-accent' : 'text-muted hover:bg-sunken hover:text-text'
+          section === it.id
+            ? 'bg-accent/10 text-accent'
+            : 'text-muted hover:bg-sunken hover:text-text'
         "
         :aria-current="section === it.id ? 'page' : undefined"
         @click="section = it.id"
@@ -53,9 +55,12 @@ const items: { id: Section; label: string; icon: typeof Boxes }[] = [
       </div>
     </nav>
     <div class="min-w-0 flex-1 overflow-y-auto p-6">
-      <ModulesPanel v-if="section === 'modules'" />
-      <DevLabsPanel v-else-if="section === 'dev-labs'" />
-      <FeaturesPanel v-else />
+      <!-- Constrain content to the same width as the per-user settings page for a consistent feel. -->
+      <div class="mx-auto max-w-3xl">
+        <ModulesPanel v-if="section === 'modules'" />
+        <DevLabsPanel v-else-if="section === 'dev-labs'" />
+        <FeaturesPanel v-else />
+      </div>
     </div>
   </div>
 </template>

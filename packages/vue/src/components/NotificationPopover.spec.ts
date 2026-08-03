@@ -80,4 +80,13 @@ describe("NotificationPopover", () => {
     const searchButton = wrapper.find('button[aria-label="Search notifications"]');
     expect(searchButton.exists()).toBe(false);
   });
+
+  it("hides the Ask AI tab entirely when the chatbot feature is disabled", () => {
+    ctx.settings.flags.chatbotEnabled = false;
+    const wrapper = mountPopover();
+    const tabs = wrapper.findAll('[role="tab"]');
+    expect(tabs).toHaveLength(1); // only Inbox
+    expect(wrapper.find("#tab-assistant").exists()).toBe(false);
+    expect(wrapper.find('[data-test="ask-ai-label"]').exists()).toBe(false);
+  });
 });

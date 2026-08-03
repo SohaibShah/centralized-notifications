@@ -3,8 +3,20 @@ import { createGuardedTick, runSummaryTick } from "../src/summary/scheduler";
 import type { ScheduleRow } from "../src/summary/schedule-repo";
 
 const rows: ScheduleRow[] = [
-  { id: "1", userKey: "kol", timezone: "Asia/Kolkata", lastGeneratedAt: null }, // 08:15 local → due
-  { id: "2", userKey: "lon", timezone: "Europe/London", lastGeneratedAt: null }, // 03:45 local → not due
+  {
+    id: "1",
+    userKey: "kol",
+    timezone: "Asia/Kolkata",
+    lastGeneratedAt: null,
+    summaryOptOut: false,
+  }, // 08:15 local → due
+  {
+    id: "2",
+    userKey: "lon",
+    timezone: "Europe/London",
+    lastGeneratedAt: null,
+    summaryOptOut: false,
+  }, // 03:45 local → not due
 ];
 const now = () => new Date("2026-07-31T02:45:00.000Z");
 
@@ -20,6 +32,34 @@ test("generates only for due users when enabled", async () => {
   expect(generate.mock.calls[0]![0].userKey).toBe("kol");
 });
 
+test("skips a user who has opted out of their personal summary", async () => {
+  const optedRows: ScheduleRow[] = [
+    {
+      id: "1",
+      userKey: "kol",
+      timezone: "Asia/Kolkata",
+      lastGeneratedAt: null,
+      summaryOptOut: true,
+    },
+    {
+      id: "2",
+      userKey: "kol2",
+      timezone: "Asia/Kolkata",
+      lastGeneratedAt: null,
+      summaryOptOut: false,
+    },
+  ];
+  const generate = vi.fn(async () => {});
+  await runSummaryTick({
+    getSettings: async () => ({ aiSummaryEnabled: true, summaryTime: "08:00" }),
+    listRows: async () => optedRows,
+    generate,
+    now,
+  });
+  expect(generate).toHaveBeenCalledTimes(1); // only the non-opted-out user
+  expect(generate.mock.calls[0]![0].userKey).toBe("kol2");
+});
+
 test("does nothing when aiSummaryEnabled is false", async () => {
   const generate = vi.fn(async () => {});
   await runSummaryTick({
@@ -33,8 +73,20 @@ test("does nothing when aiSummaryEnabled is false", async () => {
 
 test("one user's failure does not abort the batch", async () => {
   const three: ScheduleRow[] = [
-    { id: "1", userKey: "kol", timezone: "Asia/Kolkata", lastGeneratedAt: null },
-    { id: "2", userKey: "ktm", timezone: "Asia/Kathmandu", lastGeneratedAt: null },
+    {
+      id: "1",
+      userKey: "kol",
+      timezone: "Asia/Kolkata",
+      lastGeneratedAt: null,
+      summaryOptOut: false,
+    },
+    {
+      id: "2",
+      userKey: "ktm",
+      timezone: "Asia/Kathmandu",
+      lastGeneratedAt: null,
+      summaryOptOut: false,
+    },
   ];
   const generate = vi.fn(async (r: ScheduleRow) => {
     if (r.userKey === "kol") throw new Error("boom");
@@ -63,7 +115,13 @@ test("re-entrancy guard: a tick that fires while the previous pass is in flight 
   const tick = createGuardedTick({
     getSettings: async () => ({ aiSummaryEnabled: true, summaryTime: "08:00" }),
     listRows: async () => [
-      { id: "1", userKey: "kol", timezone: "Asia/Kolkata", lastGeneratedAt: null },
+      {
+        id: "1",
+        userKey: "kol",
+        timezone: "Asia/Kolkata",
+        lastGeneratedAt: null,
+        summaryOptOut: false,
+      },
     ],
     generate,
     now,

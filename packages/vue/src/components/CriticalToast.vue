@@ -3,7 +3,7 @@ import { computed, ref, watch } from "vue";
 import { X } from "@lucide/vue";
 import Icon from "../ui/Icon.vue";
 import { AUTO_DISMISS_MS, type ToastItem } from "../state/toast";
-import { priorityDotClass } from "../design/tokens";
+import { priorityDotClass, priorityLabel, priorityTextClass } from "../design/tokens";
 import { useToast } from "../provider/context";
 
 const props = defineProps<{ toast: ToastItem }>();
@@ -42,10 +42,14 @@ watch(paused, (isPaused, wasPaused) => {
     <div class="flex items-center gap-2">
       <span
         class="size-2 shrink-0 rounded-full"
-        :class="priorityDotClass.critical"
+        :class="priorityDotClass[toast.priority]"
         aria-hidden="true"
       />
-      <span class="font-mono text-[11px] uppercase tracking-wide text-danger">Critical</span>
+      <span
+        class="font-mono text-[11px] uppercase tracking-wide"
+        :class="priorityTextClass[toast.priority]"
+        >{{ priorityLabel[toast.priority] }}</span
+      >
       <button
         type="button"
         class="ml-auto grid size-6 place-items-center rounded-md text-faint transition-colors duration-100 hover:bg-sunken hover:text-text"

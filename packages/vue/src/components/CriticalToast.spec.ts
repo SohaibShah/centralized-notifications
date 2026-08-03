@@ -4,13 +4,37 @@ import CriticalToast from "./CriticalToast.vue";
 import { NOTIFICATIONS_KEY } from "../provider/context";
 import { buildTestContext } from "../test/provider-harness";
 
-const toast = { id: "a", title: "Critical a", description: "d", module: "DSAR" };
+const toast = {
+  id: "a",
+  title: "Critical a",
+  description: "d",
+  module: "DSAR",
+  priority: "critical" as const,
+};
 
 describe("CriticalToast", () => {
   beforeEach(() => {
     vi.useFakeTimers();
   });
   afterEach(() => vi.useRealTimers());
+
+  it("labels and colours the toast by the notification's priority", () => {
+    const critical = mount(CriticalToast, {
+      props: { toast },
+      global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext() } },
+    });
+    const critLabel = critical.find(".font-mono.uppercase");
+    expect(critLabel.text()).toBe("Critical");
+    expect(critLabel.classes()).toContain("text-danger");
+
+    const high = mount(CriticalToast, {
+      props: { toast: { ...toast, priority: "high" as const } },
+      global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext() } },
+    });
+    const highLabel = high.find(".font-mono.uppercase");
+    expect(highLabel.text()).toBe("High"); // not "Critical"
+    expect(highLabel.classes()).toContain("text-warning-strong"); // not red/danger
+  });
 
   it("emits view and dismiss from the buttons", async () => {
     const wrapper = mount(CriticalToast, {

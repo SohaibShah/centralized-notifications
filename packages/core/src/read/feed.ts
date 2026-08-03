@@ -9,6 +9,7 @@ import { actionSchema, FEED_SORTS } from "@notifications/shared";
 import type { QueryFn } from "../db";
 import type { Principal } from "../types";
 import { audienceWhere } from "../audience/match";
+import { muteWhere } from "../preferences/mute";
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 100;
@@ -166,6 +167,8 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
   }
 
   where += ` AND ${audienceWhere(principal, params)}`;
+  // Hide snoozable notifications from a module/category the user has an active snooze/mute on.
+  where += ` AND ${muteWhere(principal.userKey, params)}`;
 
   params.push(limit + 1);
   const limitPlaceholder = `$${params.length}`;

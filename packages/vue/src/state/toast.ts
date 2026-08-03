@@ -1,10 +1,21 @@
 import { computed, reactive, ref } from "vue";
+import type { NotificationPriority, ToastMinPriority } from "@notifications/shared";
+
+/** Whether a notification of `priority` should pop a toast given the user's `min` toast preference:
+ *  'off' = never; 'critical' = critical only; 'high' = high + critical. */
+export function shouldToast(priority: NotificationPriority, min: ToastMinPriority): boolean {
+  if (min === "off") return false;
+  if (min === "critical") return priority === "critical";
+  return priority === "critical" || priority === "high";
+}
 
 export interface ToastItem {
   id: string;
   title: string;
   description?: string;
   module: string;
+  /** The notification's priority — drives the toast's label + colour (critical vs high). */
+  priority: NotificationPriority;
 }
 
 export const AUTO_DISMISS_MS = 6000;

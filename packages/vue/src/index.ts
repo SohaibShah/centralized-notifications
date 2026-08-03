@@ -7,6 +7,7 @@ export { default as NotificationBell } from "./components/NotificationBell.vue";
 export { default as NotificationPanel } from "./components/NotificationPopover.vue";
 export { default as CriticalToastViewport } from "./components/CriticalToastViewport.vue";
 export { default as NotificationAdmin } from "./admin/NotificationAdmin.vue";
+export { default as MuteRulesEditor } from "./components/preferences/MuteRulesEditor.vue";
 
 // Reusable primitives the host may need (the reference LoginView renders FormRenderer)
 export { default as FormRenderer } from "./forms/FormRenderer.vue";
@@ -21,6 +22,7 @@ export {
   useChat,
   useSummary,
   useSettings,
+  usePreferences,
   useToast,
   usePanel,
   useActions,
@@ -38,3 +40,6 @@ export type { Transport, SseClient, SseFactory, SseStatus } from "./transport/ty
 export { ApiError, createCookieTransport } from "./transport/cookie-transport";
 export { connectSse } from "./transport/sse";
 export type { FormSchema, FormField, FormValues } from "./forms/types";
+export { preferencesForm } from "./forms/preferences.form";
+export { resolveSnoozeUntil, SNOOZE_OPTIONS, muteStatusLabel } from "./preferences/snooze";
+export type { SnoozeOption } from "./preferences/snooze";

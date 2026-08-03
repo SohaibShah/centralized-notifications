@@ -1,0 +1,76 @@
+import { z } from "zod";
+import type { NotificationPriority } from "./notification";
+
+/**
+ * Per-user preference contract — the cross-boundary shapes the settings page reads/writes and the
+ * library enforces. Notification-domain prefs only (snooze/mute, grouping, summary opt-out, toast
+ * control); identity attributes like timezone stay host-owned and are NOT part of this contract.
+ *
+ * Shared here (not core-only) because the Vue settings UI and the Fastify routes must agree on the
+ * exact shapes — same reason the notification contract lives in this package.
+ */
+
+/** Which priorities pop the bottom-right critical toast. 'off' = none; 'critical' = critical only
+ *  (today's default); 'high' = high + critical. Ordered least→most permissive is not implied. */
+export const TOAST_MIN_PRIORITIES = ["off", "critical", "high"] as const;
+export type ToastMinPriority = (typeof TOAST_MIN_PRIORITIES)[number];
+
+/** A mute/snooze rule targets either a module (by registry id) or a category (free-form string). */
+export const MUTE_TARGET_KINDS = ["module", "category"] as const;
+export type MuteTargetKind = (typeof MUTE_TARGET_KINDS)[number];
+
+/** Scalar per-user preferences. Defaults mirror the `user_preferences` column defaults. */
+export const userPreferencesSchema = z.object({
+  groupingEnabled: z.boolean(),
+  summaryOptOut: z.boolean(),
+  toastMinPriority: z.enum(TOAST_MIN_PRIORITIES),
+});
+export type UserPreferences = z.infer<typeof userPreferencesSchema>;
+
+/** PATCH body: any subset of the scalar prefs. */
+export const preferencesPatchSchema = userPreferencesSchema.partial();
+export type PreferencesPatch = z.infer<typeof preferencesPatchSchema>;
+
+/** A single active snooze/mute rule. `mutedUntil` null = muted indefinitely; ISO ts = snoozed-until. */
+export const muteRuleSchema = z.object({
+  targetKind: z.enum(MUTE_TARGET_KINDS),
+  target: z.string().min(1).max(100),
+  mutedUntil: z.string().datetime({ offset: true }).nullable(),
+});
+export type MuteRule = z.infer<typeof muteRuleSchema>;
+
+/** POST /notifications/mutes/:kind/:target body. `until` null = mute; ISO datetime = snooze-until
+ *  (the route additionally rejects a non-null value that is not in the future). */
+export const putMuteBodySchema = z.object({
+  until: z.string().datetime({ offset: true }).nullable(),
+});
+export type PutMuteBody = z.infer<typeof putMuteBodySchema>;
+
+/** GET /notifications/preferences response: the scalars plus the active rule list. */
+export const preferencesResponseSchema = userPreferencesSchema.extend({
+  rules: z.array(muteRuleSchema),
+});
+export type PreferencesResponse = z.infer<typeof preferencesResponseSchema>;
+
+/**
+ * A snooze/mute target (a module or a category) with the caller's own priority mix — the counts the
+ * settings page shows per row, the same shape the admin Modules page uses but scoped to this user.
+ * `total` is the sum across priorities. Counts ignore the mute filter, so an already-muted target
+ * still reports its mix (and stays visible so the user can un-mute it).
+ */
+export interface MuteTargetCounts {
+  byPriority: Record<NotificationPriority, number>;
+  total: number;
+}
+export interface ModuleMuteTarget extends MuteTargetCounts {
+  id: string;
+  label: string;
+}
+export interface CategoryMuteTarget extends MuteTargetCounts {
+  name: string;
+}
+/** GET /notifications/mute-targets response — the modules + categories the user can snooze/mute. */
+export interface MuteTargetsResponse {
+  modules: ModuleMuteTarget[];
+  categories: CategoryMuteTarget[];
+}

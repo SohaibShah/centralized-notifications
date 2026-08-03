@@ -10,6 +10,7 @@ import StatePanel from "../../ui/StatePanel.vue";
 import { useFeed } from "../../provider/context";
 import { useSettings } from "../../provider/context";
 import { useSummary } from "../../provider/context";
+import { usePreferences } from "../../provider/context";
 import { useActions } from "../../provider/context";
 import { relativeTime, exactTime } from "../../lib/time";
 import FeedList from "../components/FeedList.vue";
@@ -17,7 +18,25 @@ import FeedList from "../components/FeedList.vue";
 const feed = useFeed();
 const settings = useSettings();
 const summary = useSummary();
+const preferences = usePreferences();
 const aiOpen = ref(false);
+
+// The user's personal opt-out (distinct from the admin-global aiSummaryEnabled kill-switch). Reactive
+// so re-enabling here — or toggling it on the settings page — updates the panel with no reload.
+const summaryOptedOut = computed(() => preferences.prefs.summaryOptOut);
+
+// Re-enable the summary from the panel, then fetch it so the digest appears immediately.
+const enabling = ref(false);
+async function enableSummary(): Promise<void> {
+  if (enabling.value) return;
+  enabling.value = true;
+  try {
+    await preferences.updatePref({ summaryOptOut: false });
+    await summary.fetchStored();
+  } finally {
+    enabling.value = false;
+  }
+}
 
 // One-shot "bloom" on the AI summary glow on each click. Bumping the counter re-keys the glow
 // element so the CSS `ai-bloom` animation restarts every time (even mid-flight); it stays 0 on
@@ -28,8 +47,10 @@ function toggleSummary(): void {
   aiOpen.value = !aiOpen.value;
   bloomCount.value++;
   // Open shows the STORED summary (pre-generated on schedule) — fetch it once, don't regenerate.
-  // Regeneration only happens on the daily job or an explicit reload.
-  if (aiOpen.value && summary.status === "idle") void summary.fetchStored();
+  // Regeneration only happens on the daily job or an explicit reload. Skip when the user has opted
+  // out (the detail shows the re-enable prompt instead).
+  if (aiOpen.value && !summaryOptedOut.value && summary.status === "idle")
+    void summary.fetchStored();
 }
 
 // Empty vs filtered-empty are different states with different remedies.
@@ -90,8 +111,21 @@ async function onAction(
         id="ai-summary-detail"
         class="relative z-10 px-3 pb-2.5 text-[12px] leading-relaxed text-muted"
       >
+        <p v-if="summaryOptedOut" data-test="ai-summary-optedout" class="text-muted">
+          You've turned off your AI summary.
+          <button
+            type="button"
+            data-test="ai-summary-enable"
+            class="font-medium text-ai underline disabled:opacity-50"
+            :disabled="enabling"
+            @click="enableSummary"
+          >
+            Turn it back on
+          </button>
+        </p>
+
         <div
-          v-if="summary.status === 'loading'"
+          v-else-if="summary.status === 'loading'"
           data-test="ai-summary-loading"
           class="flex items-center gap-1.5 text-ai motion-safe:animate-pulse"
         >
@@ -135,11 +169,18 @@ async function onAction(
           <button
             type="button"
             data-test="ai-summary-reload"
-            class="font-medium text-ai underline disabled:opacity-50"
+            class="inline-flex items-center gap-1 font-medium text-ai underline disabled:opacity-50"
             :disabled="summary.refreshing"
+            :aria-busy="summary.refreshing ? 'true' : undefined"
             @click="summary.refresh()"
           >
-            Generate now
+            <Icon
+              v-if="summary.refreshing"
+              :icon="RotateCw"
+              :size="12"
+              class="motion-safe:animate-spin"
+            />
+            {{ summary.refreshing ? "Generating…" : "Generate now" }}
           </button>
         </p>
 

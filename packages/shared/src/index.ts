@@ -7,6 +7,7 @@
  */
 
 export * from "./notification";
+export * from "./preferences";
 
 /** Scaffolding marker retained so the placeholder app entrypoints can prove the
  *  workspace link resolves.

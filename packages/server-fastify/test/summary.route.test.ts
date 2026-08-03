@@ -78,7 +78,22 @@ test("GET returns the stored null-shape for a user with no summary yet", async (
     headers: { "x-test-user": `sumread-${stamp}` },
   });
   expect(res.statusCode).toBe(200);
-  expect(res.json()).toEqual({ summary: null, basedOn: 0, generatedAt: null });
+  expect(res.json()).toEqual({ optedOut: false, summary: null, basedOn: 0, generatedAt: null });
+});
+
+test("GET reports optedOut for a user who opted out of their summary", async () => {
+  const user = `sumopt-${stamp}`;
+  await ok.svc.updatePreferences({
+    principal: { userKey: user, roles: [], teamKeys: [] },
+    patch: { summaryOptOut: true },
+  });
+  const res = await ok.app.inject({
+    method: "GET",
+    url: "/notifications/summary",
+    headers: { "x-test-user": user },
+  });
+  expect(res.statusCode).toBe(200);
+  expect(res.json()).toEqual({ optedOut: true, summary: null, basedOn: 0, generatedAt: null });
 });
 
 test("GET is 401 without auth", async () => {
