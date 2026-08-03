@@ -71,6 +71,8 @@ interface FeedRow {
   created_iso: string;
   priority_rank: number;
   read: boolean;
+  group_key: string | null;
+  group_label: string | null;
 }
 
 function cursorFor(s: FeedSort, v: FeedView, row: FeedRow): Cursor {
@@ -111,6 +113,8 @@ function toFeedNotification(row: FeedRow): FeedNotification {
     ...(row.source_ts != null ? { timestamp: row.source_ts.toISOString() } : {}),
     createdAt: row.created_iso,
     read: row.read,
+    ...(row.group_key != null ? { groupKey: row.group_key } : {}),
+    ...(row.group_label != null ? { groupLabel: row.group_label } : {}),
   };
 }
 
@@ -189,7 +193,7 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
   const { rows } = await query<FeedRow>(
     `SELECT n.id, n.module, n.title, n.description, n.priority, n.snoozable,
             n.category, n.audience_scope, n.audience_id, n.actions, n.metadata,
-            n.source_ts, n.priority_rank,
+            n.source_ts, n.priority_rank, n.group_key, n.group_label,
             to_char(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.USZ') AS created_iso,
             (r.user_key IS NOT NULL) AS read
        FROM notifications n

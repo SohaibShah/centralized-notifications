@@ -233,6 +233,10 @@ export interface FeedNotification extends Notification {
   createdAt: string;
   /** Whether the requesting user has read this notification. */
   read: boolean;
+  /** Derived grouping key; absent when the notification is standalone. */
+  groupKey?: string;
+  /** Display heading for the group; absent when standalone. */
+  groupLabel?: string;
 }
 
 /**
