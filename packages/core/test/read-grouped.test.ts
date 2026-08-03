@@ -63,11 +63,39 @@ test("a subject with read + unread yields two entries, each counted by section",
   expect(nullKey.groupTotal).toBe(1);
 });
 
+test("sort=priority-high brings the group with the most-severe member to the top", async () => {
+  const res = await listGrouped(query, { principal: user, limit: 50, sort: "priority-high" });
+  if (!res.ok) throw new Error(res.error);
+  // The dsr:#1042 unread stack holds the critical member, so it must sort ahead of every high/normal
+  // group. (The read stack of the same subject holds only the "high" acknowledgement.)
+  const first = res.page.entries[0]!;
+  expect(first.groupKey).toBe("dsr:#1042");
+  expect(first.read).toBe(false);
+  expect(first.topPriority).toBe("critical");
+});
+
+test("a grouped cursor issued under one sort is rejected under another", async () => {
+  const first = await listGrouped(query, { principal: user, limit: 1, sort: "newest" });
+  if (!first.ok || !first.page.nextCursor) throw new Error("need a cursor");
+  const bad = await listGrouped(query, {
+    principal: user,
+    cursor: first.page.nextCursor,
+    sort: "priority-high",
+  });
+  expect(bad.ok).toBe(false);
+  if (!bad.ok) expect(bad.error).toBe("invalid cursor");
+});
+
 test("keyset-paginates the grouped feed with no overlap or skip", async () => {
   const seen: string[] = [];
   let cursor: string | undefined;
   for (let i = 0; i < 10; i++) {
-    const res = await listGrouped(query, { principal: user, limit: 1, cursor });
+    const res = await listGrouped(query, {
+      principal: user,
+      limit: 1,
+      cursor,
+      sort: "priority-high",
+    });
     if (!res.ok) throw new Error(res.error);
     for (const e of res.page.entries) seen.push(e.id); // representative id is unique per (group, read) entry
     if (!res.page.nextCursor) break;

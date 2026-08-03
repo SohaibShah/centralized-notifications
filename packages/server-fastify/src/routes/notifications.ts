@@ -55,6 +55,7 @@ export function notificationReadRoutes(
           principal,
           cursor: parsed.data.cursor,
           limit: parsed.data.limit,
+          sort: parsed.data.sort,
         });
         return reply.code(200).send(page);
       }

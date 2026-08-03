@@ -69,11 +69,12 @@ export interface NotificationService {
     view?: FeedView;
     group?: string;
   }): Promise<NotificationPage>;
-  /** The collapsed grouped feed: one entry per stack/standalone with per-group aggregates. */
+  /** The collapsed grouped feed: one entry per (group, read-state) with per-section aggregates. */
   listGrouped(args: {
     principal: Principal;
     cursor?: string;
     limit?: number;
+    sort?: FeedSort;
   }): Promise<GroupedPage>;
   counts(args: { principal: Principal }): Promise<NotificationCounts>;
   markRead(args: { principal: Principal; id: string }): Promise<void>;

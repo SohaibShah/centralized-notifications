@@ -151,6 +151,21 @@ test("grouped=true returns collapsed entries with per-group totals", async () =>
   }
 });
 
+test("grouped=true honors a sort and returns collapsed entries", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&sort=priority-high&limit=100",
+    headers: { "x-test-user": "priya", "x-test-teams": "eng" },
+  });
+  expect(res.statusCode).toBe(200);
+  const body = res.json() as { entries: { topPriority: string }[] };
+  expect(body.entries.length).toBeGreaterThan(0);
+  // priority-high orders by severity: no entry after the first may be strictly more severe than it.
+  const rank: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
+  const ranks = body.entries.map((e) => rank[e.topPriority] ?? 9);
+  expect([...ranks]).toEqual([...ranks].sort((a, b) => a - b));
+});
+
 test("grouped + group together → 400", async () => {
   const res = await app.inject({
     method: "GET",
