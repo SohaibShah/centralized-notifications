@@ -68,6 +68,7 @@ export interface NotificationService {
     sort?: FeedSort;
     view?: FeedView;
     group?: string;
+    read?: boolean;
   }): Promise<NotificationPage>;
   /** The collapsed grouped feed: one entry per (group, read-state) with per-section aggregates. */
   listGrouped(args: {

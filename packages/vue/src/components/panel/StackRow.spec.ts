@@ -61,7 +61,7 @@ describe("StackRow", () => {
     });
     await w.get('[data-test="stack-header"]').trigger("click");
     await w.get('[data-test="stack-see-all"]').trigger("click");
-    expect(w.emitted("see-all")?.[0]).toEqual(["dsr:#1042", "DSAR #1042"]);
+    expect(w.emitted("see-all")?.[0]).toEqual(["dsr:#1042", "DSAR #1042", false]);
   });
 
   it("emits mark-all-read with the group key from an unread stack", async () => {

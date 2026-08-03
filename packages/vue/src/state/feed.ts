@@ -92,6 +92,9 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   const activeGroup = ref<string | null>(null);
   // The label to show in the group banner while drilled in (captured from the stack the user opened).
   const activeGroupLabel = ref<string>("");
+  // The read-state of the stack that was drilled into — scopes the drill-in to that stack's members
+  // (unread stack → its unread members, read stack → its read members), matching the read-split.
+  const activeGroupRead = ref<boolean | null>(null);
 
   // Authoritative unread counts over the WHOLE dataset (from GET /notifications/counts), so the
   // bell/header/chip counts don't undercount to the loaded window. Seeded by fetchCounts (on load
@@ -273,9 +276,11 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     await load();
   }
 
-  /** `&group=<key>` when drilled into a "See all" view, else empty. */
+  /** `&group=<key>` (plus `&read=` for a read-split stack) when drilled into "See all", else empty. */
   function groupParam(): string {
-    return activeGroup.value !== null ? `&group=${encodeURIComponent(activeGroup.value)}` : "";
+    if (activeGroup.value === null) return "";
+    const g = `&group=${encodeURIComponent(activeGroup.value)}`;
+    return activeGroupRead.value === null ? g : `${g}&read=${activeGroupRead.value}`;
   }
 
   /**
@@ -319,10 +324,14 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     }
   }
 
-  /** Drill into one group's members ("See all"): scope the flat list to `key` and refetch page 1. */
-  async function enterGroup(key: string, label = ""): Promise<void> {
+  /**
+   * Drill into one group's members ("See all"): scope the flat list to `key` and refetch page 1.
+   * `read` scopes to the opened stack's read-state (unread/read); omit to show the whole subject.
+   */
+  async function enterGroup(key: string, label = "", read?: boolean): Promise<void> {
     activeGroup.value = key;
     activeGroupLabel.value = label;
+    activeGroupRead.value = read ?? null;
     seen.clear();
     items.value = [];
     nextCursor.value = null;
@@ -334,6 +343,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     if (activeGroup.value === null) return;
     activeGroup.value = null;
     activeGroupLabel.value = "";
+    activeGroupRead.value = null;
     seen.clear();
     items.value = [];
     nextCursor.value = null;

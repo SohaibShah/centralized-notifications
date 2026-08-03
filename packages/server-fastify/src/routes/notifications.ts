@@ -18,6 +18,12 @@ const listQuerySchema = z.object({
   sort: z.enum(FEED_SORTS).default("newest"),
   view: z.enum(FEED_VIEWS).default("active"),
   group: z.string().min(1).max(300).optional(),
+  // Read-state filter for a group drill-in (peek / "See all") — undefined = both. Kept undefined when
+  // absent (false is a real value: "only read"), so parse explicitly rather than defaulting.
+  read: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
   // Query strings are text; z.coerce.boolean() would treat "false" as true, so parse explicitly.
   grouped: z
     .enum(["true", "false"])

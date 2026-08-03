@@ -23,6 +23,7 @@ interface Cursor {
   s: FeedSort; // the sort this cursor was issued for — a cursor is only valid under its own sort
   v: FeedView; // the view this cursor was issued for — active/muted select different row sets
   grp?: string; // the group filter this cursor was issued under — a different group selects a different set
+  rd?: boolean; // the read-state filter this cursor was issued under (a stack drill-in scopes to one)
   ts: string; // ISO created_at
   id: string;
   rank?: number; // priority_rank, only carried for the priority sorts
@@ -33,6 +34,7 @@ const cursorSchema = z
     s: z.enum(FEED_SORTS),
     v: z.enum(FEED_VIEWS),
     grp: z.string().optional(),
+    rd: z.boolean().optional(),
     ts: z.string().datetime({ offset: true }),
     id: z.string().min(1),
     rank: z.number().int().min(0).max(3).optional(),
@@ -77,11 +79,18 @@ interface FeedRow {
   group_label: string | null;
 }
 
-function cursorFor(s: FeedSort, v: FeedView, group: string | undefined, row: FeedRow): Cursor {
+function cursorFor(
+  s: FeedSort,
+  v: FeedView,
+  group: string | undefined,
+  read: boolean | undefined,
+  row: FeedRow,
+): Cursor {
   const base: Cursor = {
     s,
     v,
     ...(group !== undefined ? { grp: group } : {}),
+    ...(read !== undefined ? { rd: read } : {}),
     ts: row.created_iso,
     id: row.id,
   };
@@ -136,6 +145,9 @@ export interface ListArgs {
   view?: FeedView;
   // When set, restrict the page to a single group's members (the "See all" drill-in).
   group?: string;
+  // When set (only meaningful with `group`), restrict the drill-in to one read-state — so an unread
+  // stack's "See all"/peek shows only its unread members, matching the read-split stack it opened.
+  read?: boolean;
 }
 
 export type ListResult =
@@ -151,15 +163,22 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
   const sort: FeedSort = args.sort ?? "newest";
   const view: FeedView = args.view ?? "active";
   const group = args.group;
+  const read = args.read;
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   let cursor: Cursor | null = null;
   if (args.cursor !== undefined) {
     cursor = decodeCursor(args.cursor);
-    // A cursor is only valid under the sort, view AND group filter it was issued for: the sort fixes
-    // the keyset predicate, and the view/group each select a different row set. Replaying across any
-    // would page from the wrong position, so reject it (the client always refetches page 1 on a change).
-    if (!cursor || cursor.s !== sort || cursor.v !== view || (cursor.grp ?? undefined) !== group)
+    // A cursor is only valid under the sort, view, group AND read-state filter it was issued for: the
+    // sort fixes the keyset predicate, and view/group/read each select a different row set. Replaying
+    // across any would page from the wrong position, so reject it (the client refetches page 1 on a change).
+    if (
+      !cursor ||
+      cursor.s !== sort ||
+      cursor.v !== view ||
+      (cursor.grp ?? undefined) !== group ||
+      (cursor.rd ?? undefined) !== read
+    )
       return { ok: false, error: "invalid cursor" };
   }
 
@@ -203,6 +222,12 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
     params.push(group);
     where += ` AND n.group_key = $${params.length}::text`;
   }
+  // ...and, for a read-split stack, to one read-state (r.user_key IS NOT NULL is this principal's read
+  // flag from the LEFT JOIN above).
+  if (read !== undefined) {
+    params.push(read);
+    where += ` AND (r.user_key IS NOT NULL) = $${params.length}::boolean`;
+  }
 
   params.push(limit + 1);
   const limitPlaceholder = `$${params.length}`;
@@ -227,7 +252,7 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
   const last = pageRows[pageRows.length - 1];
   const page: NotificationPage = {
     items: pageRows.map(toFeedNotification),
-    nextCursor: hasMore && last ? encodeCursor(cursorFor(sort, view, group, last)) : null,
+    nextCursor: hasMore && last ? encodeCursor(cursorFor(sort, view, group, read, last)) : null,
   };
   return { ok: true, page };
 }

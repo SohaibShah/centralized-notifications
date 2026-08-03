@@ -20,7 +20,7 @@ const emit = defineEmits<{
   action: [action: NotificationAction, notification: FeedNotification, index: number];
   unread: [notification: FeedNotification];
   "mark-all-read": [key: string];
-  "see-all": [key: string, label: string];
+  "see-all": [key: string, label: string, read: boolean];
 }>();
 
 // Each entry is read-state-homogeneous (the grouped read partitions by read), so an unread stack
@@ -72,7 +72,7 @@ onBeforeUnmount(() => observer?.disconnect());
         @action="(a, x, i) => emit('action', a, x, i)"
         @unread="(x) => emit('unread', x)"
         @mark-all-read="(k) => emit('mark-all-read', k)"
-        @see-all="(k, l) => emit('see-all', k, l)"
+        @see-all="(k, l, r) => emit('see-all', k, l, r)"
       />
     </section>
 
@@ -96,7 +96,9 @@ onBeforeUnmount(() => observer?.disconnect());
           :transport="transport"
           @open="(x) => emit('open', x)"
           @action="(a, x, i) => emit('action', a, x, i)"
-          @see-all="(k, l) => emit('see-all', k, l)"
+          @unread="(x) => emit('unread', x)"
+          @mark-all-read="(k) => emit('mark-all-read', k)"
+          @see-all="(k, l, r) => emit('see-all', k, l, r)"
         />
       </div>
     </section>

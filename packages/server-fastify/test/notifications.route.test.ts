@@ -214,6 +214,29 @@ test("POST /notifications/read with { group } marks the whole group read", async
   expect(mine.every((i) => i.read)).toBe(true);
 });
 
+test("GET /notifications?group&read scopes a drill-in to one read-state", async () => {
+  const u = { "x-test-user": `route-rdscope-${stamp}` };
+  const key = `rdscope-${stamp}`;
+  const unreadId = `rd-unread-${stamp}`;
+  const readId = `rd-read-${stamp}`;
+  await svc.ingest({ ...notif(unreadId, { scope: "global" }), metadata: { groupKey: key } });
+  await svc.ingest({ ...notif(readId, { scope: "global" }), metadata: { groupKey: key } });
+  await svc.markRead({
+    principal: { userKey: u["x-test-user"], roles: [], teamKeys: [] },
+    id: readId,
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/notifications?group=dsr:${key}&read=false&limit=100`,
+    headers: u,
+  });
+  expect(res.statusCode).toBe(200);
+  const ids = (res.json() as { items: { id: string }[] }).items.map((i) => i.id);
+  expect(ids).toContain(unreadId);
+  expect(ids).not.toContain(readId);
+});
+
 test("POST /notifications/read with neither ids nor group → 400", async () => {
   const res = await app.inject({
     method: "POST",

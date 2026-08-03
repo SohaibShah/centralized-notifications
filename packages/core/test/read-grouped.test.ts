@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test } from "vitest";
 import { createDb } from "../src/db";
 import { createTextGroupingStrategy } from "../src/grouping/text-strategy";
+import { list } from "../src/read/feed";
 import { listGrouped } from "../src/read/grouped";
 import { persist } from "../src/pipeline/persist";
 import { testPool } from "./harness";
@@ -111,4 +112,26 @@ test("a malformed grouped cursor is rejected", async () => {
   const res = await listGrouped(query, { principal: user, cursor: "not-a-real-cursor" });
   expect(res.ok).toBe(false);
   if (!res.ok) expect(res.error).toBe("invalid cursor");
+});
+
+test("a group drill-in can be scoped to one read-state (read-split See all / peek)", async () => {
+  // Unread stack drill-in: only the unread members (a, b) of dsr:#1042 — not the read one (e).
+  const unread = await list(query, { principal: user, group: "dsr:#1042", read: false, limit: 50 });
+  if (!unread.ok) throw new Error(unread.error);
+  expect(unread.page.items.every((n) => !n.read)).toBe(true);
+  expect(unread.page.items.length).toBe(2);
+  // Read stack drill-in: only the read member (e).
+  const read = await list(query, { principal: user, group: "dsr:#1042", read: true, limit: 50 });
+  if (!read.ok) throw new Error(read.error);
+  expect(read.page.items.every((n) => n.read)).toBe(true);
+  expect(read.page.items.length).toBe(1);
+  // A read-scoped cursor is rejected if replayed without the same read filter.
+  const p1 = await list(query, { principal: user, group: "dsr:#1042", read: false, limit: 1 });
+  if (!p1.ok || !p1.page.nextCursor) throw new Error("need a cursor");
+  const crossed = await list(query, {
+    principal: user,
+    group: "dsr:#1042",
+    cursor: p1.page.nextCursor,
+  });
+  expect(crossed.ok).toBe(false);
 });

@@ -26,7 +26,7 @@ const emit = defineEmits<{
   action: [action: NotificationAction, notification: FeedNotification, index: number];
   unread: [notification: FeedNotification];
   "mark-all-read": [key: string];
-  "see-all": [key: string, label: string];
+  "see-all": [key: string, label: string, read: boolean];
 }>();
 
 const PEEK = 3;
@@ -44,7 +44,7 @@ async function fetchPeek(): Promise<void> {
   peekError.value = false;
   try {
     const page = await props.transport.get<NotificationPage>(
-      `/notifications?group=${encodeURIComponent(props.entry.groupKey)}&limit=${PEEK}`,
+      `/notifications?group=${encodeURIComponent(props.entry.groupKey)}&read=${props.entry.read}&limit=${PEEK}`,
     );
     peek.value = Array.isArray(page?.items) ? page.items : [];
   } catch {
@@ -173,7 +173,7 @@ async function toggle(): Promise<void> {
         type="button"
         data-test="stack-see-all"
         class="flex w-full items-center justify-center gap-1 border-t border-line px-4 py-2 text-center text-[12px] font-semibold text-accent transition-colors hover:bg-sunken"
-        @click="emit('see-all', entry.groupKey ?? '', entry.groupLabel ?? '')"
+        @click="emit('see-all', entry.groupKey ?? '', entry.groupLabel ?? '', entry.read)"
       >
         See all in this group
         <Icon :icon="ArrowRight" :size="13" aria-hidden="true" />
