@@ -224,6 +224,16 @@ test("POST /notifications/read with neither ids nor group → 400", async () => 
   expect(res.statusCode).toBe(400);
 });
 
+test("POST /notifications/read with both ids and group → 400 (exactly one)", async () => {
+  const res = await app.inject({
+    method: "POST",
+    url: "/notifications/read",
+    headers: { "x-test-user": "priya" },
+    payload: { ids: ["x"], group: "dsr:y" },
+  });
+  expect(res.statusCode).toBe(400);
+});
+
 const dispatchUser = { "x-test-user": `dispatch-caller-${stamp}` };
 
 test("dispatch action: 401 without a principal", async () => {

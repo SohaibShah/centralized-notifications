@@ -27,10 +27,11 @@ const listQuerySchema = z.object({
 
 const readParamsSchema = z.object({ id: z.string().min(1).max(200) });
 // Bulk mark-read is either a list of ids ("Mark all read" over the loaded feed) or a whole group
-// ("Mark all read" on a stack) — never both.
+// ("Mark all read" on a stack) — never both. `.strict()` on each arm enforces exactly-one: a body
+// carrying both keys matches neither arm and is rejected.
 const bulkReadSchema = z.union([
-  z.object({ ids: z.array(z.string().min(1).max(200)).min(1).max(500) }),
-  z.object({ group: z.string().min(1).max(300) }),
+  z.object({ ids: z.array(z.string().min(1).max(200)).min(1).max(500) }).strict(),
+  z.object({ group: z.string().min(1).max(300) }).strict(),
 ]);
 
 const dispatchParamsSchema = z.object({

@@ -243,6 +243,21 @@ describe("feed store", () => {
     expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
   });
 
+  it("setSort while drilled into a group re-sorts that group flat, not the stacks", async () => {
+    getMock.mockResolvedValue(page([feedItem({ id: "m1" })], null));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.enterGroup("dsr:#1", "DSAR #1");
+    getMock.mockClear();
+    getMock.mockResolvedValue(page([feedItem({ id: "m1" })], null));
+    await feed.setSort("priority-high");
+    const call = getMock.mock.calls.find((c) => String(c[0]).includes("group=dsr%3A%231"));
+    expect(call).toBeDefined();
+    expect(String(call![0])).toContain("sort=priority-high");
+    // must NOT have refetched the collapsed stacks while drilled in
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+  });
+
   it("enterGroup loads that group's members flat; exitGroup clears it", async () => {
     const feed = makeFeed();
     getMock.mockResolvedValue(page([feedItem({ id: "m1" }), feedItem({ id: "m2" })], null));

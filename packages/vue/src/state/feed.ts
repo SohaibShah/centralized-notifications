@@ -243,8 +243,10 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     if (next === sort.value) return;
     sort.value = next;
     // The grouped and flat feeds each own a sort-scoped cursor, so a sort change resets whichever
-    // window is live and refetches page 1 in the new order.
-    if (grouped.value) {
+    // window is live and refetches page 1 in the new order. Only the collapsed-stacks view uses the
+    // grouped read — a "See all" drill-in (activeGroup set) renders the flat member list, so it must
+    // fall through to load() (which appends groupParam()) to re-sort the drilled-in group.
+    if (grouped.value && activeGroup.value === null) {
       groupedEntries.value = [];
       groupedCursor.value = null;
       await loadGrouped();
