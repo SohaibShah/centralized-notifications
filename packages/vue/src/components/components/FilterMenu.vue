@@ -8,7 +8,7 @@ import {
 } from "@notifications/shared";
 import Icon from "../../ui/Icon.vue";
 import { priorityDotClass, priorityLabel, priorityRank } from "../../design/tokens";
-import { useFeed } from "../../provider/context";
+import { useFeed, usePreferences, useSettings } from "../../provider/context";
 
 const sortOptions: { value: FeedSort; label: string }[] = [
   { value: "newest", label: "Newest" },
@@ -22,6 +22,15 @@ const sortOptions: { value: FeedSort; label: string }[] = [
 // search box narrows the option list. State lives in the feed store, so applied
 // filters also surface as removable pills in the filter bar.
 const feed = useFeed();
+const settings = useSettings();
+const preferences = usePreferences();
+
+// A quick grouping on/off toggle, mirroring the per-user setting. Only meaningful (and only shown)
+// when the admin has grouping enabled — otherwise the user pref drives no behavior.
+const groupingAvailable = computed(() => settings.flags.groupingEnabled);
+function toggleGrouping(): void {
+  void preferences.updatePref({ groupingEnabled: !preferences.prefs.groupingEnabled });
+}
 
 const open = ref(false);
 const search = ref("");
@@ -111,14 +120,15 @@ onBeforeUnmount(() => {
     <button
       ref="triggerBtn"
       type="button"
-      class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-3 py-1.5 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken"
+      class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2 py-1.5 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken"
       :aria-expanded="open"
       aria-haspopup="true"
+      aria-label="Filter and sort"
+      title="Filter and sort"
       @click="toggleOpen"
       @keydown.esc="close"
     >
       <Icon :icon="SlidersHorizontal" :size="14" />
-      Filter
       <span
         v-if="feed.activeFilterCount > 0"
         class="ml-0.5 grid size-4 place-items-center rounded-full bg-accent font-mono text-[11px] font-semibold tabular-nums text-accent-ink"
@@ -150,6 +160,22 @@ onBeforeUnmount(() => {
         </div>
 
         <div class="max-h-72 overflow-y-auto p-1.5">
+          <template v-if="groupingAvailable">
+            <label
+              class="flex cursor-pointer items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] text-text hover:bg-sunken"
+            >
+              <input
+                type="checkbox"
+                class="accent-accent"
+                data-test="toggle-grouping"
+                :checked="preferences.prefs.groupingEnabled"
+                @change="toggleGrouping"
+              />
+              Group similar
+            </label>
+            <div class="my-1 border-t border-line" aria-hidden="true" />
+          </template>
+
           <div role="radiogroup" aria-label="Sort by">
             <p class="px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-faint">
               Sort by

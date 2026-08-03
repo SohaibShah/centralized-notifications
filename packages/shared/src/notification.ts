@@ -233,6 +233,10 @@ export interface FeedNotification extends Notification {
   createdAt: string;
   /** Whether the requesting user has read this notification. */
   read: boolean;
+  /** Derived grouping key; absent when the notification is standalone. */
+  groupKey?: string;
+  /** Display heading for the group; absent when standalone. */
+  groupLabel?: string;
 }
 
 /**
@@ -242,6 +246,25 @@ export interface FeedNotification extends Notification {
  */
 export interface NotificationPage {
   items: FeedNotification[];
+  nextCursor: string | null;
+}
+
+/**
+ * One collapsed stack in the grouped feed: the group's most-recent member (representative) plus
+ * per-group aggregates. A stack is scoped to one read-state — a subject with both read and unread
+ * members appears as two entries (see the `read` flag). A standalone notification is an entry with
+ * `groupTotal: 1` and no `groupKey`.
+ */
+export interface GroupedEntry extends FeedNotification {
+  /** Members in this stack (>= 1) — all sharing this entry's read-state. A standalone entry is 1. */
+  groupTotal: number;
+  /** Highest-severity priority present in the stack. */
+  topPriority: NotificationPriority;
+}
+
+/** One keyset page of the grouped feed (one entry per stack/standalone). */
+export interface GroupedPage {
+  entries: GroupedEntry[];
   nextCursor: string | null;
 }
 

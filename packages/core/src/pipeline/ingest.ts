@@ -1,5 +1,6 @@
 import type { QueryFn } from "../db";
 import type { DeliveryHub } from "../delivery/hub";
+import type { GroupingStrategy } from "../grouping/types";
 import type { PolicyStore } from "../policy/store";
 import type { IngestResult } from "./boundary";
 import { persist } from "./persist";
@@ -9,6 +10,7 @@ export interface IngestDeps {
   query: QueryFn;
   hub: DeliveryHub;
   policy: PolicyStore;
+  groupingStrategy: GroupingStrategy;
 }
 
 /**
@@ -34,7 +36,8 @@ export async function ingest(deps: IngestDeps, raw: unknown): Promise<IngestResu
     );
     return { status: "invalid" };
   }
-  const status = await persist(deps.query, result.data, !enabled);
+  const group = deps.groupingStrategy.keyFor(result.data);
+  const status = await persist(deps.query, result.data, !enabled, group);
   if (status === "accepted") {
     if (enabled) deps.hub.publish(result.data);
     // Best-effort recency bump; a failure here must never abort an already-delivered notification.

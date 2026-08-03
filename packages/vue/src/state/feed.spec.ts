@@ -203,6 +203,94 @@ describe("feed store", () => {
     expect(feed.counts.unreadByPriority.critical).toBe(1);
   });
 
+  it("loadGrouped fetches ?grouped=true and fills groupedEntries", async () => {
+    getMock.mockResolvedValueOnce({
+      entries: [
+        {
+          ...feedItem({ id: "g1" }),
+          groupKey: "dsr:#1",
+          groupLabel: "DSAR #1",
+          groupTotal: 3,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
+    const feed = makeFeed();
+    await feed.loadGrouped();
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
+    expect(feed.groupedEntries[0]!.groupTotal).toBe(3);
+  });
+
+  it("setSort in grouped mode refetches the stacks in the new order", async () => {
+    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
+    await feed.setSort("priority-high");
+    const call = getMock.mock.calls.find((c) => String(c[0]).includes("grouped=true"));
+    expect(call).toBeDefined();
+    expect(String(call![0])).toContain("sort=priority-high");
+  });
+
+  it("markAllReadInGroup posts { group } and refetches the stacks", async () => {
+    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.markAllReadInGroup("dsr:#1042");
+    expect(postMock).toHaveBeenCalledWith("/notifications/read", { group: "dsr:#1042" });
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
+  });
+
+  it("setSort while drilled into a group re-sorts that group flat, not the stacks", async () => {
+    getMock.mockResolvedValue(page([feedItem({ id: "m1" })], null));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.enterGroup("dsr:#1", "DSAR #1");
+    getMock.mockClear();
+    getMock.mockResolvedValue(page([feedItem({ id: "m1" })], null));
+    await feed.setSort("priority-high");
+    const call = getMock.mock.calls.find((c) => String(c[0]).includes("group=dsr%3A%231"));
+    expect(call).toBeDefined();
+    expect(String(call![0])).toContain("sort=priority-high");
+    // must NOT have refetched the collapsed stacks while drilled in
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+  });
+
+  it("markRead in grouped mode persists a card outside the flat window, then refetches stacks", async () => {
+    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.markRead("peek-1"); // a peek member / single-entry card — never in the flat `items`
+    expect(postMock).toHaveBeenCalledWith("/notifications/peek-1/read");
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
+  });
+
+  it("enterGroup loads that group's members flat; exitGroup clears it", async () => {
+    const feed = makeFeed();
+    getMock.mockResolvedValue(page([feedItem({ id: "m1" }), feedItem({ id: "m2" })], null));
+    await feed.enterGroup("dsr:#1", "DSAR #1");
+    expect(feed.activeGroup).toBe("dsr:#1");
+    expect(feed.activeGroupLabel).toBe("DSAR #1");
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("group=dsr%3A%231"))).toBe(true);
+    feed.exitGroup();
+    expect(feed.activeGroup).toBeNull();
+  });
+
+  it("a live batch in grouped mode refetches the stacks (server has the keys)", async () => {
+    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    feed.connect();
+    await feed.loadGrouped();
+    const before = getMock.mock.calls.filter((c) => String(c[0]).includes("grouped=true")).length;
+    sseState.onBatch!([liveNotif({ id: "live-g", priority: "high" })]);
+    await Promise.resolve();
+    const after = getMock.mock.calls.filter((c) => String(c[0]).includes("grouped=true")).length;
+    expect(after).toBeGreaterThan(before);
+  });
+
   it("reset() returns to the active view", async () => {
     getMock.mockResolvedValue(page([], null));
     const feed = makeFeed();

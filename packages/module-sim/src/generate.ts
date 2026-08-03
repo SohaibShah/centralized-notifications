@@ -202,6 +202,41 @@ export function generateBurst(count: number, seed?: number): Notification[] {
   return batch;
 }
 
+/**
+ * A burst of notifications all about ONE subject — they share a `#<id>` in the title, so the feed's
+ * grouping strategy collapses them into a single instance stack (e.g. "DSAR #4821"). Use this to
+ * demo instance grouping (the compelling "5 notifications about the same thing" case), distinct from
+ * `generateBurst` whose repeated templates demo *kind* grouping.
+ */
+export function generateSubjectBurst(count = 4, seed?: number): Notification[] {
+  const rng = mulberry32((seed ?? Date.now()) >>> 0);
+  const subject = 4000 + Math.floor(rng() * 5000); // shared "#<id>" across the burst
+  const steps = [
+    "received",
+    "identity verified",
+    "identity re-verification requested",
+    "documents uploaded",
+    "overdue — action needed",
+  ];
+  const batch: Notification[] = [];
+  for (let i = 0; i < count; i++) {
+    const step = steps[i % steps.length]!;
+    batch.push(
+      validate({
+        id: `dsr-subject-${subject}-${i}-${randomUUID()}`,
+        module: "dsr",
+        title: `DSAR #${subject} ${step}`,
+        description: "",
+        priority: i === count - 1 ? "high" : "normal",
+        snoozable: true,
+        category: "requests",
+        audience: { scope: "global" },
+      }),
+    );
+  }
+  return batch;
+}
+
 interface PresetDef {
   module: string;
   title: string;

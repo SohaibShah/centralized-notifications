@@ -8,6 +8,7 @@ import type {
   MuteTargetsResponse,
   NotificationCounts,
   NotificationPage,
+  GroupedPage,
   NotificationPriority,
   PreferencesPatch,
   UserPreferences,
@@ -15,13 +16,15 @@ import type {
 import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import { createDb } from "./db";
 import { DeliveryHub } from "./delivery/hub";
+import { createTextGroupingStrategy } from "./grouping/text-strategy";
 import { ingest } from "./pipeline/ingest";
 import type { IngestResult } from "./pipeline/boundary";
 import { PolicyStore } from "./policy/store";
 import { counts } from "./read/counts";
 import { list } from "./read/feed";
+import { listGrouped } from "./read/grouped";
 import { muteTargetCounts } from "./read/mute-targets";
-import { markRead, markReadBulk, markUnread } from "./read/read-state";
+import { markRead, markReadBulk, markReadGroup, markUnread } from "./read/read-state";
 import { SummaryEngine } from "./ai/summarize";
 import { createSummaryStore } from "./ai/summary-store";
 import { createPreferencesStore } from "./preferences/store";
@@ -64,10 +67,21 @@ export interface NotificationService {
     limit?: number;
     sort?: FeedSort;
     view?: FeedView;
+    group?: string;
+    read?: boolean;
   }): Promise<NotificationPage>;
+  /** The collapsed grouped feed: one entry per (group, read-state) with per-section aggregates. */
+  listGrouped(args: {
+    principal: Principal;
+    cursor?: string;
+    limit?: number;
+    sort?: FeedSort;
+  }): Promise<GroupedPage>;
   counts(args: { principal: Principal }): Promise<NotificationCounts>;
   markRead(args: { principal: Principal; id: string }): Promise<void>;
   markReadBulk(args: { principal: Principal; ids: string[] }): Promise<void>;
+  /** Mark every visible member of one group read (a stack's "Mark all read"). */
+  markReadGroup(args: { principal: Principal; group: string }): Promise<void>;
   markUnread(args: { principal: Principal; id: string }): Promise<void>;
 
   /** Forward a user's `dispatch` action to its owning module and relay the module's response. Throws
@@ -155,7 +169,8 @@ export function createNotificationService(opts: {
   const { query } = createDb(opts.pool);
   const hub = new DeliveryHub();
   const policy = new PolicyStore({ query, catalog: opts.config.modules });
-  const deps = { query, hub, policy };
+  const groupingStrategy = opts.config.groupingStrategy ?? createTextGroupingStrategy();
+  const deps = { query, hub, policy, groupingStrategy };
   const adminRole = opts.config.adminRole ?? "admin";
   const summaryEngine = new SummaryEngine({
     query,
@@ -180,12 +195,18 @@ export function createNotificationService(opts: {
       if (!result.ok) throw new InvalidCursorError();
       return result.page;
     },
+    listGrouped: async (args) => {
+      const result = await listGrouped(query, args);
+      if (!result.ok) throw new InvalidCursorError();
+      return result.page;
+    },
     counts: (args) => counts(query, args),
     markRead: async (args) => {
       const result = await markRead(query, args);
       if (!result.ok) throw new NotFoundError();
     },
     markReadBulk: (args) => markReadBulk(query, args),
+    markReadGroup: (args) => markReadGroup(query, args),
     markUnread: (args) => markUnread(query, args),
     dispatchAction: (args) =>
       dispatchAction({ query, policy, dispatcher: opts.config.actionDispatcher }, args),

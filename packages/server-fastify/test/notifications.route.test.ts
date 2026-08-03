@@ -133,6 +133,48 @@ test("view=muted returns only what an active rule hides; active view is the inve
   expect(active).toContain(globalId); // still comes through
 });
 
+test("grouped=true returns collapsed entries with per-group totals", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&limit=100",
+    headers: { "x-test-user": "priya", "x-test-teams": "eng" },
+  });
+  expect(res.statusCode).toBe(200);
+  const body = res.json() as { entries: { groupTotal: number; topPriority: string }[] };
+  expect(Array.isArray(body.entries)).toBe(true);
+  expect(body.entries.length).toBeGreaterThan(0);
+  // Every collapsed entry carries the per-group aggregates.
+  for (const e of body.entries) {
+    expect(typeof e.groupTotal).toBe("number");
+    expect(e.groupTotal).toBeGreaterThanOrEqual(1);
+    expect(typeof e.topPriority).toBe("string");
+  }
+});
+
+test("grouped=true honors a sort and returns collapsed entries", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&sort=priority-high&limit=100",
+    headers: { "x-test-user": "priya", "x-test-teams": "eng" },
+  });
+  expect(res.statusCode).toBe(200);
+  const body = res.json() as { entries: { topPriority: string }[] };
+  expect(body.entries.length).toBeGreaterThan(0);
+  // priority-high orders by severity: no entry after the first may be strictly more severe than it.
+  const rank: Record<string, number> = { critical: 0, high: 1, normal: 2, low: 3 };
+  const ranks = body.entries.map((e) => rank[e.topPriority] ?? 9);
+  expect([...ranks]).toEqual([...ranks].sort((a, b) => a - b));
+});
+
+test("grouped + group together → 400", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&group=dsr:x",
+    headers: { "x-test-user": "priya" },
+  });
+  expect(res.statusCode).toBe(400);
+});
+
 test("an invalid view value → 400", async () => {
   const res = await app.inject({
     method: "GET",
@@ -149,6 +191,70 @@ test("marking read is audience-scoped: out-of-audience id → 404", async () => 
     headers: { "x-test-user": "sam", "x-test-teams": "security" },
   });
   expect(res.statusCode).toBe(404);
+});
+
+test("POST /notifications/read with { group } marks the whole group read", async () => {
+  const gUser = { "x-test-user": `route-grpread-${stamp}` };
+  const key = `grpread-${stamp}`;
+  await svc.ingest({ ...notif(`gr-a-${stamp}`, { scope: "global" }), metadata: { groupKey: key } });
+  await svc.ingest({ ...notif(`gr-b-${stamp}`, { scope: "global" }), metadata: { groupKey: key } });
+
+  const res = await app.inject({
+    method: "POST",
+    url: "/notifications/read",
+    headers: gUser,
+    payload: { group: `dsr:${key}` },
+  });
+  expect(res.statusCode).toBe(204);
+
+  const feed = await app.inject({ method: "GET", url: "/notifications?limit=100", headers: gUser });
+  const items = (feed.json() as { items: { id: string; read: boolean }[] }).items;
+  const mine = items.filter((i) => i.id.startsWith("gr-"));
+  expect(mine.length).toBeGreaterThanOrEqual(2);
+  expect(mine.every((i) => i.read)).toBe(true);
+});
+
+test("GET /notifications?group&read scopes a drill-in to one read-state", async () => {
+  const u = { "x-test-user": `route-rdscope-${stamp}` };
+  const key = `rdscope-${stamp}`;
+  const unreadId = `rd-unread-${stamp}`;
+  const readId = `rd-read-${stamp}`;
+  await svc.ingest({ ...notif(unreadId, { scope: "global" }), metadata: { groupKey: key } });
+  await svc.ingest({ ...notif(readId, { scope: "global" }), metadata: { groupKey: key } });
+  await svc.markRead({
+    principal: { userKey: u["x-test-user"], roles: [], teamKeys: [] },
+    id: readId,
+  });
+
+  const res = await app.inject({
+    method: "GET",
+    url: `/notifications?group=dsr:${key}&read=false&limit=100`,
+    headers: u,
+  });
+  expect(res.statusCode).toBe(200);
+  const ids = (res.json() as { items: { id: string }[] }).items.map((i) => i.id);
+  expect(ids).toContain(unreadId);
+  expect(ids).not.toContain(readId);
+});
+
+test("POST /notifications/read with neither ids nor group → 400", async () => {
+  const res = await app.inject({
+    method: "POST",
+    url: "/notifications/read",
+    headers: { "x-test-user": "priya" },
+    payload: {},
+  });
+  expect(res.statusCode).toBe(400);
+});
+
+test("POST /notifications/read with both ids and group → 400 (exactly one)", async () => {
+  const res = await app.inject({
+    method: "POST",
+    url: "/notifications/read",
+    headers: { "x-test-user": "priya" },
+    payload: { ids: ["x"], group: "dsr:y" },
+  });
+  expect(res.statusCode).toBe(400);
 });
 
 const dispatchUser = { "x-test-user": `dispatch-caller-${stamp}` };

@@ -22,6 +22,8 @@ const MAX_LIMIT = 100;
 interface Cursor {
   s: FeedSort; // the sort this cursor was issued for — a cursor is only valid under its own sort
   v: FeedView; // the view this cursor was issued for — active/muted select different row sets
+  grp?: string; // the group filter this cursor was issued under — a different group selects a different set
+  rd?: boolean; // the read-state filter this cursor was issued under (a stack drill-in scopes to one)
   ts: string; // ISO created_at
   id: string;
   rank?: number; // priority_rank, only carried for the priority sorts
@@ -31,6 +33,8 @@ const cursorSchema = z
   .object({
     s: z.enum(FEED_SORTS),
     v: z.enum(FEED_VIEWS),
+    grp: z.string().optional(),
+    rd: z.boolean().optional(),
     ts: z.string().datetime({ offset: true }),
     id: z.string().min(1),
     rank: z.number().int().min(0).max(3).optional(),
@@ -71,10 +75,25 @@ interface FeedRow {
   created_iso: string;
   priority_rank: number;
   read: boolean;
+  group_key: string | null;
+  group_label: string | null;
 }
 
-function cursorFor(s: FeedSort, v: FeedView, row: FeedRow): Cursor {
-  const base: Cursor = { s, v, ts: row.created_iso, id: row.id };
+function cursorFor(
+  s: FeedSort,
+  v: FeedView,
+  group: string | undefined,
+  read: boolean | undefined,
+  row: FeedRow,
+): Cursor {
+  const base: Cursor = {
+    s,
+    v,
+    ...(group !== undefined ? { grp: group } : {}),
+    ...(read !== undefined ? { rd: read } : {}),
+    ts: row.created_iso,
+    id: row.id,
+  };
   return s === "priority-high" || s === "priority-low"
     ? { ...base, rank: row.priority_rank }
     : base;
@@ -111,6 +130,8 @@ function toFeedNotification(row: FeedRow): FeedNotification {
     ...(row.source_ts != null ? { timestamp: row.source_ts.toISOString() } : {}),
     createdAt: row.created_iso,
     read: row.read,
+    ...(row.group_key != null ? { groupKey: row.group_key } : {}),
+    ...(row.group_label != null ? { groupLabel: row.group_label } : {}),
   };
 }
 
@@ -122,6 +143,11 @@ export interface ListArgs {
   // "active" (default) is the normal feed; "muted" returns only what the user's snooze/mute rules
   // are currently hiding (the inverse of the mute filter).
   view?: FeedView;
+  // When set, restrict the page to a single group's members (the "See all" drill-in).
+  group?: string;
+  // When set (only meaningful with `group`), restrict the drill-in to one read-state — so an unread
+  // stack's "See all"/peek shows only its unread members, matching the read-split stack it opened.
+  read?: boolean;
 }
 
 export type ListResult =
@@ -136,15 +162,23 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
   const { principal } = args;
   const sort: FeedSort = args.sort ?? "newest";
   const view: FeedView = args.view ?? "active";
+  const group = args.group;
+  const read = args.read;
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
 
   let cursor: Cursor | null = null;
   if (args.cursor !== undefined) {
     cursor = decodeCursor(args.cursor);
-    // A cursor is only valid under the sort AND view it was issued for: the sort fixes the keyset
-    // predicate, and the view selects a different row set (active vs. muted). Replaying across either
-    // would page from the wrong position, so reject it (the client always refetches page 1 on a change).
-    if (!cursor || cursor.s !== sort || cursor.v !== view)
+    // A cursor is only valid under the sort, view, group AND read-state filter it was issued for: the
+    // sort fixes the keyset predicate, and view/group/read each select a different row set. Replaying
+    // across any would page from the wrong position, so reject it (the client refetches page 1 on a change).
+    if (
+      !cursor ||
+      cursor.s !== sort ||
+      cursor.v !== view ||
+      (cursor.grp ?? undefined) !== group ||
+      (cursor.rd ?? undefined) !== read
+    )
       return { ok: false, error: "invalid cursor" };
   }
 
@@ -183,13 +217,25 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
   const mutePredicate = view === "muted" ? mutedOnlyWhere : muteWhere;
   where += ` AND ${mutePredicate(principal.userKey, params)}`;
 
+  // "See all" drill-in: restrict to one group's members.
+  if (group !== undefined) {
+    params.push(group);
+    where += ` AND n.group_key = $${params.length}::text`;
+  }
+  // ...and, for a read-split stack, to one read-state (r.user_key IS NOT NULL is this principal's read
+  // flag from the LEFT JOIN above).
+  if (read !== undefined) {
+    params.push(read);
+    where += ` AND (r.user_key IS NOT NULL) = $${params.length}::boolean`;
+  }
+
   params.push(limit + 1);
   const limitPlaceholder = `$${params.length}`;
 
   const { rows } = await query<FeedRow>(
     `SELECT n.id, n.module, n.title, n.description, n.priority, n.snoozable,
             n.category, n.audience_scope, n.audience_id, n.actions, n.metadata,
-            n.source_ts, n.priority_rank,
+            n.source_ts, n.priority_rank, n.group_key, n.group_label,
             to_char(n.created_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.USZ') AS created_iso,
             (r.user_key IS NOT NULL) AS read
        FROM notifications n
@@ -206,7 +252,7 @@ export async function list(query: QueryFn, args: ListArgs): Promise<ListResult> 
   const last = pageRows[pageRows.length - 1];
   const page: NotificationPage = {
     items: pageRows.map(toFeedNotification),
-    nextCursor: hasMore && last ? encodeCursor(cursorFor(sort, view, last)) : null,
+    nextCursor: hasMore && last ? encodeCursor(cursorFor(sort, view, group, read, last)) : null,
   };
   return { ok: true, page };
 }

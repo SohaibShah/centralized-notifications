@@ -3,6 +3,8 @@ import type {
   FeedNotification,
   FeedSort,
   FeedView,
+  GroupedEntry,
+  GroupedPage,
   Notification,
   NotificationAction,
   NotificationCounts,
@@ -77,6 +79,22 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   // snooze/mute rules are hiding — the server-side inverse). Switching requires a page-1 refetch of
   // a different dataset, so setView clears the window like setSort. Default matches the backend.
   const view = ref<FeedView>("active");
+
+  // --- grouping -------------------------------------------------------------
+  // `grouped` is an INPUT flag the panel sets (from the admin + user toggles + filter state); it tells
+  // the store to render collapsed stacks (`groupedEntries`) and drives the live-batch behaviour.
+  const grouped = ref(false);
+  const groupedEntries = shallowRef<GroupedEntry[]>([]);
+  const groupedCursor = ref<string | null>(null);
+  const loadingGrouped = ref(false);
+  const hasMoreGrouped = computed(() => groupedCursor.value !== null);
+  // The "See all" drill-in: when set, the flat item list is scoped to this one group's members.
+  const activeGroup = ref<string | null>(null);
+  // The label to show in the group banner while drilled in (captured from the stack the user opened).
+  const activeGroupLabel = ref<string>("");
+  // The read-state of the stack that was drilled into — scopes the drill-in to that stack's members
+  // (unread stack → its unread members, read stack → its read members), matching the read-split.
+  const activeGroupRead = ref<boolean | null>(null);
 
   // Authoritative unread counts over the WHOLE dataset (from GET /notifications/counts), so the
   // bell/header/chip counts don't undercount to the loaded window. Seeded by fetchCounts (on load
@@ -153,6 +171,11 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     readThisSession.value = new Set();
     sort.value = "newest"; // a re-login starts at the default order
     view.value = "active"; // …and in the normal (non-muted) view
+    grouped.value = false;
+    groupedEntries.value = [];
+    groupedCursor.value = null;
+    activeGroup.value = null;
+    activeGroupLabel.value = "";
     counts.value = { unread: 0, unreadByPriority: emptyByPriority() };
   }
 
@@ -168,7 +191,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     error.value = null;
     try {
       const page = await deps.transport.get<NotificationPage>(
-        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}`,
+        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}${groupParam()}`,
       );
       addBack(page.items);
       nextCursor.value = page.nextCursor;
@@ -200,7 +223,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     try {
       const cursor = encodeURIComponent(nextCursor.value);
       const page = await deps.transport.get<NotificationPage>(
-        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}&cursor=${cursor}`,
+        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}${groupParam()}&cursor=${cursor}`,
       );
       addBack(page.items);
       nextCursor.value = page.nextCursor;
@@ -222,6 +245,16 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   async function setSort(next: FeedSort): Promise<void> {
     if (next === sort.value) return;
     sort.value = next;
+    // The grouped and flat feeds each own a sort-scoped cursor, so a sort change resets whichever
+    // window is live and refetches page 1 in the new order. Only the collapsed-stacks view uses the
+    // grouped read — a "See all" drill-in (activeGroup set) renders the flat member list, so it must
+    // fall through to load() (which appends groupParam()) to re-sort the drilled-in group.
+    if (grouped.value && activeGroup.value === null) {
+      groupedEntries.value = [];
+      groupedCursor.value = null;
+      await loadGrouped();
+      return;
+    }
     seen.clear();
     items.value = [];
     nextCursor.value = null;
@@ -241,6 +274,79 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     items.value = [];
     nextCursor.value = null;
     await load();
+  }
+
+  /** `&group=<key>` (plus `&read=` for a read-split stack) when drilled into "See all", else empty. */
+  function groupParam(): string {
+    if (activeGroup.value === null) return "";
+    const g = `&group=${encodeURIComponent(activeGroup.value)}`;
+    return activeGroupRead.value === null ? g : `${g}&read=${activeGroupRead.value}`;
+  }
+
+  /**
+   * Load the collapsed grouped feed (page 1) — one entry per stack/standalone. Replaces the grouped
+   * window (not additive): the server owns the aggregates, so a refetch is always the source of truth.
+   */
+  async function loadGrouped(): Promise<void> {
+    // Only show the skeleton on a first/cold load — a warm refetch (e.g. an SSE-triggered refresh)
+    // keeps the current stacks visible rather than flashing the loading state.
+    if (status.value !== "ready") status.value = "loading";
+    error.value = null;
+    try {
+      const page = await deps.transport.get<GroupedPage>(
+        `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}`,
+      );
+      groupedEntries.value = Array.isArray(page?.entries) ? page.entries : [];
+      groupedCursor.value = page?.nextCursor ?? null;
+      status.value = "ready";
+      await fetchCounts();
+    } catch {
+      status.value = "error";
+      error.value = "Couldn't load your notifications. Check your connection and try again.";
+    }
+  }
+
+  /** Fetch the next page of grouped stacks (older). No-op while one is in flight or at the end. */
+  async function loadMoreGrouped(): Promise<void> {
+    if (loadingGrouped.value || !groupedCursor.value) return;
+    loadingGrouped.value = true;
+    try {
+      const cursor = encodeURIComponent(groupedCursor.value);
+      const page = await deps.transport.get<GroupedPage>(
+        `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}&cursor=${cursor}`,
+      );
+      groupedEntries.value = [...groupedEntries.value, ...page.entries];
+      groupedCursor.value = page.nextCursor;
+    } catch {
+      console.warn("[feed] failed to load older stacks; will retry on next scroll");
+    } finally {
+      loadingGrouped.value = false;
+    }
+  }
+
+  /**
+   * Drill into one group's members ("See all"): scope the flat list to `key` and refetch page 1.
+   * `read` scopes to the opened stack's read-state (unread/read); omit to show the whole subject.
+   */
+  async function enterGroup(key: string, label = "", read?: boolean): Promise<void> {
+    activeGroup.value = key;
+    activeGroupLabel.value = label;
+    activeGroupRead.value = read ?? null;
+    seen.clear();
+    items.value = [];
+    nextCursor.value = null;
+    await load();
+  }
+
+  /** Leave the "See all" drill-in and return to the flat/grouped feed. */
+  function exitGroup(): void {
+    if (activeGroup.value === null) return;
+    activeGroup.value = null;
+    activeGroupLabel.value = "";
+    activeGroupRead.value = null;
+    seen.clear();
+    items.value = [];
+    nextCursor.value = null;
   }
 
   // Live alert subscribers (the toast listens here). Fired with genuinely-new high+critical items
@@ -266,15 +372,21 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     );
     for (const n of fresh) adjustCount(n.priority, +1);
     const freshAlerts = fresh.filter((n) => n.priority === "critical" || n.priority === "high");
-    // Live arrivals are active (un-muted) notifications, so counts and toasts still update — but the
-    // muted view must not gain them.
-    if (view.value === "active") {
+    // Live arrivals are active (un-muted) notifications, so counts and toasts still update — but only
+    // the plain active feed gains them in place. In every other mode we record their ids in `seen`
+    // (so an at-least-once redelivery isn't counted as `fresh` twice) and reconcile differently.
+    if (activeGroup.value !== null) {
+      // "See all" drill-in: SSE items carry no group_key, so we can't place them in this group — skip.
+      for (const n of fresh) seen.add(n.id);
+    } else if (grouped.value) {
+      // Grouped stacks: SSE items carry no group_key, so refetch the stacks from the server (which
+      // has the keys) to fold the arrival into the right stack with correct totals.
+      for (const n of fresh) seen.add(n.id);
+      if (fresh.length > 0) void loadGrouped();
+    } else if (view.value === "active") {
       addFront(incoming); // dedupes on `seen` internally
     } else {
-      // In the muted view we don't prepend (these are active notifs, not muted ones), but we still
-      // record their ids in `seen` so an at-least-once re-delivery isn't counted as `fresh` twice —
-      // the same dedup the active view gets via addFront. setView clears `seen` on the way back, and
-      // an active notification can never belong in the muted list, so nothing is wrongly suppressed.
+      // Muted view: never gains active arrivals; an active notification can't belong in the muted list.
       for (const n of fresh) seen.add(n.id);
     }
     if (freshAlerts.length > 0) for (const cb of alertSubs) cb(freshAlerts);
@@ -321,26 +433,36 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
    * failure. No-op if it's unknown or already read, so a re-click costs nothing.
    */
   async function markRead(id: string): Promise<void> {
+    // In the grouped stacks view the card lives in a stack's peek or a single-entry card, NOT in the
+    // flat `items` window — so `target` is undefined there. We must still persist the read (that was
+    // the "the icon does nothing" bug) and reflect it by refetching the server-derived stacks.
     const target = items.value.find((n) => n.id === id);
-    if (!target || target.read) return;
-    const prio = target.priority;
-    setRead(id, true);
-    stick(id); // open-and-seen: keep it in place while it's read this session
-    adjustCount(prio, -1); // optimistic: one fewer unread of this priority
+    if (target) {
+      if (target.read) return; // already read
+      setRead(id, true);
+      stick(id); // open-and-seen: keep it in place while it's read this session
+      adjustCount(target.priority, -1); // optimistic: one fewer unread of this priority
+    } else if (!grouped.value) {
+      return; // an unknown notification in the flat feed — nothing to do (only grouped peek/single
+      // cards legitimately sit outside `items`)
+    }
     try {
       await deps.transport.post(`/notifications/${encodeURIComponent(id)}/read`);
+      if (grouped.value && activeGroup.value === null) await loadGrouped();
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         // The notification no longer exists server-side (e.g. deleted via admin maintenance
         // while this feed stayed open). Drop the stale row instead of reverting — otherwise it
         // lingers, un-markable, because every future read POST 404s the same way. It's no longer
         // an unread-existing notification, so the count decrement stands.
-        remove(id);
+        if (target) remove(id);
         return;
       }
-      setRead(id, false); // genuine failure — revert
-      unstick(id);
-      adjustCount(prio, +1); // revert the count delta too
+      if (target) {
+        setRead(id, false); // genuine failure — revert
+        unstick(id);
+        adjustCount(target.priority, +1); // revert the count delta too
+      }
       console.warn(`[feed] failed to mark ${id} read; reverted`);
     }
   }
@@ -351,19 +473,28 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
    * No-op if unknown or already unread.
    */
   async function markUnread(id: string): Promise<void> {
+    // Same as markRead: in the grouped stacks view the card isn't in `items`, so persist + refetch.
     const target = items.value.find((n) => n.id === id);
-    if (!target || !target.read) return;
-    const prio = target.priority;
+    if (target) {
+      if (!target.read) return; // already unread
+    } else if (!grouped.value) {
+      return; // unknown in the flat feed — nothing to do
+    }
     const wasSticky = readThisSession.value.has(id);
-    setRead(id, false);
-    unstick(id);
-    adjustCount(prio, +1); // optimistic: one more unread of this priority
+    if (target) {
+      setRead(id, false);
+      unstick(id);
+      adjustCount(target.priority, +1); // optimistic: one more unread of this priority
+    }
     try {
       await deps.transport.del(`/notifications/${encodeURIComponent(id)}/read`);
+      if (grouped.value && activeGroup.value === null) await loadGrouped();
     } catch {
-      setRead(id, true); // revert — the server didn't clear it
-      if (wasSticky) stick(id); // restore its in-place (sticky) position too — a true inverse
-      adjustCount(prio, -1); // revert the count delta too
+      if (target) {
+        setRead(id, true); // revert — the server didn't clear it
+        if (wasSticky) stick(id); // restore its in-place (sticky) position too — a true inverse
+        adjustCount(target.priority, -1); // revert the count delta too
+      }
       console.warn(`[feed] failed to mark ${id} unread; reverted`);
     }
   }
@@ -388,6 +519,21 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
         adjustCount(n.priority, +1);
       }
       console.warn("[feed] mark-all-read failed; reverted");
+    }
+  }
+
+  /**
+   * Mark an entire group read (a stack's "Mark all read"). The server owns the grouped aggregates, so
+   * rather than optimistically reshuffle stacks, persist and refetch — the unread stack collapses and
+   * the same subject's read stack in Earlier absorbs it. `loadGrouped` also refreshes the counts.
+   */
+  async function markAllReadInGroup(key: string): Promise<void> {
+    if (!key) return;
+    try {
+      await deps.transport.post("/notifications/read", { group: key });
+      await loadGrouped();
+    } catch {
+      console.warn("[feed] mark-group-read failed");
     }
   }
 
@@ -491,6 +637,13 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     sort,
     view,
     counts,
+    // grouping
+    grouped,
+    groupedEntries,
+    hasMoreGrouped,
+    loadingGrouped,
+    activeGroup,
+    activeGroupLabel,
     // filters
     query,
     priorities,
@@ -509,6 +662,10 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     loadMore,
     setSort,
     setView,
+    loadGrouped,
+    loadMoreGrouped,
+    enterGroup,
+    exitGroup,
     fetchCounts,
     reset,
     connect,
@@ -518,6 +675,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     setActions,
     flushSessionReads,
     markAllReadInScope,
+    markAllReadInGroup,
     onLiveAlert,
     togglePriority,
     toggleModule,

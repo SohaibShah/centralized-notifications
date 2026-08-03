@@ -17,10 +17,28 @@ const listQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
   sort: z.enum(FEED_SORTS).default("newest"),
   view: z.enum(FEED_VIEWS).default("active"),
+  group: z.string().min(1).max(300).optional(),
+  // Read-state filter for a group drill-in (peek / "See all") — undefined = both. Kept undefined when
+  // absent (false is a real value: "only read"), so parse explicitly rather than defaulting.
+  read: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => (v === undefined ? undefined : v === "true")),
+  // Query strings are text; z.coerce.boolean() would treat "false" as true, so parse explicitly.
+  grouped: z
+    .enum(["true", "false"])
+    .optional()
+    .transform((v) => v === "true"),
 });
 
 const readParamsSchema = z.object({ id: z.string().min(1).max(200) });
-const bulkReadSchema = z.object({ ids: z.array(z.string().min(1).max(200)).min(1).max(500) });
+// Bulk mark-read is either a list of ids ("Mark all read" over the loaded feed) or a whole group
+// ("Mark all read" on a stack) — never both. `.strict()` on each arm enforces exactly-one: a body
+// carrying both keys matches neither arm and is rejected.
+const bulkReadSchema = z.union([
+  z.object({ ids: z.array(z.string().min(1).max(200)).min(1).max(500) }).strict(),
+  z.object({ group: z.string().min(1).max(300) }).strict(),
+]);
 
 const dispatchParamsSchema = z.object({
   id: z.string().min(1).max(200),
@@ -40,7 +58,19 @@ export function notificationReadRoutes(
     if (!principal) return reply.code(401).send({ error: "authentication required" });
     const parsed = listQuerySchema.safeParse(req.query);
     if (!parsed.success) return reply.code(400).send({ error: "invalid query parameters" });
+    // `grouped` lists stacks; `group` drills into one — they can't be combined.
+    if (parsed.data.grouped && parsed.data.group !== undefined)
+      return reply.code(400).send({ error: "grouped and group are mutually exclusive" });
     try {
+      if (parsed.data.grouped) {
+        const page = await service.listGrouped({
+          principal,
+          cursor: parsed.data.cursor,
+          limit: parsed.data.limit,
+          sort: parsed.data.sort,
+        });
+        return reply.code(200).send(page);
+      }
       const page = await service.list({ principal, ...parsed.data });
       return reply.code(200).send(page);
     } catch (err) {
@@ -85,7 +115,9 @@ export function notificationReadRoutes(
     if (!principal) return reply.code(401).send({ error: "authentication required" });
     const parsed = bulkReadSchema.safeParse(req.body);
     if (!parsed.success) return reply.code(400).send({ error: "invalid request body" });
-    await service.markReadBulk({ principal, ids: parsed.data.ids });
+    if ("group" in parsed.data)
+      await service.markReadGroup({ principal, group: parsed.data.group });
+    else await service.markReadBulk({ principal, ids: parsed.data.ids });
     return reply.code(204).send();
   });
 

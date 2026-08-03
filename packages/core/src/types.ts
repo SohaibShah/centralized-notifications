@@ -1,4 +1,5 @@
 import type { NotificationAction } from "@notifications/shared";
+import type { GroupingStrategy } from "./grouping/types";
 
 /**
  * WHO is asking, as the audience filter needs them. The library's identity contract — the host's
@@ -109,4 +110,6 @@ export interface NotificationServiceConfig {
   /** Optional outbound transport for `dispatch` actions. When absent, dispatch actions report
    *  "module unavailable" (there is no way to reach the module). */
   actionDispatcher?: ActionDispatcher;
+  /** Optional grouping algorithm. Defaults to the text hybrid strategy when absent. */
+  groupingStrategy?: GroupingStrategy;
 }

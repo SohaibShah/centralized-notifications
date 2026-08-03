@@ -1,5 +1,6 @@
 import type { Notification } from "@notifications/shared";
 import type { QueryFn } from "../db";
+import type { GroupAssignment } from "../grouping/types";
 
 /**
  * Persist a validated notification, deduping on its `id` in a single atomic statement:
@@ -15,12 +16,14 @@ export async function persist(
   query: QueryFn,
   n: Notification,
   suppressed: boolean,
+  group: GroupAssignment | null = null,
 ): Promise<"accepted" | "duplicate"> {
   const result = await query<{ id: string }>(
     `INSERT INTO notifications
        (id, module, title, description, priority, snoozable, category,
-        audience_scope, audience_id, actions, metadata, source_ts, suppressed)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        audience_scope, audience_id, actions, metadata, source_ts, suppressed,
+        group_key, group_label)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
      ON CONFLICT (id) DO NOTHING
      RETURNING id`,
     [
@@ -39,6 +42,8 @@ export async function persist(
       n.metadata ? JSON.stringify(n.metadata) : null,
       n.timestamp ?? null,
       suppressed,
+      group?.key ?? null,
+      group?.label ?? null,
     ],
   );
   return result.rows.length > 0 ? "accepted" : "duplicate";
