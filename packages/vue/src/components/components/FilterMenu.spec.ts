@@ -23,6 +23,17 @@ describe("FilterMenu", () => {
     expect(panel.attributes("data-notification-overlay")).toBeDefined();
   });
 
+  it("shows a grouping toggle that reflects and updates the user preference", async () => {
+    const ctx = buildTestContext();
+    const spy = vi.spyOn(ctx.preferences, "updatePref").mockResolvedValue();
+    const wrapper = mountMenu(ctx);
+    await wrapper.get('button[aria-haspopup="true"]').trigger("click");
+    const toggle = wrapper.get('[data-test="toggle-grouping"]');
+    expect((toggle.element as HTMLInputElement).checked).toBe(true); // default on
+    await toggle.trigger("change");
+    expect(spy).toHaveBeenCalledWith({ groupingEnabled: false });
+  });
+
   it("renders Sort-by radios that reflect feed.sort and call setSort on change", async () => {
     const ctx = buildTestContext();
     const spy = vi.spyOn(ctx.feed, "setSort").mockResolvedValue();
