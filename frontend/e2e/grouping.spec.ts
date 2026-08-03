@@ -93,4 +93,41 @@ test.describe("notification grouping", () => {
     await expect(dialog.locator('[data-test="stack-header"]')).toHaveCount(0);
     await expect(dialog.getByText(`${subject} overdue`)).toBeVisible(); // shown as a flat card now
   });
+
+  test("Mark all read clears an unread stack from Needs action into an Earlier stack", async ({
+    page,
+    request,
+  }) => {
+    const token = process.env.INTERNAL_INTAKE_TOKEN ?? "";
+    expect(token, "INTERNAL_INTAKE_TOKEN must be set").not.toBe("");
+
+    await login(page, DEV_USER, DEV_PASSWORD);
+    await ensureGroupingOn(page);
+
+    // Three unread notifications about one subject → a single unread stack (total 3) in Needs action.
+    const uid = `${Date.now()}`.slice(-6);
+    const subject = `MarkAll #${uid}`;
+    for (const step of ["received", "verified", "overdue"]) {
+      expect((await publish(request, token, `${subject} ${step}`)).ok()).toBeTruthy();
+    }
+
+    await page.getByRole("button", { name: /Notifications/ }).click();
+    const dialog = page.getByRole("dialog", { name: "Notifications" });
+    const stack = dialog.locator('[data-test="stack-header"]', { hasText: subject });
+    await expect(stack).toBeVisible();
+    await expect(stack).toContainText("3");
+
+    // Expand and mark the whole group read.
+    await stack.click();
+    await dialog.locator('[data-test="stack-mark-all"]').first().click();
+
+    // The unread stack collapses out of Needs action and the same subject reappears, still counted 3,
+    // as a read stack in the Earlier section (the read-split in action).
+    const earlierStack = dialog.locator('[data-test="earlier-list"] [data-test="stack-header"]', {
+      hasText: subject,
+    });
+    await expect(earlierStack).toBeVisible();
+    await expect(earlierStack).toContainText("3");
+    await page.keyboard.press("Escape");
+  });
 });
