@@ -222,6 +222,18 @@ describe("feed store", () => {
     expect(feed.groupedEntries[0]!.groupTotal).toBe(3);
   });
 
+  it("setSort in grouped mode refetches the stacks in the new order", async () => {
+    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
+    await feed.setSort("priority-high");
+    const call = getMock.mock.calls.find((c) => String(c[0]).includes("grouped=true"));
+    expect(call).toBeDefined();
+    expect(String(call![0])).toContain("sort=priority-high");
+  });
+
   it("enterGroup loads that group's members flat; exitGroup clears it", async () => {
     const feed = makeFeed();
     getMock.mockResolvedValue(page([feedItem({ id: "m1" }), feedItem({ id: "m2" })], null));

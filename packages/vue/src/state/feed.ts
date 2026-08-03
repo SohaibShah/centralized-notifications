@@ -242,6 +242,14 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   async function setSort(next: FeedSort): Promise<void> {
     if (next === sort.value) return;
     sort.value = next;
+    // The grouped and flat feeds each own a sort-scoped cursor, so a sort change resets whichever
+    // window is live and refetches page 1 in the new order.
+    if (grouped.value) {
+      groupedEntries.value = [];
+      groupedCursor.value = null;
+      await loadGrouped();
+      return;
+    }
     seen.clear();
     items.value = [];
     nextCursor.value = null;
@@ -279,7 +287,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     error.value = null;
     try {
       const page = await deps.transport.get<GroupedPage>(
-        `/notifications?grouped=true&limit=${PAGE_SIZE}`,
+        `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}`,
       );
       groupedEntries.value = Array.isArray(page?.entries) ? page.entries : [];
       groupedCursor.value = page?.nextCursor ?? null;
@@ -298,7 +306,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     try {
       const cursor = encodeURIComponent(groupedCursor.value);
       const page = await deps.transport.get<GroupedPage>(
-        `/notifications?grouped=true&limit=${PAGE_SIZE}&cursor=${cursor}`,
+        `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}&cursor=${cursor}`,
       );
       groupedEntries.value = [...groupedEntries.value, ...page.entries];
       groupedCursor.value = page.nextCursor;
