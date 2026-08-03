@@ -2,6 +2,7 @@ import type { Pool } from "pg";
 import type {
   CategoryMuteTarget,
   FeedSort,
+  FeedView,
   MuteRule,
   MuteTargetKind,
   MuteTargetsResponse,
@@ -62,6 +63,7 @@ export interface NotificationService {
     cursor?: string;
     limit?: number;
     sort?: FeedSort;
+    view?: FeedView;
   }): Promise<NotificationPage>;
   counts(args: { principal: Principal }): Promise<NotificationCounts>;
   markRead(args: { principal: Principal; id: string }): Promise<void>;

@@ -82,6 +82,13 @@ test.describe("per-user settings", () => {
     await page.getByRole("button", { name: /Notifications/ }).click();
     await expect(dialog.getByText(nonSnoozTitle)).toBeVisible();
     await expect(dialog.getByText(snoozTitle)).toHaveCount(0);
+
+    // The muted-view toggle reveals exactly what's hidden: the snoozable DSR notif appears here,
+    // while the non-snoozable one (never muted) does not. Toggle back to the active feed after.
+    await dialog.locator('[data-test="muted-view-toggle"]').click();
+    await expect(dialog.getByText(snoozTitle)).toBeVisible();
+    await expect(dialog.getByText(nonSnoozTitle)).toHaveCount(0);
+    await dialog.locator('[data-test="muted-view-toggle"]').click(); // back to the active feed
     await page.keyboard.press("Escape");
 
     // Un-mute (in-app) → the snoozable DSR notif reappears without a reload.

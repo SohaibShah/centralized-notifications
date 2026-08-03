@@ -2,6 +2,7 @@ import { computed, reactive, ref, shallowRef, type Ref } from "vue";
 import type {
   FeedNotification,
   FeedSort,
+  FeedView,
   Notification,
   NotificationAction,
   NotificationCounts,
@@ -71,6 +72,11 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   // Server-owned sort order. The keyset cursor is scoped to this value, so changing it
   // requires a page-1 refetch (see setSort). Default matches the backend default.
   const sort = ref<FeedSort>("newest");
+
+  // Which slice of the feed to read: "active" (the normal feed) or "muted" (only what the user's
+  // snooze/mute rules are hiding — the server-side inverse). Switching requires a page-1 refetch of
+  // a different dataset, so setView clears the window like setSort. Default matches the backend.
+  const view = ref<FeedView>("active");
 
   // Authoritative unread counts over the WHOLE dataset (from GET /notifications/counts), so the
   // bell/header/chip counts don't undercount to the loaded window. Seeded by fetchCounts (on load
@@ -146,6 +152,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     status.value = "idle";
     readThisSession.value = new Set();
     sort.value = "newest"; // a re-login starts at the default order
+    view.value = "active"; // …and in the normal (non-muted) view
     counts.value = { unread: 0, unreadByPriority: emptyByPriority() };
   }
 
@@ -161,7 +168,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     error.value = null;
     try {
       const page = await deps.transport.get<NotificationPage>(
-        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}`,
+        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}`,
       );
       addBack(page.items);
       nextCursor.value = page.nextCursor;
@@ -193,7 +200,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     try {
       const cursor = encodeURIComponent(nextCursor.value);
       const page = await deps.transport.get<NotificationPage>(
-        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&cursor=${cursor}`,
+        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}&cursor=${cursor}`,
       );
       addBack(page.items);
       nextCursor.value = page.nextCursor;
@@ -221,6 +228,21 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     await load(); // load() flushes session reads and refetches the newest page in the new order
   }
 
+  /**
+   * Switch the feed view between "active" (the normal feed) and "muted" (only what the user's
+   * snooze/mute rules are hiding). It's a different dataset, so — like setSort — soft-reset the
+   * loaded window and refetch page 1. The SSE connection stays live (onLiveBatch skips the prepend
+   * while in the muted view; live arrivals are active notifications and must not enter it).
+   */
+  async function setView(next: FeedView): Promise<void> {
+    if (next === view.value) return;
+    view.value = next;
+    seen.clear();
+    items.value = [];
+    nextCursor.value = null;
+    await load();
+  }
+
   // Live alert subscribers (the toast listens here). Fired with genuinely-new high+critical items
   // this batch (the toastable set); the toast viewport narrows further by the user's toast preference.
   // Only fresh items are emitted, so a duplicate delivery never re-toasts.
@@ -244,7 +266,17 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     );
     for (const n of fresh) adjustCount(n.priority, +1);
     const freshAlerts = fresh.filter((n) => n.priority === "critical" || n.priority === "high");
-    addFront(incoming); // dedupes on `seen` internally
+    // Live arrivals are active (un-muted) notifications, so counts and toasts still update — but the
+    // muted view must not gain them.
+    if (view.value === "active") {
+      addFront(incoming); // dedupes on `seen` internally
+    } else {
+      // In the muted view we don't prepend (these are active notifs, not muted ones), but we still
+      // record their ids in `seen` so an at-least-once re-delivery isn't counted as `fresh` twice —
+      // the same dedup the active view gets via addFront. setView clears `seen` on the way back, and
+      // an active notification can never belong in the muted list, so nothing is wrongly suppressed.
+      for (const n of fresh) seen.add(n.id);
+    }
     if (freshAlerts.length > 0) for (const cb of alertSubs) cb(freshAlerts);
   }
 
@@ -457,6 +489,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     connection,
     hasMore,
     sort,
+    view,
     counts,
     // filters
     query,
@@ -475,6 +508,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     reload,
     loadMore,
     setSort,
+    setView,
     fetchCounts,
     reset,
     connect,

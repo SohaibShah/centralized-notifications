@@ -28,6 +28,24 @@ export function muteWhere(userKey: string, params: unknown[]): string {
                     OR (mr.target_kind = 'category' AND mr.target = n.category) ) ) )`;
 }
 
+/**
+ * The exact inverse of `muteWhere`: match ONLY the notifications currently hidden by an active
+ * snooze/mute rule — i.e. `snoozable: true` AND a matching active rule. Used by the "muted" feed
+ * view so a user can peek at what their rules are hiding. Must stay in lockstep with `muteWhere`:
+ * together the two predicates partition the audience-scoped feed (active ∪ muted, no overlap).
+ */
+export function mutedOnlyWhere(userKey: string, params: unknown[]): string {
+  params.push(userKey);
+  const u = params.length;
+  return `( n.snoozable = true
+        AND EXISTS (
+              SELECT 1 FROM user_mute_rules mr
+               WHERE mr.user_key = $${u}::text
+                 AND (mr.muted_until IS NULL OR mr.muted_until > now())
+                 AND ( (mr.target_kind = 'module'   AND mr.target = n.module)
+                    OR (mr.target_kind = 'category' AND mr.target = n.category) ) ) )`;
+}
+
 /** In-memory twin used by the delivery hub / SSE, where the DB is not on the hot path. */
 export function isSuppressed(
   rules: MuteRule[],

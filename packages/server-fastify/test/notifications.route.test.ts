@@ -105,6 +105,43 @@ test("a bad cursor → 400", async () => {
   expect(res.statusCode).toBe(400);
 });
 
+test("view=muted returns only what an active rule hides; active view is the inverse", async () => {
+  const mutedUser = `route-muted-${stamp}`;
+  const headers = { "x-test-user": mutedUser };
+  const snoozableId = `route-snoozable-${stamp}`;
+  // A snoozable global notif; `globalId` (ingested in beforeAll) is non-snoozable.
+  await svc.ingest({ ...notif(snoozableId, { scope: "global" }), snoozable: true });
+  await svc.putMuteRule({
+    principal: { userKey: mutedUser, roles: [], teamKeys: [] },
+    targetKind: "module",
+    target: "dsr",
+    until: null,
+  });
+
+  const muted = await app.inject({
+    method: "GET",
+    url: "/notifications?view=muted&limit=100",
+    headers,
+  });
+  expect(muted.statusCode).toBe(200);
+  const mutedIds = (muted.json() as { items: { id: string }[] }).items.map((i) => i.id);
+  expect(mutedIds).toContain(snoozableId); // snoozable + muted module → in the muted view
+  expect(mutedIds).not.toContain(globalId); // non-snoozable → never muted
+
+  const active = await feedIds(headers);
+  expect(active).not.toContain(snoozableId); // hidden from the active feed
+  expect(active).toContain(globalId); // still comes through
+});
+
+test("an invalid view value → 400", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?view=bogus",
+    headers: { "x-test-user": "priya" },
+  });
+  expect(res.statusCode).toBe(400);
+});
+
 test("marking read is audience-scoped: out-of-audience id → 404", async () => {
   const res = await app.inject({
     method: "POST",
