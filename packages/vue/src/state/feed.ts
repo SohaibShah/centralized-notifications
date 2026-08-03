@@ -3,6 +3,8 @@ import type {
   FeedNotification,
   FeedSort,
   FeedView,
+  GroupedEntry,
+  GroupedPage,
   Notification,
   NotificationAction,
   NotificationCounts,
@@ -77,6 +79,19 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   // snooze/mute rules are hiding — the server-side inverse). Switching requires a page-1 refetch of
   // a different dataset, so setView clears the window like setSort. Default matches the backend.
   const view = ref<FeedView>("active");
+
+  // --- grouping -------------------------------------------------------------
+  // `grouped` is an INPUT flag the panel sets (from the admin + user toggles + filter state); it tells
+  // the store to render collapsed stacks (`groupedEntries`) and drives the live-batch behaviour.
+  const grouped = ref(false);
+  const groupedEntries = shallowRef<GroupedEntry[]>([]);
+  const groupedCursor = ref<string | null>(null);
+  const loadingGrouped = ref(false);
+  const hasMoreGrouped = computed(() => groupedCursor.value !== null);
+  // The "See all" drill-in: when set, the flat item list is scoped to this one group's members.
+  const activeGroup = ref<string | null>(null);
+  // The label to show in the group banner while drilled in (captured from the stack the user opened).
+  const activeGroupLabel = ref<string>("");
 
   // Authoritative unread counts over the WHOLE dataset (from GET /notifications/counts), so the
   // bell/header/chip counts don't undercount to the loaded window. Seeded by fetchCounts (on load
@@ -153,6 +168,11 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     readThisSession.value = new Set();
     sort.value = "newest"; // a re-login starts at the default order
     view.value = "active"; // …and in the normal (non-muted) view
+    grouped.value = false;
+    groupedEntries.value = [];
+    groupedCursor.value = null;
+    activeGroup.value = null;
+    activeGroupLabel.value = "";
     counts.value = { unread: 0, unreadByPriority: emptyByPriority() };
   }
 
@@ -168,7 +188,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     error.value = null;
     try {
       const page = await deps.transport.get<NotificationPage>(
-        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}`,
+        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}${groupParam()}`,
       );
       addBack(page.items);
       nextCursor.value = page.nextCursor;
@@ -200,7 +220,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     try {
       const cursor = encodeURIComponent(nextCursor.value);
       const page = await deps.transport.get<NotificationPage>(
-        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}&cursor=${cursor}`,
+        `/notifications?limit=${PAGE_SIZE}&sort=${sort.value}&view=${view.value}${groupParam()}&cursor=${cursor}`,
       );
       addBack(page.items);
       nextCursor.value = page.nextCursor;
@@ -243,6 +263,70 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     await load();
   }
 
+  /** `&group=<key>` when drilled into a "See all" view, else empty. */
+  function groupParam(): string {
+    return activeGroup.value !== null ? `&group=${encodeURIComponent(activeGroup.value)}` : "";
+  }
+
+  /**
+   * Load the collapsed grouped feed (page 1) — one entry per stack/standalone. Replaces the grouped
+   * window (not additive): the server owns the aggregates, so a refetch is always the source of truth.
+   */
+  async function loadGrouped(): Promise<void> {
+    status.value = "loading";
+    error.value = null;
+    try {
+      const page = await deps.transport.get<GroupedPage>(
+        `/notifications?grouped=true&limit=${PAGE_SIZE}`,
+      );
+      groupedEntries.value = page.entries;
+      groupedCursor.value = page.nextCursor;
+      status.value = "ready";
+      await fetchCounts();
+    } catch {
+      status.value = "error";
+      error.value = "Couldn't load your notifications. Check your connection and try again.";
+    }
+  }
+
+  /** Fetch the next page of grouped stacks (older). No-op while one is in flight or at the end. */
+  async function loadMoreGrouped(): Promise<void> {
+    if (loadingGrouped.value || !groupedCursor.value) return;
+    loadingGrouped.value = true;
+    try {
+      const cursor = encodeURIComponent(groupedCursor.value);
+      const page = await deps.transport.get<GroupedPage>(
+        `/notifications?grouped=true&limit=${PAGE_SIZE}&cursor=${cursor}`,
+      );
+      groupedEntries.value = [...groupedEntries.value, ...page.entries];
+      groupedCursor.value = page.nextCursor;
+    } catch {
+      console.warn("[feed] failed to load older stacks; will retry on next scroll");
+    } finally {
+      loadingGrouped.value = false;
+    }
+  }
+
+  /** Drill into one group's members ("See all"): scope the flat list to `key` and refetch page 1. */
+  async function enterGroup(key: string, label = ""): Promise<void> {
+    activeGroup.value = key;
+    activeGroupLabel.value = label;
+    seen.clear();
+    items.value = [];
+    nextCursor.value = null;
+    await load();
+  }
+
+  /** Leave the "See all" drill-in and return to the flat/grouped feed. */
+  function exitGroup(): void {
+    if (activeGroup.value === null) return;
+    activeGroup.value = null;
+    activeGroupLabel.value = "";
+    seen.clear();
+    items.value = [];
+    nextCursor.value = null;
+  }
+
   // Live alert subscribers (the toast listens here). Fired with genuinely-new high+critical items
   // this batch (the toastable set); the toast viewport narrows further by the user's toast preference.
   // Only fresh items are emitted, so a duplicate delivery never re-toasts.
@@ -266,15 +350,21 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     );
     for (const n of fresh) adjustCount(n.priority, +1);
     const freshAlerts = fresh.filter((n) => n.priority === "critical" || n.priority === "high");
-    // Live arrivals are active (un-muted) notifications, so counts and toasts still update — but the
-    // muted view must not gain them.
-    if (view.value === "active") {
+    // Live arrivals are active (un-muted) notifications, so counts and toasts still update — but only
+    // the plain active feed gains them in place. In every other mode we record their ids in `seen`
+    // (so an at-least-once redelivery isn't counted as `fresh` twice) and reconcile differently.
+    if (activeGroup.value !== null) {
+      // "See all" drill-in: SSE items carry no group_key, so we can't place them in this group — skip.
+      for (const n of fresh) seen.add(n.id);
+    } else if (grouped.value) {
+      // Grouped stacks: SSE items carry no group_key, so refetch the stacks from the server (which
+      // has the keys) to fold the arrival into the right stack with correct totals.
+      for (const n of fresh) seen.add(n.id);
+      if (fresh.length > 0) void loadGrouped();
+    } else if (view.value === "active") {
       addFront(incoming); // dedupes on `seen` internally
     } else {
-      // In the muted view we don't prepend (these are active notifs, not muted ones), but we still
-      // record their ids in `seen` so an at-least-once re-delivery isn't counted as `fresh` twice —
-      // the same dedup the active view gets via addFront. setView clears `seen` on the way back, and
-      // an active notification can never belong in the muted list, so nothing is wrongly suppressed.
+      // Muted view: never gains active arrivals; an active notification can't belong in the muted list.
       for (const n of fresh) seen.add(n.id);
     }
     if (freshAlerts.length > 0) for (const cb of alertSubs) cb(freshAlerts);
@@ -491,6 +581,13 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     sort,
     view,
     counts,
+    // grouping
+    grouped,
+    groupedEntries,
+    hasMoreGrouped,
+    loadingGrouped,
+    activeGroup,
+    activeGroupLabel,
     // filters
     query,
     priorities,
@@ -509,6 +606,10 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     loadMore,
     setSort,
     setView,
+    loadGrouped,
+    loadMoreGrouped,
+    enterGroup,
+    exitGroup,
     fetchCounts,
     reset,
     connect,
