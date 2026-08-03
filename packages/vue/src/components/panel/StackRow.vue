@@ -58,6 +58,20 @@ async function toggle(): Promise<void> {
   open.value = !open.value;
   if (open.value && peek.value === null && !loading.value) await fetchPeek();
 }
+
+// Optimistically flip a peek member's read flag so its card responds instantly; the panel then
+// persists the change and refetches the stacks (their counts/split are server-derived).
+function flipPeekRead(id: string, read: boolean): void {
+  if (peek.value) peek.value = peek.value.map((m) => (m.id === id ? { ...m, read } : m));
+}
+function onMemberRead(n: FeedNotification): void {
+  flipPeekRead(n.id, true);
+  emit("open", n);
+}
+function onMemberUnread(n: FeedNotification): void {
+  flipPeekRead(n.id, false);
+  emit("unread", n);
+}
 </script>
 
 <template>
@@ -67,6 +81,7 @@ async function toggle(): Promise<void> {
     :notification="entry"
     @open="(n) => emit('open', n)"
     @action="(a, n, i) => emit('action', a, n, i)"
+    @unread="(n) => emit('unread', n)"
   />
 
   <div v-else class="border-b border-line">
@@ -164,9 +179,9 @@ async function toggle(): Promise<void> {
           v-for="m in peek ?? []"
           :key="m.id"
           :notification="m"
-          @open="(n) => emit('open', n)"
+          @open="onMemberRead"
           @action="(a, n, i) => emit('action', a, n, i)"
-          @unread="(n) => emit('unread', n)"
+          @unread="onMemberUnread"
         />
       </div>
       <button

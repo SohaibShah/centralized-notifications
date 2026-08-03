@@ -258,6 +258,15 @@ describe("feed store", () => {
     expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
   });
 
+  it("markRead in grouped mode persists a card outside the flat window, then refetches stacks", async () => {
+    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.markRead("peek-1"); // a peek member / single-entry card — never in the flat `items`
+    expect(postMock).toHaveBeenCalledWith("/notifications/peek-1/read");
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
+  });
+
   it("enterGroup loads that group's members flat; exitGroup clears it", async () => {
     const feed = makeFeed();
     getMock.mockResolvedValue(page([feedItem({ id: "m1" }), feedItem({ id: "m2" })], null));

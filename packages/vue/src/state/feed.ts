@@ -433,26 +433,36 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
    * failure. No-op if it's unknown or already read, so a re-click costs nothing.
    */
   async function markRead(id: string): Promise<void> {
+    // In the grouped stacks view the card lives in a stack's peek or a single-entry card, NOT in the
+    // flat `items` window — so `target` is undefined there. We must still persist the read (that was
+    // the "the icon does nothing" bug) and reflect it by refetching the server-derived stacks.
     const target = items.value.find((n) => n.id === id);
-    if (!target || target.read) return;
-    const prio = target.priority;
-    setRead(id, true);
-    stick(id); // open-and-seen: keep it in place while it's read this session
-    adjustCount(prio, -1); // optimistic: one fewer unread of this priority
+    if (target) {
+      if (target.read) return; // already read
+      setRead(id, true);
+      stick(id); // open-and-seen: keep it in place while it's read this session
+      adjustCount(target.priority, -1); // optimistic: one fewer unread of this priority
+    } else if (!grouped.value) {
+      return; // an unknown notification in the flat feed — nothing to do (only grouped peek/single
+      // cards legitimately sit outside `items`)
+    }
     try {
       await deps.transport.post(`/notifications/${encodeURIComponent(id)}/read`);
+      if (grouped.value && activeGroup.value === null) await loadGrouped();
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         // The notification no longer exists server-side (e.g. deleted via admin maintenance
         // while this feed stayed open). Drop the stale row instead of reverting — otherwise it
         // lingers, un-markable, because every future read POST 404s the same way. It's no longer
         // an unread-existing notification, so the count decrement stands.
-        remove(id);
+        if (target) remove(id);
         return;
       }
-      setRead(id, false); // genuine failure — revert
-      unstick(id);
-      adjustCount(prio, +1); // revert the count delta too
+      if (target) {
+        setRead(id, false); // genuine failure — revert
+        unstick(id);
+        adjustCount(target.priority, +1); // revert the count delta too
+      }
       console.warn(`[feed] failed to mark ${id} read; reverted`);
     }
   }
@@ -463,19 +473,28 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
    * No-op if unknown or already unread.
    */
   async function markUnread(id: string): Promise<void> {
+    // Same as markRead: in the grouped stacks view the card isn't in `items`, so persist + refetch.
     const target = items.value.find((n) => n.id === id);
-    if (!target || !target.read) return;
-    const prio = target.priority;
+    if (target) {
+      if (!target.read) return; // already unread
+    } else if (!grouped.value) {
+      return; // unknown in the flat feed — nothing to do
+    }
     const wasSticky = readThisSession.value.has(id);
-    setRead(id, false);
-    unstick(id);
-    adjustCount(prio, +1); // optimistic: one more unread of this priority
+    if (target) {
+      setRead(id, false);
+      unstick(id);
+      adjustCount(target.priority, +1); // optimistic: one more unread of this priority
+    }
     try {
       await deps.transport.del(`/notifications/${encodeURIComponent(id)}/read`);
+      if (grouped.value && activeGroup.value === null) await loadGrouped();
     } catch {
-      setRead(id, true); // revert — the server didn't clear it
-      if (wasSticky) stick(id); // restore its in-place (sticky) position too — a true inverse
-      adjustCount(prio, -1); // revert the count delta too
+      if (target) {
+        setRead(id, true); // revert — the server didn't clear it
+        if (wasSticky) stick(id); // restore its in-place (sticky) position too — a true inverse
+        adjustCount(target.priority, -1); // revert the count delta too
+      }
       console.warn(`[feed] failed to mark ${id} unread; reverted`);
     }
   }

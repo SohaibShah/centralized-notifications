@@ -53,6 +53,52 @@ describe("StackRow", () => {
     expect(w.findAll('[data-test="member-card"]').length).toBe(2);
   });
 
+  it("marking a peek member read optimistically flips it in the peek and emits open", async () => {
+    const get = vi.fn().mockResolvedValue({
+      items: [feedItem({ id: "m1", read: false })],
+      nextCursor: null,
+    });
+    const w = mount(StackRow, {
+      props: { entry: entry(), transport: { get } },
+      global: {
+        stubs: {
+          NotificationCardRenderer: {
+            props: ["notification"],
+            emits: ["open", "action", "unread"],
+            template: `<button class="mem" :data-read="String(notification.read)" @click="$emit('open', notification)" />`,
+          },
+        },
+      },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(w.get(".mem").attributes("data-read")).toBe("false");
+    await w.get(".mem").trigger("click");
+    expect(w.emitted("open")).toBeTruthy();
+    await Promise.resolve();
+    expect(w.get(".mem").attributes("data-read")).toBe("true");
+  });
+
+  it("a single-entry card forwards unread", async () => {
+    const w = mount(StackRow, {
+      props: {
+        entry: entry({ groupTotal: 1, groupKey: undefined, read: true }),
+        transport: { get: vi.fn() },
+      },
+      global: {
+        stubs: {
+          NotificationCardRenderer: {
+            props: ["notification"],
+            emits: ["open", "action", "unread"],
+            template: `<button data-test="single" @click="$emit('unread', notification)" />`,
+          },
+        },
+      },
+    });
+    await w.get('[data-test="single"]').trigger("click");
+    expect(w.emitted("unread")).toBeTruthy();
+  });
+
   it("emits see-all with the group key", async () => {
     const get = vi.fn().mockResolvedValue({ items: [], nextCursor: null });
     const w = mount(StackRow, {
