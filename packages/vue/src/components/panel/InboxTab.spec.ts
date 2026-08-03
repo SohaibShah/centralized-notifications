@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { flushPromises } from "@vue/test-utils";
 import InboxTab from "./InboxTab.vue";
 import { feedItem } from "../../test-support/feedItem";
 import { buildTestContext, mountWithProvider } from "../../test/provider-harness";
@@ -108,8 +109,57 @@ describe("InboxTab", () => {
     expect(wrapper.text()).not.toContain("You're all caught up");
   });
 
+  it("renders stacks when grouping is active (admin + user on) and no filters", async () => {
+    const transport = {
+      get: vi.fn(async () => ({
+        entries: [
+          {
+            ...feedItem({ id: "g1", title: "DSAR #1042 overdue" }),
+            groupKey: "dsr:#1042",
+            groupLabel: "DSAR #1042",
+            groupTotal: 3,
+            groupUnread: 2,
+            topPriority: "high",
+          },
+        ],
+        nextCursor: null,
+      })),
+      post: vi.fn(async () => ({})),
+      patch: vi.fn(async () => ({})),
+      del: vi.fn(async () => ({})),
+    } as unknown as NotificationsContext["transport"];
+    const ctx = buildTestContext({
+      transport,
+      summary: summaryState as unknown as NotificationsContext["summary"],
+    });
+    ctx.settings.flags.groupingEnabled = true;
+    ctx.preferences.prefs.groupingEnabled = true;
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    await flushPromises();
+    expect(wrapper.find('[data-test="stack-header"]').exists()).toBe(true);
+  });
+
+  it("falls back to the flat feed when the user grouping pref is off", () => {
+    const ctx = makeCtx();
+    ctx.settings.flags.groupingEnabled = true;
+    ctx.preferences.prefs.groupingEnabled = false;
+    ctx.feed.status = "ready";
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    expect(wrapper.find('[data-test="stack-header"]').exists()).toBe(false);
+  });
+
+  it("a filter chip active forces the flat feed even when grouping is on", () => {
+    const ctx = makeCtx();
+    ctx.settings.flags.groupingEnabled = true;
+    ctx.preferences.prefs.groupingEnabled = true;
+    ctx.feed.togglePriority("critical");
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    expect(wrapper.find('[data-test="stack-header"]').exists()).toBe(false);
+  });
+
   it("opens a new tab for a link action", async () => {
     const ctx = makeCtx();
+    ctx.preferences.prefs.groupingEnabled = false; // flat feed — this tests card action wiring
     const feed = ctx.feed;
     feed.items = [
       feedItem({
@@ -138,6 +188,7 @@ describe("InboxTab", () => {
 
   it("does not open a tab for a dispatch action, and dispatches to its own index-keyed endpoint", async () => {
     const ctx = makeCtx();
+    ctx.preferences.prefs.groupingEnabled = false; // flat feed — this tests card action wiring
     const feed = ctx.feed;
     feed.items = [
       feedItem({
@@ -161,6 +212,7 @@ describe("InboxTab", () => {
 
   it("treats a legacy action with no kind as a link (still opens a tab)", async () => {
     const ctx = makeCtx();
+    ctx.preferences.prefs.groupingEnabled = false; // flat feed — this tests card action wiring
     const feed = ctx.feed;
     feed.items = [
       feedItem({

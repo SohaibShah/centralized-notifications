@@ -1,6 +1,15 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
-import { BellOff, ChevronDown, Inbox, RotateCw, SearchX, Sparkles, WifiOff } from "@lucide/vue";
+import { computed, ref, watch } from "vue";
+import {
+  BellOff,
+  ChevronDown,
+  Inbox,
+  Layers,
+  RotateCw,
+  SearchX,
+  Sparkles,
+  WifiOff,
+} from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Button from "../../ui/Button.vue";
 import Chip from "../../ui/Chip.vue";
@@ -12,8 +21,10 @@ import { useSettings } from "../../provider/context";
 import { useSummary } from "../../provider/context";
 import { usePreferences } from "../../provider/context";
 import { useActions } from "../../provider/context";
+import { useTransport } from "../../provider/context";
 import { relativeTime, exactTime } from "../../lib/time";
 import FeedList from "../components/FeedList.vue";
+import StackList from "../components/StackList.vue";
 import FeedBanner from "./FeedBanner.vue";
 
 const feed = useFeed();
@@ -58,8 +69,40 @@ function toggleSummary(): void {
 // "all caught up" empty only applies to the active feed — an empty muted view means nothing is
 // currently muted, which is its own state.
 const isMutedView = computed(() => feed.view === "muted");
+
+// --- grouping -------------------------------------------------------------
+const transport = useTransport();
+// Grouping is available when the admin flag AND the user preference are on, and no filter/search or
+// muted view is narrowing the feed (those force the flat list — a scope decision, see the spec).
+const groupingOn = computed(
+  () =>
+    settings.flags.groupingEnabled &&
+    preferences.prefs.groupingEnabled &&
+    !feed.isFiltered &&
+    feed.view === "active",
+);
+// Show collapsed stacks only when grouping is on AND we're not drilled into a single group ("See all").
+const showStacks = computed(() => groupingOn.value && feed.activeGroup === null);
+
+// Drive the data source: entering the stacks view loads the collapsed feed; leaving it for a filtered/
+// muted flat list refetches flat. A drill-in (enterGroup) loads its own members, and exitGroup flips
+// activeGroup back to null which re-enters the stacks view here. Also keep the store's SSE flag synced.
+watch(
+  showStacks,
+  (on, prev) => {
+    feed.grouped = on;
+    if (on) void feed.loadGrouped();
+    else if (prev && feed.activeGroup === null) void feed.load();
+  },
+  { immediate: true },
+);
+
 const isEmpty = computed(
-  () => feed.view === "active" && feed.status === "ready" && feed.items.length === 0,
+  () =>
+    feed.view === "active" &&
+    feed.activeGroup === null &&
+    feed.status === "ready" &&
+    (showStacks.value ? feed.groupedEntries.length === 0 : feed.items.length === 0),
 );
 const isMutedEmpty = computed(
   () => feed.view === "muted" && feed.status === "ready" && feed.items.length === 0,
@@ -267,6 +310,16 @@ async function onAction(
       label="Snoozed & muted notifications"
     />
 
+    <!-- "See all" drill-in: shows one group's members with a one-click exit back to the stacks. -->
+    <FeedBanner
+      v-else-if="feed.activeGroup !== null"
+      data-test="group-view-banner"
+      :icon="Layers"
+      :label="feed.activeGroupLabel || 'Group'"
+      exit-label="Exit group"
+      @exit="feed.exitGroup()"
+    />
+
     <!-- Body: loading / error / empty / filtered-empty / populated -->
     <div class="flex min-h-0 flex-1 flex-col">
       <div v-if="feed.status === 'loading'" class="px-3 py-2" aria-hidden="true">
@@ -311,6 +364,21 @@ async function onAction(
         <Button variant="secondary" size="sm" @click="feed.clearFilters()">Clear filters</Button>
       </StatePanel>
 
+      <!-- Grouped stacks (grouping on, not drilled into a group). -->
+      <StackList
+        v-else-if="showStacks"
+        :entries="feed.groupedEntries"
+        :unread="feed.counts.unread"
+        :has-more="feed.hasMoreGrouped"
+        :loading-more="feed.loadingGrouped"
+        :transport="transport"
+        @load-more="feed.loadMoreGrouped()"
+        @open="(n) => feed.markRead(n.id)"
+        @action="onAction"
+        @see-all="(key, label) => feed.enterGroup(key, label)"
+      />
+
+      <!-- Flat feed: the ungrouped case, and the "See all" drill-in (one group's members). -->
       <FeedList
         v-else
         :groups="feed.groups"

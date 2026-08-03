@@ -273,14 +273,16 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
    * window (not additive): the server owns the aggregates, so a refetch is always the source of truth.
    */
   async function loadGrouped(): Promise<void> {
-    status.value = "loading";
+    // Only show the skeleton on a first/cold load — a warm refetch (e.g. an SSE-triggered refresh)
+    // keeps the current stacks visible rather than flashing the loading state.
+    if (status.value !== "ready") status.value = "loading";
     error.value = null;
     try {
       const page = await deps.transport.get<GroupedPage>(
         `/notifications?grouped=true&limit=${PAGE_SIZE}`,
       );
-      groupedEntries.value = page.entries;
-      groupedCursor.value = page.nextCursor;
+      groupedEntries.value = Array.isArray(page?.entries) ? page.entries : [];
+      groupedCursor.value = page?.nextCursor ?? null;
       status.value = "ready";
       await fetchCounts();
     } catch {
