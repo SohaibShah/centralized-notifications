@@ -14,6 +14,7 @@ import { usePreferences } from "../../provider/context";
 import { useActions } from "../../provider/context";
 import { relativeTime, exactTime } from "../../lib/time";
 import FeedList from "../components/FeedList.vue";
+import FeedBanner from "./FeedBanner.vue";
 
 const feed = useFeed();
 const settings = useSettings();
@@ -259,14 +260,12 @@ async function onAction(
     </div>
 
     <!-- Mode banner: makes it unambiguous the feed body is now showing muted items, not the feed. -->
-    <div
+    <FeedBanner
       v-if="isMutedView"
       data-test="muted-view-banner"
-      class="flex shrink-0 items-center gap-1.5 px-3 pb-1 text-[11px] text-muted"
-    >
-      <Icon :icon="BellOff" :size="12" />
-      <span>Snoozed &amp; muted notifications</span>
-    </div>
+      :icon="BellOff"
+      label="Snoozed & muted notifications"
+    />
 
     <!-- Body: loading / error / empty / filtered-empty / populated -->
     <div class="flex min-h-0 flex-1 flex-col">
