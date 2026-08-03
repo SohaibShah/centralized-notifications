@@ -24,6 +24,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   open: [notification: FeedNotification];
   action: [action: NotificationAction, notification: FeedNotification, index: number];
+  unread: [notification: FeedNotification];
   "see-all": [key: string, label: string];
 }>();
 
@@ -124,25 +125,18 @@ async function toggle(): Promise<void> {
           Try again
         </button>
       </div>
-      <ul v-else>
-        <li
+      <!-- Members are the real feed card — collapsed by default, expandable in place to their actions,
+           exactly like the main feed (one card renderer, no divergent stack-only markup). -->
+      <div v-else>
+        <NotificationCardRenderer
           v-for="m in peek ?? []"
           :key="m.id"
-          class="flex items-start gap-2 border-t border-line px-4 py-2.5 pl-11"
-        >
-          <span
-            v-if="!m.read"
-            class="mt-1.5 size-1.5 shrink-0 rounded-full bg-accent"
-            aria-hidden="true"
-          />
-          <div class="min-w-0 flex-1">
-            <p class="truncate text-[12px] font-medium text-text">{{ m.title }}</p>
-            <p class="mt-0.5 font-mono text-[11px] text-faint">
-              {{ m.module }} · {{ relativeTime(m.createdAt) }}
-            </p>
-          </div>
-        </li>
-      </ul>
+          :notification="m"
+          @open="(n) => emit('open', n)"
+          @action="(a, n, i) => emit('action', a, n, i)"
+          @unread="(n) => emit('unread', n)"
+        />
+      </div>
       <button
         type="button"
         data-test="stack-see-all"

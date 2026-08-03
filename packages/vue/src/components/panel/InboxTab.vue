@@ -387,6 +387,7 @@ async function onAction(
         @load-more="feed.loadMoreGrouped()"
         @open="(n) => feed.markRead(n.id)"
         @action="onAction"
+        @unread="(n) => feed.markUnread(n.id)"
         @see-all="(key, label) => feed.enterGroup(key, label)"
       />
 

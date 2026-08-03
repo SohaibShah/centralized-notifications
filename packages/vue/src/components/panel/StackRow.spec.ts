@@ -26,7 +26,10 @@ describe("StackRow", () => {
       items: [feedItem({ id: "m1" }), feedItem({ id: "m2" }), feedItem({ id: "m3" })],
       nextCursor: "c",
     });
-    const w = mount(StackRow, { props: { entry: entry(), transport: { get } } });
+    const w = mount(StackRow, {
+      props: { entry: entry(), transport: { get } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
     await w.get('[data-test="stack-header"]').trigger("click");
     await Promise.resolve();
     expect(get).toHaveBeenCalledWith(expect.stringContaining("group=dsr%3A%231042"));
@@ -34,9 +37,28 @@ describe("StackRow", () => {
     expect(w.find('[data-test="stack-see-all"]').exists()).toBe(true);
   });
 
+  it("renders peek members through NotificationCardRenderer (inline actions)", async () => {
+    const get = vi.fn().mockResolvedValue({
+      items: [feedItem({ id: "m1", title: "M one" }), feedItem({ id: "m2", title: "M two" })],
+      nextCursor: null,
+    });
+    const w = mount(StackRow, {
+      props: { entry: entry(), transport: { get } },
+      global: {
+        stubs: { NotificationCardRenderer: { template: '<div data-test="member-card" />' } },
+      },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(w.findAll('[data-test="member-card"]').length).toBe(2);
+  });
+
   it("emits see-all with the group key", async () => {
     const get = vi.fn().mockResolvedValue({ items: [], nextCursor: null });
-    const w = mount(StackRow, { props: { entry: entry(), transport: { get } } });
+    const w = mount(StackRow, {
+      props: { entry: entry(), transport: { get } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
     await w.get('[data-test="stack-header"]').trigger("click");
     await w.get('[data-test="stack-see-all"]').trigger("click");
     expect(w.emitted("see-all")?.[0]).toEqual(["dsr:#1042", "DSAR #1042"]);
@@ -44,7 +66,10 @@ describe("StackRow", () => {
 
   it("shows an error state with retry when the peek fetch fails", async () => {
     const get = vi.fn().mockRejectedValue(new Error("network"));
-    const w = mount(StackRow, { props: { entry: entry(), transport: { get } } });
+    const w = mount(StackRow, {
+      props: { entry: entry(), transport: { get } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
     await w.get('[data-test="stack-header"]').trigger("click");
     await Promise.resolve();
     await Promise.resolve();
