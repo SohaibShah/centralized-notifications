@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { createDb } from "../src/db";
 import { DeliveryHub } from "../src/delivery/hub";
+import { createTextGroupingStrategy } from "../src/grouping/text-strategy";
 import { ingest } from "../src/pipeline/ingest";
 import { PolicyStore } from "../src/policy/store";
 import { testPool } from "./harness";
@@ -9,7 +10,7 @@ const pool = testPool();
 const { query } = createDb(pool);
 const hub = new DeliveryHub();
 const policy = new PolicyStore({ query, catalog: [{ id: "dsr", label: "DSR" }] });
-const deps = { query, hub, policy };
+const deps = { query, hub, policy, groupingStrategy: createTextGroupingStrategy() };
 afterAll(() => pool.end());
 
 beforeAll(() => policy.reconcile());

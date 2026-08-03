@@ -15,6 +15,7 @@ import type {
 import { NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import { createDb } from "./db";
 import { DeliveryHub } from "./delivery/hub";
+import { createTextGroupingStrategy } from "./grouping/text-strategy";
 import { ingest } from "./pipeline/ingest";
 import type { IngestResult } from "./pipeline/boundary";
 import { PolicyStore } from "./policy/store";
@@ -155,7 +156,8 @@ export function createNotificationService(opts: {
   const { query } = createDb(opts.pool);
   const hub = new DeliveryHub();
   const policy = new PolicyStore({ query, catalog: opts.config.modules });
-  const deps = { query, hub, policy };
+  const groupingStrategy = opts.config.groupingStrategy ?? createTextGroupingStrategy();
+  const deps = { query, hub, policy, groupingStrategy };
   const adminRole = opts.config.adminRole ?? "admin";
   const summaryEngine = new SummaryEngine({
     query,
