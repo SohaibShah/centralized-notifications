@@ -16,7 +16,11 @@ import { useActions, useSettings } from "../../provider/context";
 // clickable card, and the title button carries the aria-expanded disclosure state for
 // keyboard/SR users). Actions and "Mark as unread" stop propagation and don't mark read here;
 // firing an action marks it read too, but that's the consumer's (InboxTab) job.
-const props = defineProps<{ notification: FeedNotification }>();
+// `flush`: render without the priority edge-strip + wash. Used when the card is a threaded stack
+// member (StackRow), where per-member priority is already carried by the stack's inner priority line
+// + the priority-label text — the card's own strip would be a second, colliding vertical. Default
+// (flat feed) keeps the full emphasis.
+const props = defineProps<{ notification: FeedNotification; flush?: boolean }>();
 const emit = defineEmits<{
   open: [notification: FeedNotification];
   action: [action: NotificationAction, notification: FeedNotification, index: number];
@@ -48,6 +52,8 @@ const expanded = ref(false);
 // notification. Normal & low stay quiet and keep the pine "unread" edge while unread; read state is
 // still carried everywhere by the read/unread toggle icon and the title weight.
 const cardEmphasis = computed(() => {
+  // Threaded stack member: no strip/wash — the stack's inner line carries priority (see `flush` above).
+  if (props.flush) return "hover:bg-sunken";
   const p = item.value.priority;
   if (p === "critical") return "prio-critical";
   if (p === "high") return "prio-high";

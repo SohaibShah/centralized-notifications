@@ -77,6 +77,12 @@ function onMemberUnread(n: FeedNotification): void {
 // Collapsed header / open header take the group's top-priority line + wash; each member takes its own.
 const headerLine = computed(() => stackLineClass[props.entry.topPriority]);
 const headerWash = computed(() => stackWashClass[props.entry.topPriority]);
+// Washed headers (critical/high) keep the priority wash at rest, hover (via `.nt-wash-*:hover`), and
+// when open — so we do NOT also apply the neutral bg-sunken utilities there (they'd fight the wash and
+// turn an open critical header grey). Unwashed headers (normal/low) get the sunken hover/open feedback.
+const headerBg = computed(() =>
+  headerWash.value ? headerWash.value : open.value ? "bg-sunken/50" : "hover:bg-sunken/50",
+);
 function memberLine(p: NotificationPriority): string {
   return stackLineClass[p];
 }
@@ -99,12 +105,12 @@ function memberLine(p: NotificationPriority): string {
         type="button"
         data-test="stack-header"
         class="nt-prio-line relative flex w-full items-center gap-2.5 py-3 pl-6 pr-4 text-left transition-colors duration-100"
-        :class="[headerLine, headerWash, open ? 'bg-sunken/50' : 'hover:bg-sunken/50']"
+        :class="[headerLine, headerBg]"
         :aria-expanded="open"
         :aria-controls="open ? peekId : undefined"
         @click="toggle"
       >
-        <span class="min-w-0 flex-1 truncate font-sans text-[13px] font-semibold text-text">
+        <span class="min-w-0 flex-1 truncate font-sans text-[14px] font-semibold text-text">
           {{ entry.groupLabel }}
         </span>
         <!-- Priority is conveyed by the line + wash (decorative); carry the word for SR / color-blind users. -->
@@ -159,6 +165,7 @@ function memberLine(p: NotificationPriority): string {
           >
             <NotificationCardRenderer
               :notification="m"
+              flush
               @open="onMemberRead"
               @action="(a, n, i) => emit('action', a, n, i)"
               @unread="onMemberUnread"
@@ -172,7 +179,7 @@ function memberLine(p: NotificationPriority): string {
     <div
       v-if="open"
       data-test="stack-footer"
-      class="flex items-center justify-between gap-2 border-t border-line bg-surface px-4 py-2"
+      class="-mt-px flex items-center justify-between gap-2 border-t border-line bg-surface px-4 py-2"
     >
       <button
         v-if="!entry.read"

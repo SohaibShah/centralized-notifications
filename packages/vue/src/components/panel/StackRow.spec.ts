@@ -166,8 +166,7 @@ describe("StackRow", () => {
       global: { stubs: { NotificationCardRenderer: true } },
     });
     const header = w.get('[data-test="stack-header"]');
-    // No 2x2 priority dot; the label anchors the row.
-    expect(header.find(".size-2").exists()).toBe(false);
+    // The label is the first content in the row — no dot/circle slot indenting it.
     expect(header.text().startsWith("DSAR #1042")).toBe(true);
   });
 

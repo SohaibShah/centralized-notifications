@@ -227,11 +227,22 @@
 .nt-line-high::before {
   background: var(--color-warning-strong);
 }
+/* Wash mirrors the default card's `.prio-*` precedent (unlayered, with a :hover step) so a washed
+   header keeps its priority tint at rest, on hover, AND when open — the spec keeps the header wash =
+   top priority in both states. Normal/low headers have no wash and instead take the bg-sunken hover/
+   open utilities (see `headerBg` in StackRow.vue); the two are never applied to the same element, so
+   there's no cascade fight with the layered utilities. */
 .nt-wash-critical {
   background: color-mix(in oklab, var(--color-danger) 8%, transparent);
 }
+.nt-wash-critical:hover {
+  background: color-mix(in oklab, var(--color-danger) 14%, transparent);
+}
 .nt-wash-high {
   background: color-mix(in oklab, var(--color-warning) 10%, transparent);
+}
+.nt-wash-high:hover {
+  background: color-mix(in oklab, var(--color-warning) 16%, transparent);
 }
 
 @keyframes countdown-recede {
