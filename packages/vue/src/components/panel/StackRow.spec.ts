@@ -146,4 +146,62 @@ describe("StackRow", () => {
     });
     expect(w.find('[data-test="stack-header"]').exists()).toBe(false);
   });
+
+  it("collapsed header carries the priority line + wash for a critical-topped group", () => {
+    const w = mount(StackRow, {
+      props: { entry: entry({ topPriority: "critical" }), transport: { get: vi.fn() } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    const header = w.get('[data-test="stack-header"]');
+    expect(header.classes()).toContain("nt-prio-line");
+    expect(header.classes()).toContain("nt-line-critical");
+    expect(header.classes()).toContain("nt-wash-critical");
+    // The outer neutral thread wraps the stack.
+    expect(w.find(".nt-thread").exists()).toBe(true);
+  });
+
+  it("anchors the label with no read-circle dot slot", () => {
+    const w = mount(StackRow, {
+      props: { entry: entry({ topPriority: "high" }), transport: { get: vi.fn() } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    const header = w.get('[data-test="stack-header"]');
+    // No 2x2 priority dot; the label anchors the row.
+    expect(header.find(".size-2").exists()).toBe(false);
+    expect(header.text().startsWith("DSAR #1042")).toBe(true);
+  });
+
+  it("expanded footer is a plain control row with no thread/priority lines", async () => {
+    const get = vi.fn().mockResolvedValue({ items: [feedItem({ id: "m1" })], nextCursor: null });
+    const w = mount(StackRow, {
+      props: { entry: entry({ read: false }), transport: { get } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    const footer = w.get('[data-test="stack-footer"]');
+    expect(footer.classes()).not.toContain("nt-thread");
+    expect(footer.classes()).not.toContain("nt-prio-line");
+    // The footer lives OUTSIDE the threaded region.
+    expect(w.get(".nt-thread").find('[data-test="stack-footer"]').exists()).toBe(false);
+  });
+
+  it("wraps each peek member with its own priority line", async () => {
+    const get = vi.fn().mockResolvedValue({
+      items: [
+        feedItem({ id: "m1", priority: "critical" }),
+        feedItem({ id: "m2", priority: "normal" }),
+      ],
+      nextCursor: null,
+    });
+    const w = mount(StackRow, {
+      props: { entry: entry(), transport: { get } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    // Two member wrappers, both on the inner line; the critical one recolors it.
+    expect(w.findAll('[data-test="stack-peek"] .nt-prio-line').length).toBe(2);
+    expect(w.find('[data-test="stack-peek"] .nt-line-critical').exists()).toBe(true);
+  });
 });
