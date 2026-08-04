@@ -98,14 +98,30 @@ function memberWash(p: NotificationPriority): string {
 </script>
 
 <template>
-  <!-- A single-member entry is just a card — unchanged. -->
-  <NotificationCardRenderer
-    v-if="entry.groupTotal === 1"
-    :notification="entry"
-    @open="(n) => emit('open', n)"
-    @action="(a, n, i) => emit('action', a, n, i)"
-    @unread="(n) => emit('unread', n)"
-  />
+  <!-- A single-member entry shows the notification itself. If it still belongs to a multi-message
+       subject (has a groupKey), it also offers a jump to the full thread; a truly standalone
+       notification (no groupKey) is just the card. -->
+  <div v-if="entry.groupTotal === 1" :class="entry.groupKey ? 'border-b border-line' : ''">
+    <NotificationCardRenderer
+      :notification="entry"
+      @open="(n) => emit('open', n)"
+      @action="(a, n, i) => emit('action', a, n, i)"
+      @unread="(n) => emit('unread', n)"
+    />
+    <div
+      v-if="entry.groupKey"
+      class="-mt-px flex items-center justify-end border-t border-line bg-surface px-4 py-1.5"
+    >
+      <button
+        type="button"
+        data-test="single-see-all"
+        class="inline-flex items-center gap-1 text-[12px] font-semibold text-accent transition-colors hover:underline"
+        @click="emit('see-all', entry.groupKey, entry.groupLabel ?? '', entry.read)"
+      >
+        See all <Icon :icon="ArrowRight" :size="13" aria-hidden="true" />
+      </button>
+    </div>
+  </div>
 
   <div v-else data-test="stack" class="border-b border-line">
     <!-- Header reads as a plain notification (a group glyph where a card's read-circle sits), no left

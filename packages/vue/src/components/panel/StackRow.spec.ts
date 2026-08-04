@@ -147,6 +147,25 @@ describe("StackRow", () => {
     expect(w.find('[data-test="stack-header"]').exists()).toBe(false);
   });
 
+  it("a single notification WITH a groupKey offers 'See all' (jump to the full thread)", async () => {
+    const w = mount(StackRow, {
+      props: { entry: entry({ groupTotal: 1 }), transport: { get: vi.fn() } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    const seeAll = w.find('[data-test="single-see-all"]');
+    expect(seeAll.exists()).toBe(true);
+    await seeAll.trigger("click");
+    expect(w.emitted("see-all")?.[0]).toEqual(["dsr:#1042", "DSAR #1042", false]);
+  });
+
+  it("a truly standalone notification (no groupKey) has no 'See all'", () => {
+    const w = mount(StackRow, {
+      props: { entry: entry({ groupTotal: 1, groupKey: undefined }), transport: { get: vi.fn() } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    expect(w.find('[data-test="single-see-all"]').exists()).toBe(false);
+  });
+
   it("header reads as a plain notification: group glyph + priority wash, and NO stack-lines", () => {
     const w = mount(StackRow, {
       props: { entry: entry({ topPriority: "critical" }), transport: { get: vi.fn() } },

@@ -390,7 +390,7 @@ async function onAction(
         @action="onAction"
         @unread="(n) => feed.markUnread(n.id)"
         @mark-all-read="(key) => feed.markAllReadInGroup(key)"
-        @see-all="(key, label, read) => feed.enterGroup(key, label, read)"
+        @see-all="(key, label) => feed.enterGroup(key, label)"
       />
 
       <!-- Flat feed: the ungrouped case, and the "See all" drill-in (one group's members). -->

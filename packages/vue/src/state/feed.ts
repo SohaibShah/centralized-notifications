@@ -354,8 +354,10 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   }
 
   /**
-   * Drill into one group's members ("See all"): scope the flat list to `key` and refetch page 1.
-   * `read` scopes to the opened stack's read-state (unread/read); omit to show the whole subject.
+   * Drill into one group's members ("See all"): scope the flat list to `key` and refetch page 1. The UI
+   * calls this WITHOUT `read`, so the drill-in shows the whole thread — every message in the subject,
+   * read and unread together. (`read` still scopes to one read-state if ever passed; the server's `read`
+   * filter is optional, so omitting it returns all members.)
    */
   async function enterGroup(key: string, label = "", read?: boolean): Promise<void> {
     activeGroup.value = key;
