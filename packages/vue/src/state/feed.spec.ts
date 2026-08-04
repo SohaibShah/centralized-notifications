@@ -438,6 +438,31 @@ describe("feed store", () => {
     expect(feed.counts.unread).toBe(3); // count delta undone
   });
 
+  it("markUnread of a grouped standalone flips it to unread in the store (moves back to Needs action)", async () => {
+    getMock.mockResolvedValue(standaloneEntry({ read: true }));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    expect(feed.groupedEntries[0]!.read).toBe(true);
+    await feed.markUnread("s1");
+    expect(feed.groupedEntries[0]!.read).toBe(false); // now unread → StackList puts it in Needs action
+  });
+
+  it("flips the grouped entry even when a stale flat `items` window still holds the same id", async () => {
+    // Repro of the "no reaction" bug: a prior drill-in left `items` populated with this id. In grouped
+    // stacks mode the visible row is the grouped entry, so the flat window must be ignored.
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "s1", read: true })], null));
+    const feed = makeFeed();
+    await feed.load(); // stale flat window now contains s1
+    expect(feed.items.some((n) => n.id === "s1")).toBe(true);
+    feed.grouped = true;
+    getMock.mockResolvedValueOnce(standaloneEntry({ read: true }));
+    await feed.loadGrouped();
+    await feed.markUnread("s1");
+    // The GROUPED card flips (not just the invisible flat item).
+    expect(feed.groupedEntries[0]!.read).toBe(false);
+  });
+
   it("markUnread of a grouped standalone reverts to read + re-sticks when the request fails", async () => {
     getMock.mockResolvedValue(standaloneEntry({ read: true }));
     const feed = makeFeed();

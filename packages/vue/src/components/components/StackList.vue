@@ -13,7 +13,7 @@ const props = defineProps<{
   hasMore: boolean;
   loadingMore: boolean;
   transport: { get: <T>(url: string) => Promise<T> };
-  // Entry keys (`groupKey ?? id`) marked read *this session*. A stuck read entry stays in Needs action
+  // Representative entry ids marked read *this session*. A stuck read entry stays in Needs action
   // (shown read) until the panel reopens — the grouped view is session-stable (see feed.ts).
   stuck: Set<string>;
 }>();
@@ -72,7 +72,7 @@ onBeforeUnmount(() => observer?.disconnect());
       </div>
       <StackRow
         v-for="e in needsAction"
-        :key="e.groupKey ?? e.id"
+        :key="e.id"
         :entry="e"
         :transport="transport"
         @open="(x) => emit('open', x)"
@@ -98,7 +98,7 @@ onBeforeUnmount(() => observer?.disconnect());
       <div v-if="showEarlier" data-test="earlier-list">
         <StackRow
           v-for="e in earlier"
-          :key="e.groupKey ?? e.id"
+          :key="e.id"
           :entry="e"
           :transport="transport"
           @open="(x) => emit('open', x)"

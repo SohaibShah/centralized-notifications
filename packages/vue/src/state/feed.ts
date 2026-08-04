@@ -468,15 +468,18 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     // only re-form on panel reopen). A peek member (neither in `items` nor an entry) is flipped locally by
     // StackRow; here we just persist it. This was the "the icon does nothing" bug — but without the old
     // refetch that yanked the card to Earlier (#4) and duplicated / collapsed stacks (#5, #6).
-    const target = items.value.find((n) => n.id === id);
-    // A grouped STANDALONE (groupTotal === 1) is a card in `groupedEntries` — flip it optimistically.
+    // In grouped-stacks mode the on-screen rows are `groupedEntries`, NOT the flat `items` window (which
+    // can be stale from a prior "See all" drill-in). Ignore `items` there — otherwise a stale flat copy
+    // matches `target` and we mutate the invisible window instead of the grouped card (the "no reaction"
+    // bug). A grouped STANDALONE (groupTotal === 1) is a card in `groupedEntries` — flip it optimistically.
     // Only groupTotal === 1: a multi-member stack's representative shares its id with a peek member, and
     // reading that member must NOT flip the whole stack (it's a peek member — handled below).
-    const entry =
-      !target && grouped.value && activeGroup.value === null
-        ? groupedEntries.value.find((e) => e.id === id && e.groupTotal === 1)
-        : undefined;
-    const peekMember = !target && !entry && grouped.value && activeGroup.value === null;
+    const inGroupedStacks = grouped.value && activeGroup.value === null;
+    const target = inGroupedStacks ? undefined : items.value.find((n) => n.id === id);
+    const entry = inGroupedStacks
+      ? groupedEntries.value.find((e) => e.id === id && e.groupTotal === 1)
+      : undefined;
+    const peekMember = inGroupedStacks && !entry;
     if (target) {
       if (target.read) return; // already read
       setRead(id, true);
@@ -525,13 +528,15 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
    */
   async function markUnread(id: string): Promise<void> {
     // Mirror of markRead: flat item, grouped standalone/representative entry, or a peek member (StackRow
-    // flips it locally; we only persist). Session-stable — no refetch.
-    const target = items.value.find((n) => n.id === id);
-    const entry =
-      !target && grouped.value && activeGroup.value === null
-        ? groupedEntries.value.find((e) => e.id === id && e.groupTotal === 1)
-        : undefined;
-    const peekMember = !target && !entry && grouped.value && activeGroup.value === null;
+    // flips it locally; we only persist). Session-stable — no refetch. In grouped-stacks mode the on-screen
+    // rows are `groupedEntries`, NOT the flat `items` window (which can be stale from a prior drill-in), so
+    // ignore `items` there and go straight to the grouped-entry / peek path.
+    const inGroupedStacks = grouped.value && activeGroup.value === null;
+    const target = inGroupedStacks ? undefined : items.value.find((n) => n.id === id);
+    const entry = inGroupedStacks
+      ? groupedEntries.value.find((e) => e.id === id && e.groupTotal === 1)
+      : undefined;
+    const peekMember = inGroupedStacks && !entry;
     if (target) {
       if (!target.read) return; // already unread
     } else if (entry) {

@@ -36,8 +36,10 @@ const peek = ref<FeedNotification[] | null>(null);
 const loading = ref(false);
 const peekError = ref(false);
 
-// A stable id so the header's aria-controls can point at the expanded peek region.
-const peekId = computed(() => `stack-peek-${props.entry.groupKey ?? props.entry.id}`);
+// A stable, UNIQUE id so the header's aria-controls points at this stack's peek region — keyed by the
+// entry's own id, not groupKey (a split subject's read + unread stacks share a groupKey, which would
+// collide the DOM id / aria-controls of two rows on screen at once).
+const peekId = computed(() => `stack-peek-${props.entry.id}`);
 
 async function fetchPeek(): Promise<void> {
   if (!props.entry.groupKey) return;

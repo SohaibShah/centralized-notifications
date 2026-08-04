@@ -49,4 +49,16 @@ describe("StackList partition", () => {
     const w = mountList([entry({ id: "s1", read: true })], new Set());
     expect(w.get('[data-test="earlier-list"]').find('[data-id="s1"]').exists()).toBe(true);
   });
+
+  it("renders BOTH entries of a split subject in Needs action (same groupKey, distinct ids)", () => {
+    // A subject's read member, marked unread this session, becomes a second unread entry that shares
+    // the unread stack's groupKey. Keyed by id (not groupKey) both must render — no v-for key collision.
+    const w = mountList([
+      entry({ id: "unread-rep", read: false, groupKey: "dsr:#9", groupTotal: 3 }),
+      entry({ id: "was-read", read: false, groupKey: "dsr:#9", groupTotal: 1 }),
+    ]);
+    const needs = w.get("section");
+    expect(needs.find('[data-id="unread-rep"]').exists()).toBe(true);
+    expect(needs.find('[data-id="was-read"]').exists()).toBe(true);
+  });
 });
