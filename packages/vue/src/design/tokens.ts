@@ -38,3 +38,22 @@ export const priorityRank: Record<NotificationPriority, number> = {
   normal: 2,
   low: 3,
 };
+
+/**
+ * Grouped-stack chrome (see StackRow.vue). The inner "priority line" recolors for critical/high;
+ * normal/low keep the base neutral line (empty modifier). Paired with `.nt-prio-line` in lib.css.
+ */
+export const stackLineClass: Record<NotificationPriority, string> = {
+  critical: "nt-line-critical",
+  high: "nt-line-high",
+  normal: "",
+  low: "",
+};
+
+/** Row background wash by priority — critical/high only; normal/low stay quiet (no wash). */
+export const stackWashClass: Record<NotificationPriority, string> = {
+  critical: "nt-wash-critical",
+  high: "nt-wash-high",
+  normal: "",
+  low: "",
+};

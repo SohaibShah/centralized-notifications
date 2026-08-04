@@ -26,6 +26,7 @@
   --color-faint: var(--nt-color-faint);
   --color-line: var(--nt-color-line);
   --color-line-strong: var(--nt-color-line-strong);
+  --color-neutral: var(--nt-color-neutral);
   --color-accent: var(--nt-color-accent);
   --color-accent-ink: var(--nt-color-accent-ink);
   --color-danger: var(--nt-color-danger);
@@ -61,6 +62,8 @@
   --nt-color-faint: oklch(0.55 0.018 70);
   --nt-color-line: oklch(0.9 0.012 80);
   --nt-color-line-strong: oklch(0.87 0.014 80);
+  /* Stack "thread" line — a warm grey a step darker than line-strong so the stack reads as a thread. */
+  --nt-color-neutral: oklch(0.8 0.028 85);
 
   --nt-color-accent: oklch(0.45 0.09 155);
   --nt-color-accent-ink: oklch(0.98 0.01 155);
@@ -93,6 +96,7 @@
   --color-faint: var(--nt-color-faint);
   --color-line: var(--nt-color-line);
   --color-line-strong: var(--nt-color-line-strong);
+  --color-neutral: var(--nt-color-neutral);
   --color-accent: var(--nt-color-accent);
   --color-accent-ink: var(--nt-color-accent-ink);
   --color-danger: var(--nt-color-danger);
@@ -182,6 +186,52 @@
 }
 .prio-high:hover {
   background: color-mix(in oklab, var(--color-warning) 16%, transparent);
+}
+
+/* ── Grouped-stack chrome (see StackRow.vue) ──
+   A collapsed/expanded stack lives in the same flat list as the default cards. Two left lines mark
+   it: an OUTER neutral "thread" (.nt-thread) down the header + members (never the footer), and an
+   INNER per-row PRIORITY segment (.nt-prio-line). Wash reuses the card's priority mix WITHOUT the
+   inset strip the default card carries — that strip would collide with these lines. */
+.nt-thread {
+  position: relative;
+}
+.nt-thread::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-neutral);
+}
+.nt-prio-line {
+  position: relative;
+}
+.nt-prio-line::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(
+    --color-line-strong
+  ); /* normal/low: a quiet segment so the line stays continuous */
+}
+.nt-line-critical::before {
+  background: var(--color-danger);
+}
+.nt-line-high::before {
+  background: var(--color-warning-strong);
+}
+.nt-wash-critical {
+  background: color-mix(in oklab, var(--color-danger) 8%, transparent);
+}
+.nt-wash-high {
+  background: color-mix(in oklab, var(--color-warning) 10%, transparent);
 }
 
 @keyframes countdown-recede {
