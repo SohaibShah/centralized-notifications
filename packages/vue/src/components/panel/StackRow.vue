@@ -14,10 +14,11 @@ import { priorityLabel, stackWashClass } from "../../design/tokens";
 import { relativeTime } from "../../lib/time";
 import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue";
 
-// A collapsed notification stack: one group's header + an inline peek of its most-recent members,
-// with a "See all" that hands the group key up so the panel can drill in. Fetches the peek lazily via
-// the injected transport (parent passes it from useTransport). A single-member entry renders as a
-// plain card — no stack chrome.
+// A collapsed notification stack: one group's header + an inline peek of its most-recent members, with
+// a "See all" that hands the group key up so the panel can drill in. Fetches the peek lazily via the
+// injected transport (parent passes it from useTransport). EVERY entry renders this way — a single
+// notification is just a "group of one" (count 1) whose sole member is the entry itself (no fetch), for
+// one consistent presentation across single and multi-notification subjects.
 const props = defineProps<{
   entry: GroupedEntry;
   transport: { get: <T>(url: string) => Promise<T> };
@@ -41,8 +42,16 @@ const peekError = ref(false);
 // collide the DOM id / aria-controls of two rows on screen at once).
 const peekId = computed(() => `stack-peek-${props.entry.id}`);
 
-async function fetchPeek(): Promise<void> {
-  if (!props.entry.groupKey) return;
+async function loadPeek(): Promise<void> {
+  // A group of one: the entry IS its sole member — show it directly, no fetch.
+  if (props.entry.groupTotal === 1) {
+    peek.value = [props.entry];
+    return;
+  }
+  if (!props.entry.groupKey) {
+    peek.value = [];
+    return;
+  }
   loading.value = true;
   peekError.value = false;
   try {
@@ -59,7 +68,7 @@ async function fetchPeek(): Promise<void> {
 
 async function toggle(): Promise<void> {
   open.value = !open.value;
-  if (open.value && peek.value === null && !loading.value) await fetchPeek();
+  if (open.value && peek.value === null && !loading.value) await loadPeek();
 }
 
 // Optimistically flip a peek member's read flag so its card responds instantly; the panel persists it
@@ -98,32 +107,10 @@ function memberWash(p: NotificationPriority): string {
 </script>
 
 <template>
-  <!-- A single-member entry shows the notification itself. If it still belongs to a multi-message
-       subject (has a groupKey), it also offers a jump to the full thread; a truly standalone
-       notification (no groupKey) is just the card. -->
-  <div v-if="entry.groupTotal === 1" :class="entry.groupKey ? 'border-b border-line' : ''">
-    <NotificationCardRenderer
-      :notification="entry"
-      @open="(n) => emit('open', n)"
-      @action="(a, n, i) => emit('action', a, n, i)"
-      @unread="(n) => emit('unread', n)"
-    />
-    <div
-      v-if="entry.groupKey"
-      class="-mt-px flex items-center justify-end border-t border-line bg-surface px-4 py-1.5"
-    >
-      <button
-        type="button"
-        data-test="single-see-all"
-        class="inline-flex items-center gap-1 text-[12px] font-semibold text-accent transition-colors hover:underline"
-        @click="emit('see-all', entry.groupKey, entry.groupLabel ?? '', entry.read)"
-      >
-        See all <Icon :icon="ArrowRight" :size="13" aria-hidden="true" />
-      </button>
-    </div>
-  </div>
-
-  <div v-else data-test="stack" class="border-b border-line">
+  <!-- Every entry renders as a group — even a single notification is a "group of one" (count 1), for a
+       consistent collapsed-subject presentation. Expand to reveal the member(s); the footer offers
+       "See all" (+ "Mark all read" while unread). -->
+  <div data-test="stack" class="border-b border-line">
     <!-- Header reads as a plain notification (a group glyph where a card's read-circle sits), no left
          lines — so it never looks threaded under the card above it. Priority is the wash. -->
     <button
@@ -147,7 +134,7 @@ function memberWash(p: NotificationPriority): string {
         class="min-w-0 flex-1 truncate font-sans text-[14px]"
         :class="entry.read ? 'font-normal text-muted' : 'font-semibold text-text'"
       >
-        {{ entry.groupLabel }}
+        {{ entry.groupLabel || entry.title }}
       </span>
       <!-- Priority is conveyed by the wash (decorative); carry the word for SR / color-blind users. -->
       <span class="sr-only">{{ priorityLabel[entry.topPriority] }} priority</span>
@@ -185,7 +172,7 @@ function memberWash(p: NotificationPriority): string {
         class="flex items-center gap-2 py-3 pl-11 text-[12px] text-muted"
       >
         <span>Couldn't load these.</span>
-        <button type="button" class="font-semibold text-accent underline" @click="fetchPeek()">
+        <button type="button" class="font-semibold text-accent underline" @click="loadPeek()">
           Try again
         </button>
       </div>
@@ -212,9 +199,10 @@ function memberWash(p: NotificationPriority): string {
       </div>
     </div>
 
-    <!-- Footer: a control row, not a card — OUTSIDE the thread, so it carries no lines. -->
+    <!-- Footer: a control row, not a card — OUTSIDE the thread, so it carries no lines. Shown while open
+         when there's an action to offer (Mark all read while unread, and/or See all for a real group). -->
     <div
-      v-if="open"
+      v-if="open && (!entry.read || entry.groupKey)"
       data-test="stack-footer"
       class="-mt-px flex items-center justify-between gap-2 border-t border-line bg-surface px-4 py-2"
     >
@@ -229,10 +217,11 @@ function memberWash(p: NotificationPriority): string {
       </button>
       <span v-else aria-hidden="true" />
       <button
+        v-if="entry.groupKey"
         type="button"
         data-test="stack-see-all"
         class="inline-flex items-center gap-1 text-[12px] font-semibold text-accent transition-colors hover:underline"
-        @click="emit('see-all', entry.groupKey ?? '', entry.groupLabel ?? '', entry.read)"
+        @click="emit('see-all', entry.groupKey, entry.groupLabel ?? '', entry.read)"
       >
         See all
         <Icon :icon="ArrowRight" :size="13" aria-hidden="true" />

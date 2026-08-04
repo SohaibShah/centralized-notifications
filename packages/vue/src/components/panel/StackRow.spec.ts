@@ -79,23 +79,25 @@ describe("StackRow", () => {
     expect(w.get(".mem").attributes("data-read")).toBe("true");
   });
 
-  it("a single-entry card forwards unread", async () => {
+  it("a group of one expands to the entry itself (no fetch) and forwards its unread", async () => {
+    const get = vi.fn();
     const w = mount(StackRow, {
-      props: {
-        entry: entry({ groupTotal: 1, groupKey: undefined, read: true }),
-        transport: { get: vi.fn() },
-      },
+      props: { entry: entry({ groupTotal: 1, read: true }), transport: { get } },
       global: {
         stubs: {
           NotificationCardRenderer: {
             props: ["notification"],
             emits: ["open", "action", "unread"],
-            template: `<button data-test="single" @click="$emit('unread', notification)" />`,
+            template: `<button class="mem" @click="$emit('unread', notification)" />`,
           },
         },
       },
     });
-    await w.get('[data-test="single"]').trigger("click");
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(get).not.toHaveBeenCalled(); // a group of one needs no network — the entry is its member
+    expect(w.findAll(".mem").length).toBe(1);
+    await w.get(".mem").trigger("click");
     expect(w.emitted("unread")).toBeTruthy();
   });
 
@@ -138,32 +140,35 @@ describe("StackRow", () => {
     expect(get).toHaveBeenCalledTimes(2);
   });
 
-  it("renders a plain card (no stack chrome) when groupTotal is 1", () => {
-    const w = mount(StackRow, {
-      props: { entry: entry({ groupTotal: 1, groupKey: undefined }), transport: { get: vi.fn() } },
-      // The card renderer pulls from provider context; stub it — we only assert the stack chrome is gone.
-      global: { stubs: { NotificationCardRenderer: true } },
-    });
-    expect(w.find('[data-test="stack-header"]').exists()).toBe(false);
-  });
-
-  it("a single notification WITH a groupKey offers 'See all' (jump to the full thread)", async () => {
+  it("renders a group of one as a stack (header + count 1), not a plain card", () => {
     const w = mount(StackRow, {
       props: { entry: entry({ groupTotal: 1 }), transport: { get: vi.fn() } },
       global: { stubs: { NotificationCardRenderer: true } },
     });
-    const seeAll = w.find('[data-test="single-see-all"]');
-    expect(seeAll.exists()).toBe(true);
-    await seeAll.trigger("click");
+    expect(w.find('[data-test="stack-header"]').exists()).toBe(true);
+    expect(w.get('[data-test="stack-total"]').text()).toBe("1");
+  });
+
+  it("a group of one with a groupKey offers See all in its footer", async () => {
+    const w = mount(StackRow, {
+      props: { entry: entry({ groupTotal: 1 }), transport: { get: vi.fn() } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(w.find('[data-test="stack-see-all"]').exists()).toBe(true);
+    await w.get('[data-test="stack-see-all"]').trigger("click");
     expect(w.emitted("see-all")?.[0]).toEqual(["dsr:#1042", "DSAR #1042", false]);
   });
 
-  it("a truly standalone notification (no groupKey) has no 'See all'", () => {
+  it("a group of one with NO groupKey has no See all", async () => {
     const w = mount(StackRow, {
       props: { entry: entry({ groupTotal: 1, groupKey: undefined }), transport: { get: vi.fn() } },
       global: { stubs: { NotificationCardRenderer: true } },
     });
-    expect(w.find('[data-test="single-see-all"]').exists()).toBe(false);
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(w.find('[data-test="stack-see-all"]').exists()).toBe(false);
   });
 
   it("header reads as a plain notification: group glyph + priority wash, and NO stack-lines", () => {
