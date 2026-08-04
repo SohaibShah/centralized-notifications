@@ -384,6 +384,7 @@ async function onAction(
         :has-more="feed.hasMoreGrouped"
         :loading-more="feed.loadingGrouped"
         :transport="transport"
+        :stuck="feed.groupedReadThisSession"
         @load-more="feed.loadMoreGrouped()"
         @open="(n) => feed.markRead(n.id)"
         @action="onAction"

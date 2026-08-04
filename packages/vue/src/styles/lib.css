@@ -189,10 +189,11 @@
 }
 
 /* ── Grouped-stack chrome (see StackRow.vue) ──
-   A collapsed/expanded stack lives in the same flat list as the default cards. Two left lines mark
-   it: an OUTER neutral "thread" (.nt-thread) down the header + members (never the footer), and an
-   INNER per-row PRIORITY segment (.nt-prio-line). Wash reuses the card's priority mix WITHOUT the
-   inset strip the default card carries — that strip would collide with these lines. */
+   The expanded stack's MEMBERS live in the same flat list as the default cards, threaded by two left
+   lines — an OUTER neutral "thread" (.nt-thread) down the whole members region, and an INNER neutral
+   segment per member (.nt-prio-line). Both lines are neutral and priority-INDEPENDENT; a member's
+   priority is shown by a flush wash (.nt-wash-*) on its row. The header carries no lines (it reads as
+   a plain notification) and the footer sits outside .nt-thread, so neither shows these lines. */
 .nt-thread {
   position: relative;
 }
@@ -219,19 +220,13 @@
   border-radius: 1px;
   background: var(
     --color-line-strong
-  ); /* normal/low: a quiet segment so the line stays continuous */
-}
-.nt-line-critical::before {
-  background: var(--color-danger);
-}
-.nt-line-high::before {
-  background: var(--color-warning-strong);
+  ); /* a lighter neutral — reads as the inner (second) thread line */
 }
 /* Wash mirrors the default card's `.prio-*` precedent (unlayered, with a :hover step) so a washed
-   header keeps its priority tint at rest, on hover, AND when open — the spec keeps the header wash =
-   top priority in both states. Normal/low headers have no wash and instead take the bg-sunken hover/
-   open utilities (see `headerBg` in StackRow.vue); the two are never applied to the same element, so
-   there's no cascade fight with the layered utilities. */
+   header/member keeps its priority tint at rest, on hover, AND when open — the header wash = top
+   priority in both states, and each member's wash = its own priority. Normal/low headers have no wash
+   and instead take the bg-sunken hover/open utilities (see `headerBg` in StackRow.vue); the two are
+   never applied to the same element, so there's no cascade fight with the layered utilities. */
 .nt-wash-critical {
   background: color-mix(in oklab, var(--color-danger) 8%, transparent);
 }

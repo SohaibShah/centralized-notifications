@@ -234,13 +234,30 @@ describe("feed store", () => {
     expect(String(call![0])).toContain("sort=priority-high");
   });
 
-  it("markAllReadInGroup posts { group } and refetches the stacks", async () => {
-    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+  it("markAllReadInGroup posts { group }, sticks the stack, and does NOT refetch (session-stable)", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "g1", read: false }),
+          groupKey: "dsr:#1042",
+          groupLabel: "DSAR #1042",
+          groupTotal: 4,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
     const feed = makeFeed();
     feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
     await feed.markAllReadInGroup("dsr:#1042");
     expect(postMock).toHaveBeenCalledWith("/notifications/read", { group: "dsr:#1042" });
-    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
+    // No refetch — the stack stays until the panel reopens.
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+    // Optimistically flipped + stuck so it stays in Needs action, shown read.
+    expect(feed.groupedEntries[0]!.read).toBe(true);
+    expect(feed.groupedReadThisSession.has("dsr:#1042")).toBe(true);
   });
 
   it("setSort while drilled into a group re-sorts that group flat, not the stacks", async () => {
@@ -258,13 +275,73 @@ describe("feed store", () => {
     expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
   });
 
-  it("markRead in grouped mode persists a card outside the flat window, then refetches stacks", async () => {
-    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+  it("markRead of a grouped standalone flips it, sticks it, and does NOT refetch (session-stable)", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "s1", read: false, priority: "high" }),
+          groupKey: undefined,
+          groupLabel: "S one",
+          groupTotal: 1,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
     const feed = makeFeed();
     feed.grouped = true;
-    await feed.markRead("peek-1"); // a peek member / single-entry card — never in the flat `items`
+    await feed.loadGrouped();
+    getMock.mockClear();
+    await feed.markRead("s1");
+    expect(postMock).toHaveBeenCalledWith("/notifications/s1/read");
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+    expect(feed.groupedEntries[0]!.read).toBe(true); // shown read
+    expect(feed.groupedReadThisSession.has("s1")).toBe(true); // but stuck → stays in Needs action
+  });
+
+  it("markRead of a peek member (absent from entries) persists without refetching or touching entries", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "g1", read: false }),
+          groupKey: "dsr:#1",
+          groupLabel: "DSAR #1",
+          groupTotal: 3,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
+    await feed.markRead("peek-1"); // a peek member — never in `items` nor an entry
     expect(postMock).toHaveBeenCalledWith("/notifications/peek-1/read");
-    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+    expect(feed.groupedEntries[0]!.read).toBe(false); // the stack is untouched (no collapse / re-split)
+  });
+
+  it("loadGrouped clears session read-stickiness so groups re-form on reopen", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "s1", read: false }),
+          groupKey: undefined,
+          groupLabel: "S one",
+          groupTotal: 1,
+          topPriority: "normal",
+        },
+      ],
+      nextCursor: null,
+    });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    await feed.markRead("s1");
+    expect(feed.groupedReadThisSession.has("s1")).toBe(true);
+    await feed.loadGrouped(); // panel reopen
+    expect(feed.groupedReadThisSession.has("s1")).toBe(false);
   });
 
   it("enterGroup loads that group's members flat; exitGroup clears it", async () => {

@@ -96,6 +96,28 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   // (unread stack → its unread members, read stack → its read members), matching the read-split.
   const activeGroupRead = ref<boolean | null>(null);
 
+  // Grouped analog of `readThisSession`: entry keys (`groupKey ?? id`) marked read *this session* stay
+  // in "Needs action" (shown read) instead of jumping to Earlier or re-splitting the stacks. The grouped
+  // view is session-stable — stacks only re-form on a fresh loadGrouped (panel reopen). Cleared there.
+  const groupedReadThisSession = ref<Set<string>>(new Set());
+  const entryKey = (e: GroupedEntry): string => e.groupKey ?? e.id;
+  function stickGroup(key: string): void {
+    groupedReadThisSession.value = new Set(groupedReadThisSession.value).add(key);
+  }
+  function unstickGroup(key: string): void {
+    if (!groupedReadThisSession.value.has(key)) return;
+    const next = new Set(groupedReadThisSession.value);
+    next.delete(key);
+    groupedReadThisSession.value = next;
+  }
+  // Optimistically flip a grouped entry's read flag (match by notification id OR group key). Replaces the
+  // entry object so the `groupedEntries` shallowRef sees the change and StackList re-partitions.
+  function setGroupedRead(idOrKey: string, read: boolean): void {
+    groupedEntries.value = groupedEntries.value.map((e) =>
+      e.id === idOrKey || e.groupKey === idOrKey ? { ...e, read } : e,
+    );
+  }
+
   // Authoritative unread counts over the WHOLE dataset (from GET /notifications/counts), so the
   // bell/header/chip counts don't undercount to the loaded window. Seeded by fetchCounts (on load
   // + panel open) and kept live by exact optimistic deltas (read actions) and SSE increments.
@@ -287,7 +309,15 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
    * Load the collapsed grouped feed (page 1) — one entry per stack/standalone. Replaces the grouped
    * window (not additive): the server owns the aggregates, so a refetch is always the source of truth.
    */
-  async function loadGrouped(): Promise<void> {
+  async function loadGrouped(opts: { flush?: boolean } = {}): Promise<void> {
+    // A deliberate (re)load re-forms the stacks from server truth, so drop this-session read stickiness
+    // (flat + grouped) — read items settle into Earlier and groups re-partition. This is the panel-reopen
+    // path (the `showStacks` watch). An involuntary SSE-triggered refresh passes `flush: false` to keep
+    // the session stable while the panel stays open.
+    if (opts.flush ?? true) {
+      flushSessionReads();
+      if (groupedReadThisSession.value.size > 0) groupedReadThisSession.value = new Set();
+    }
     // Only show the skeleton on a first/cold load — a warm refetch (e.g. an SSE-triggered refresh)
     // keeps the current stacks visible rather than flashing the loading state.
     if (status.value !== "ready") status.value = "loading";
@@ -380,9 +410,10 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
       for (const n of fresh) seen.add(n.id);
     } else if (grouped.value) {
       // Grouped stacks: SSE items carry no group_key, so refetch the stacks from the server (which
-      // has the keys) to fold the arrival into the right stack with correct totals.
+      // has the keys) to fold the arrival into the right stack with correct totals. Keep the session
+      // stable (`flush: false`) — an involuntary live refresh must not yank read items to Earlier.
       for (const n of fresh) seen.add(n.id);
-      if (fresh.length > 0) void loadGrouped();
+      if (fresh.length > 0) void loadGrouped({ flush: false });
     } else if (view.value === "active") {
       addFront(incoming); // dedupes on `seen` internally
     } else {
@@ -433,22 +464,31 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
    * failure. No-op if it's unknown or already read, so a re-click costs nothing.
    */
   async function markRead(id: string): Promise<void> {
-    // In the grouped stacks view the card lives in a stack's peek or a single-entry card, NOT in the
-    // flat `items` window — so `target` is undefined there. We must still persist the read (that was
-    // the "the icon does nothing" bug) and reflect it by refetching the server-derived stacks.
+    // In the grouped stacks view a standalone / group-representative card lives in `groupedEntries`, not
+    // the flat `items` window. Flip it optimistically + stick it (session-stable: no refetch — the stacks
+    // only re-form on panel reopen). A peek member (neither in `items` nor an entry) is flipped locally by
+    // StackRow; here we just persist it. This was the "the icon does nothing" bug — but without the old
+    // refetch that yanked the card to Earlier (#4) and duplicated / collapsed stacks (#5, #6).
     const target = items.value.find((n) => n.id === id);
+    const entry =
+      !target && grouped.value && activeGroup.value === null
+        ? groupedEntries.value.find((e) => e.id === id)
+        : undefined;
     if (target) {
       if (target.read) return; // already read
       setRead(id, true);
       stick(id); // open-and-seen: keep it in place while it's read this session
       adjustCount(target.priority, -1); // optimistic: one fewer unread of this priority
+    } else if (entry) {
+      if (entry.read) return;
+      setGroupedRead(id, true);
+      stickGroup(entryKey(entry)); // keep the standalone in Needs action until reopen
+      adjustCount(entry.priority, -1);
     } else if (!grouped.value) {
-      return; // an unknown notification in the flat feed — nothing to do (only grouped peek/single
-      // cards legitimately sit outside `items`)
+      return; // an unknown notification in the flat feed — nothing to do
     }
     try {
       await deps.transport.post(`/notifications/${encodeURIComponent(id)}/read`);
-      if (grouped.value && activeGroup.value === null) await loadGrouped();
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         // The notification no longer exists server-side (e.g. deleted via admin maintenance
@@ -462,6 +502,10 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
         setRead(id, false); // genuine failure — revert
         unstick(id);
         adjustCount(target.priority, +1); // revert the count delta too
+      } else if (entry) {
+        setGroupedRead(id, false);
+        unstickGroup(entryKey(entry));
+        adjustCount(entry.priority, +1);
       }
       console.warn(`[feed] failed to mark ${id} read; reverted`);
     }
@@ -473,27 +517,42 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
    * No-op if unknown or already unread.
    */
   async function markUnread(id: string): Promise<void> {
-    // Same as markRead: in the grouped stacks view the card isn't in `items`, so persist + refetch.
+    // Mirror of markRead: flat item, grouped standalone/representative entry, or a peek member (StackRow
+    // flips it locally; we only persist). Session-stable — no refetch.
     const target = items.value.find((n) => n.id === id);
+    const entry =
+      !target && grouped.value && activeGroup.value === null
+        ? groupedEntries.value.find((e) => e.id === id)
+        : undefined;
     if (target) {
       if (!target.read) return; // already unread
+    } else if (entry) {
+      if (!entry.read) return;
     } else if (!grouped.value) {
       return; // unknown in the flat feed — nothing to do
     }
     const wasSticky = readThisSession.value.has(id);
+    const wasStickyGroup = entry ? groupedReadThisSession.value.has(entryKey(entry)) : false;
     if (target) {
       setRead(id, false);
       unstick(id);
       adjustCount(target.priority, +1); // optimistic: one more unread of this priority
+    } else if (entry) {
+      setGroupedRead(id, false);
+      unstickGroup(entryKey(entry));
+      adjustCount(entry.priority, +1);
     }
     try {
       await deps.transport.del(`/notifications/${encodeURIComponent(id)}/read`);
-      if (grouped.value && activeGroup.value === null) await loadGrouped();
     } catch {
       if (target) {
         setRead(id, true); // revert — the server didn't clear it
         if (wasSticky) stick(id); // restore its in-place (sticky) position too — a true inverse
         adjustCount(target.priority, -1); // revert the count delta too
+      } else if (entry) {
+        setGroupedRead(id, true);
+        if (wasStickyGroup) stickGroup(entryKey(entry));
+        adjustCount(entry.priority, -1);
       }
       console.warn(`[feed] failed to mark ${id} unread; reverted`);
     }
@@ -523,16 +582,20 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   }
 
   /**
-   * Mark an entire group read (a stack's "Mark all read"). The server owns the grouped aggregates, so
-   * rather than optimistically reshuffle stacks, persist and refetch — the unread stack collapses and
-   * the same subject's read stack in Earlier absorbs it. `loadGrouped` also refreshes the counts.
+   * Mark an entire group read (a stack's "Mark all read"). Session-stable, like the single marks:
+   * optimistically flip the stack read + stick it (StackRow flips its loaded peek members locally) so it
+   * stays put in Needs action, shown read, until the panel reopens — then loadGrouped re-forms the stacks
+   * and the same-subject read stack absorbs it. Counts reconcile on that reopen (loadGrouped → fetchCounts).
    */
   async function markAllReadInGroup(key: string): Promise<void> {
     if (!key) return;
+    setGroupedRead(key, true);
+    stickGroup(key);
     try {
       await deps.transport.post("/notifications/read", { group: key });
-      await loadGrouped();
     } catch {
+      setGroupedRead(key, false);
+      unstickGroup(key);
       console.warn("[feed] mark-group-read failed");
     }
   }
@@ -640,6 +703,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     // grouping
     grouped,
     groupedEntries,
+    groupedReadThisSession,
     hasMoreGrouped,
     loadingGrouped,
     activeGroup,

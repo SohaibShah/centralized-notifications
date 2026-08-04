@@ -147,27 +147,30 @@ describe("StackRow", () => {
     expect(w.find('[data-test="stack-header"]').exists()).toBe(false);
   });
 
-  it("collapsed header carries the priority line + wash for a critical-topped group", () => {
+  it("header reads as a plain notification: group glyph + priority wash, and NO stack-lines", () => {
     const w = mount(StackRow, {
       props: { entry: entry({ topPriority: "critical" }), transport: { get: vi.fn() } },
       global: { stubs: { NotificationCardRenderer: true } },
     });
     const header = w.get('[data-test="stack-header"]');
-    expect(header.classes()).toContain("nt-prio-line");
-    expect(header.classes()).toContain("nt-line-critical");
+    // Priority is the wash; the header carries no thread/priority line.
     expect(header.classes()).toContain("nt-wash-critical");
-    // The outer neutral thread wraps the stack.
-    expect(w.find(".nt-thread").exists()).toBe(true);
+    expect(header.classes()).not.toContain("nt-prio-line");
+    expect(header.classes()).not.toContain("nt-thread");
+    // Collapsed: the thread only appears once the members open.
+    expect(w.find(".nt-thread").exists()).toBe(false);
+    // The group glyph sits where a card's read-circle would.
+    expect(header.find('[data-test="stack-glyph"]').exists()).toBe(true);
   });
 
-  it("anchors the label with no read-circle dot slot", () => {
+  it("a normal-topped header has no wash (falls back to the sunken hover utility)", () => {
     const w = mount(StackRow, {
-      props: { entry: entry({ topPriority: "high" }), transport: { get: vi.fn() } },
+      props: { entry: entry({ topPriority: "normal" }), transport: { get: vi.fn() } },
       global: { stubs: { NotificationCardRenderer: true } },
     });
     const header = w.get('[data-test="stack-header"]');
-    // The label is the first content in the row — no dot/circle slot indenting it.
-    expect(header.text().startsWith("DSAR #1042")).toBe(true);
+    expect(header.classes()).not.toContain("nt-wash-critical");
+    expect(header.classes()).toContain("hover:bg-sunken/50");
   });
 
   it("expanded footer is a plain control row with no thread/priority lines", async () => {
@@ -185,7 +188,7 @@ describe("StackRow", () => {
     expect(w.get(".nt-thread").find('[data-test="stack-footer"]').exists()).toBe(false);
   });
 
-  it("wraps each peek member with its own priority line", async () => {
+  it("threads the members with two neutral lines and a per-member priority wash", async () => {
     const get = vi.fn().mockResolvedValue({
       items: [
         feedItem({ id: "m1", priority: "critical" }),
@@ -199,8 +202,35 @@ describe("StackRow", () => {
     });
     await w.get('[data-test="stack-header"]').trigger("click");
     await Promise.resolve();
-    // Two member wrappers, both on the inner line; the critical one recolors it.
+    // The open members region carries the outer neutral thread.
+    expect(w.get('[data-test="stack-peek"]').classes()).toContain("nt-thread");
+    // Both members sit on the inner neutral line; priority is the wash (critical → red flush).
     expect(w.findAll('[data-test="stack-peek"] .nt-prio-line').length).toBe(2);
-    expect(w.find('[data-test="stack-peek"] .nt-line-critical').exists()).toBe(true);
+    expect(w.find('[data-test="stack-peek"] .nt-wash-critical').exists()).toBe(true);
+  });
+
+  it("mark-all optimistically flips every loaded peek member read (and emits the key)", async () => {
+    const get = vi.fn().mockResolvedValue({
+      items: [feedItem({ id: "m1", read: false }), feedItem({ id: "m2", read: false })],
+      nextCursor: null,
+    });
+    const w = mount(StackRow, {
+      props: { entry: entry({ read: false }), transport: { get } },
+      global: {
+        stubs: {
+          NotificationCardRenderer: {
+            props: ["notification"],
+            template: `<div class="mem" :data-read="String(notification.read)" />`,
+          },
+        },
+      },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(w.findAll(".mem").every((m) => m.attributes("data-read") === "false")).toBe(true);
+    await w.get('[data-test="stack-mark-all"]').trigger("click");
+    expect(w.emitted("mark-all-read")?.[0]).toEqual(["dsr:#1042"]);
+    await Promise.resolve();
+    expect(w.findAll(".mem").every((m) => m.attributes("data-read") === "true")).toBe(true);
   });
 });

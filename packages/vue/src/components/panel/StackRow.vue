@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ArrowRight, Check, ChevronRight } from "@lucide/vue";
+import { ArrowRight, Check, ChevronRight, Layers } from "@lucide/vue";
 import type {
   FeedNotification,
   GroupedEntry,
@@ -10,7 +10,7 @@ import type {
 } from "@notifications/shared";
 import Icon from "../../ui/Icon.vue";
 import Spinner from "../../ui/Spinner.vue";
-import { priorityLabel, stackLineClass, stackWashClass } from "../../design/tokens";
+import { priorityLabel, stackWashClass } from "../../design/tokens";
 import { relativeTime } from "../../lib/time";
 import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue";
 
@@ -60,8 +60,9 @@ async function toggle(): Promise<void> {
   if (open.value && peek.value === null && !loading.value) await fetchPeek();
 }
 
-// Optimistically flip a peek member's read flag so its card responds instantly; the panel then
-// persists the change and refetches the stacks (their counts/split are server-derived).
+// Optimistically flip a peek member's read flag so its card responds instantly; the panel persists it
+// but does NOT re-form the stacks — the grouped view is session-stable, so the member stays under this
+// header until the panel reopens (see feed.ts markRead / loadGrouped).
 function flipPeekRead(id: string, read: boolean): void {
   if (peek.value) peek.value = peek.value.map((m) => (m.id === id ? { ...m, read } : m));
 }
@@ -73,18 +74,24 @@ function onMemberUnread(n: FeedNotification): void {
   flipPeekRead(n.id, false);
   emit("unread", n);
 }
+// Whole-group "Mark all read": flip every loaded peek member read locally too, so the open stack shows
+// read but stays put (the parent marks the group read + sticky; it re-forms only on reopen).
+function markAll(): void {
+  if (peek.value) peek.value = peek.value.map((m) => ({ ...m, read: true }));
+  emit("mark-all-read", props.entry.groupKey ?? "");
+}
 
-// Collapsed header / open header take the group's top-priority line + wash; each member takes its own.
-const headerLine = computed(() => stackLineClass[props.entry.topPriority]);
+// The header reads as a plain notification (no stack-lines) — priority is its wash. Washed headers
+// (critical/high) keep the wash at rest, hover (via `.nt-wash-*:hover`), and when open — so we do NOT
+// also apply the neutral bg-sunken utilities there (they'd fight the wash and turn an open critical
+// header grey). Unwashed headers (normal/low) get the sunken hover/open feedback instead.
 const headerWash = computed(() => stackWashClass[props.entry.topPriority]);
-// Washed headers (critical/high) keep the priority wash at rest, hover (via `.nt-wash-*:hover`), and
-// when open — so we do NOT also apply the neutral bg-sunken utilities there (they'd fight the wash and
-// turn an open critical header grey). Unwashed headers (normal/low) get the sunken hover/open feedback.
 const headerBg = computed(() =>
   headerWash.value ? headerWash.value : open.value ? "bg-sunken/50" : "hover:bg-sunken/50",
 );
-function memberLine(p: NotificationPriority): string {
-  return stackLineClass[p];
+// Each member's priority is shown by a flush wash on its row (the two stack-lines are neutral).
+function memberWash(p: NotificationPriority): string {
+  return stackWashClass[p];
 }
 </script>
 
@@ -99,78 +106,86 @@ function memberLine(p: NotificationPriority): string {
   />
 
   <div v-else data-test="stack" class="border-b border-line">
-    <!-- The neutral thread runs down the header + members; the footer sits OUTSIDE it (no lines). -->
-    <div class="nt-thread">
-      <button
-        type="button"
-        data-test="stack-header"
-        class="nt-prio-line relative flex w-full items-center gap-2.5 py-3 pl-6 pr-4 text-left transition-colors duration-100"
-        :class="[headerLine, headerBg]"
-        :aria-expanded="open"
-        :aria-controls="open ? peekId : undefined"
-        @click="toggle"
+    <!-- Header reads as a plain notification (a group glyph where a card's read-circle sits), no left
+         lines — so it never looks threaded under the card above it. Priority is the wash. -->
+    <button
+      type="button"
+      data-test="stack-header"
+      class="relative flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100"
+      :class="[headerBg]"
+      :aria-expanded="open"
+      :aria-controls="open ? peekId : undefined"
+      @click="toggle"
+    >
+      <Icon
+        :icon="Layers"
+        :size="16"
+        aria-hidden="true"
+        data-test="stack-glyph"
+        class="mt-0.5 shrink-0 text-faint"
+      />
+      <span class="min-w-0 flex-1 truncate font-sans text-[14px] font-semibold text-text">
+        {{ entry.groupLabel }}
+      </span>
+      <!-- Priority is conveyed by the wash (decorative); carry the word for SR / color-blind users. -->
+      <span class="sr-only">{{ priorityLabel[entry.topPriority] }} priority</span>
+      <span
+        data-test="stack-total"
+        :aria-label="`${entry.groupTotal} in this group`"
+        class="shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted"
+        >{{ entry.groupTotal }}</span
       >
-        <span class="min-w-0 flex-1 truncate font-sans text-[14px] font-semibold text-text">
-          {{ entry.groupLabel }}
-        </span>
-        <!-- Priority is conveyed by the line + wash (decorative); carry the word for SR / color-blind users. -->
-        <span class="sr-only">{{ priorityLabel[entry.topPriority] }} priority</span>
-        <span
-          data-test="stack-total"
-          :aria-label="`${entry.groupTotal} in this group`"
-          class="shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted"
-          >{{ entry.groupTotal }}</span
-        >
-        <Icon
-          :icon="ChevronRight"
-          :size="14"
-          aria-hidden="true"
-          class="shrink-0 text-faint motion-safe:transition-transform"
-          :class="{ 'rotate-90': open }"
-        />
-        <time
-          data-test="stack-time"
-          :datetime="entry.createdAt"
-          :title="entry.createdAt"
-          class="shrink-0 font-mono text-[11px] tabular-nums text-faint"
-          >{{ relativeTime(entry.createdAt) }}</time
-        >
-      </button>
+      <Icon
+        :icon="ChevronRight"
+        :size="14"
+        aria-hidden="true"
+        class="shrink-0 text-faint motion-safe:transition-transform"
+        :class="{ 'rotate-90': open }"
+      />
+      <time
+        data-test="stack-time"
+        :datetime="entry.createdAt"
+        :title="entry.createdAt"
+        class="shrink-0 font-mono text-[11px] tabular-nums text-faint"
+        >{{ relativeTime(entry.createdAt) }}</time
+      >
+    </button>
 
-      <div v-if="open" :id="peekId" data-test="stack-peek">
-        <div v-if="loading" class="flex items-center gap-2 py-3 pl-11 text-[12px] text-muted">
-          <Spinner :size="12" /> Loading…
-        </div>
+    <!-- Members region carries the two neutral stack-lines (`.nt-thread` outer + `.nt-prio-line`
+         inner per member); the footer sits OUTSIDE it, so it has no lines. -->
+    <div v-if="open" :id="peekId" data-test="stack-peek" class="nt-thread">
+      <div v-if="loading" class="flex items-center gap-2 py-3 pl-11 text-[12px] text-muted">
+        <Spinner :size="12" /> Loading…
+      </div>
+      <div
+        v-else-if="peekError"
+        data-test="stack-peek-error"
+        class="flex items-center gap-2 py-3 pl-11 text-[12px] text-muted"
+      >
+        <span>Couldn't load these.</span>
+        <button type="button" class="font-semibold text-accent underline" @click="fetchPeek()">
+          Try again
+        </button>
+      </div>
+      <div v-else-if="(peek ?? []).length === 0" class="py-3 pl-11 text-[12px] text-muted">
+        Nothing left in this group.
+      </div>
+      <!-- Members are the real feed card, nested (indented) behind two neutral edges; each member's
+           priority is the flush wash on its row. Collapsed by default, expandable like the main feed. -->
+      <div v-else>
         <div
-          v-else-if="peekError"
-          data-test="stack-peek-error"
-          class="flex items-center gap-2 py-3 pl-11 text-[12px] text-muted"
+          v-for="m in peek ?? []"
+          :key="m.id"
+          class="nt-prio-line pl-6"
+          :class="memberWash(m.priority)"
         >
-          <span>Couldn't load these.</span>
-          <button type="button" class="font-semibold text-accent underline" @click="fetchPeek()">
-            Try again
-          </button>
-        </div>
-        <div v-else-if="(peek ?? []).length === 0" class="py-3 pl-11 text-[12px] text-muted">
-          Nothing left in this group.
-        </div>
-        <!-- Members are the real feed card, nested (indented) and threaded with a per-member priority
-             line — collapsed by default, expandable in place to their actions, exactly like the feed. -->
-        <div v-else>
-          <div
-            v-for="m in peek ?? []"
-            :key="m.id"
-            class="nt-prio-line pl-6"
-            :class="memberLine(m.priority)"
-          >
-            <NotificationCardRenderer
-              :notification="m"
-              flush
-              @open="onMemberRead"
-              @action="(a, n, i) => emit('action', a, n, i)"
-              @unread="onMemberUnread"
-            />
-          </div>
+          <NotificationCardRenderer
+            :notification="m"
+            flush
+            @open="onMemberRead"
+            @action="(a, n, i) => emit('action', a, n, i)"
+            @unread="onMemberUnread"
+          />
         </div>
       </div>
     </div>
@@ -186,7 +201,7 @@ function memberLine(p: NotificationPriority): string {
         type="button"
         data-test="stack-mark-all"
         class="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:bg-sunken"
-        @click="emit('mark-all-read', entry.groupKey ?? '')"
+        @click="markAll()"
       >
         <Icon :icon="Check" :size="12" /> Mark all read
       </button>

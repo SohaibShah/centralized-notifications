@@ -13,6 +13,9 @@ const props = defineProps<{
   hasMore: boolean;
   loadingMore: boolean;
   transport: { get: <T>(url: string) => Promise<T> };
+  // Entry keys (`groupKey ?? id`) marked read *this session*. A stuck read entry stays in Needs action
+  // (shown read) until the panel reopens — the grouped view is session-stable (see feed.ts).
+  stuck: Set<string>;
 }>();
 const emit = defineEmits<{
   loadMore: [];
@@ -24,9 +27,11 @@ const emit = defineEmits<{
 }>();
 
 // Each entry is read-state-homogeneous (the grouped read partitions by read), so an unread stack
-// lands in Needs action and a read stack in Earlier — split on the entry's own read flag.
-const needsAction = computed(() => props.entries.filter((e) => !e.read));
-const earlier = computed(() => props.entries.filter((e) => e.read));
+// lands in Needs action and a read stack in Earlier — split on the entry's own read flag, EXCEPT a
+// stuck entry (read this session) holds its Needs-action spot until the panel reopens.
+const isStuck = (e: GroupedEntry): boolean => props.stuck.has(e.groupKey ?? e.id);
+const needsAction = computed(() => props.entries.filter((e) => !e.read || isStuck(e)));
+const earlier = computed(() => props.entries.filter((e) => e.read && !isStuck(e)));
 const showEarlier = ref(true);
 
 const scroller = ref<HTMLElement | null>(null);
