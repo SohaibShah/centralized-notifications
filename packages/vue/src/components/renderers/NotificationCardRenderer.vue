@@ -52,8 +52,10 @@ const expanded = ref(false);
 // notification. Normal & low stay quiet and keep the pine "unread" edge while unread; read state is
 // still carried everywhere by the read/unread toggle icon and the title weight.
 const cardEmphasis = computed(() => {
-  // Threaded stack member: no strip/wash — the stack's inner line carries priority (see `flush` above).
-  if (props.flush) return "hover:bg-sunken";
+  // Threaded stack member: fully transparent — no strip, no wash, and (crucially) no opaque hover fill
+  // that would paint over the wrapper's priority wash. The member WRAPPER (StackRow) owns the row
+  // background + hover (a wash, or a translucent sunken for normal/low).
+  if (props.flush) return "";
   const p = item.value.priority;
   if (p === "critical") return "prio-critical";
   if (p === "high") return "prio-high";

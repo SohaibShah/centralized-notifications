@@ -167,7 +167,7 @@ describe("NotificationCardRenderer", () => {
     expect(wrapper.get("article").classes()).toContain("prio-critical");
   });
 
-  it("drops the priority strip + wash + unread accent when flush (threaded stack member)", () => {
+  it("renders transparent (no strip, wash, accent, or hover fill) when flush (threaded stack member)", () => {
     const critical = mount(NotificationCardRenderer, {
       props: { notification: feedItem({ id: "a", priority: "critical" }), flush: true },
       global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext() } },
@@ -177,11 +177,12 @@ describe("NotificationCardRenderer", () => {
       props: { notification: feedItem({ id: "b" }), flush: true },
       global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext() } },
     });
-    // No colliding inset strip — the stack's inner line carries priority instead.
+    // No inset strip and NO opaque hover fill — the member wrapper owns the row background + hover, so
+    // the priority wash underneath isn't painted over.
     expect(unread.get("article").classes()).not.toContain(
       "shadow-[inset_2px_0_0_var(--color-accent)]",
     );
-    expect(unread.get("article").classes()).toContain("hover:bg-sunken");
+    expect(unread.get("article").classes()).not.toContain("hover:bg-sunken");
   });
 
   it("clicking the card body expands an expandable card and emits open", async () => {

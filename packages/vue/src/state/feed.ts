@@ -96,26 +96,25 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   // (unread stack → its unread members, read stack → its read members), matching the read-split.
   const activeGroupRead = ref<boolean | null>(null);
 
-  // Grouped analog of `readThisSession`: entry keys (`groupKey ?? id`) marked read *this session* stay
-  // in "Needs action" (shown read) instead of jumping to Earlier or re-splitting the stacks. The grouped
+  // Grouped analog of `readThisSession`: representative-entry ids marked read *this session* stay in
+  // "Needs action" (shown read) instead of jumping to Earlier or re-splitting the stacks. The grouped
   // view is session-stable — stacks only re-form on a fresh loadGrouped (panel reopen). Cleared there.
+  // Keyed by the entry's own notification id (`e.id`), NOT `groupKey`: a split subject has two entries
+  // (a read + an unread stack) sharing one `groupKey`, so keying on the key would flip/stick both.
   const groupedReadThisSession = ref<Set<string>>(new Set());
-  const entryKey = (e: GroupedEntry): string => e.groupKey ?? e.id;
-  function stickGroup(key: string): void {
-    groupedReadThisSession.value = new Set(groupedReadThisSession.value).add(key);
+  function stickGroup(id: string): void {
+    groupedReadThisSession.value = new Set(groupedReadThisSession.value).add(id);
   }
-  function unstickGroup(key: string): void {
-    if (!groupedReadThisSession.value.has(key)) return;
+  function unstickGroup(id: string): void {
+    if (!groupedReadThisSession.value.has(id)) return;
     const next = new Set(groupedReadThisSession.value);
-    next.delete(key);
+    next.delete(id);
     groupedReadThisSession.value = next;
   }
-  // Optimistically flip a grouped entry's read flag (match by notification id OR group key). Replaces the
-  // entry object so the `groupedEntries` shallowRef sees the change and StackList re-partitions.
-  function setGroupedRead(idOrKey: string, read: boolean): void {
-    groupedEntries.value = groupedEntries.value.map((e) =>
-      e.id === idOrKey || e.groupKey === idOrKey ? { ...e, read } : e,
-    );
+  // Optimistically flip ONE grouped entry's read flag by its representative id (unique per entry).
+  // Replaces the object so the `groupedEntries` shallowRef sees the change and StackList re-partitions.
+  function setGroupedRead(id: string, read: boolean): void {
+    groupedEntries.value = groupedEntries.value.map((e) => (e.id === id ? { ...e, read } : e));
   }
 
   // Authoritative unread counts over the WHOLE dataset (from GET /notifications/counts), so the
@@ -470,10 +469,14 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     // StackRow; here we just persist it. This was the "the icon does nothing" bug — but without the old
     // refetch that yanked the card to Earlier (#4) and duplicated / collapsed stacks (#5, #6).
     const target = items.value.find((n) => n.id === id);
+    // A grouped STANDALONE (groupTotal === 1) is a card in `groupedEntries` — flip it optimistically.
+    // Only groupTotal === 1: a multi-member stack's representative shares its id with a peek member, and
+    // reading that member must NOT flip the whole stack (it's a peek member — handled below).
     const entry =
       !target && grouped.value && activeGroup.value === null
-        ? groupedEntries.value.find((e) => e.id === id)
+        ? groupedEntries.value.find((e) => e.id === id && e.groupTotal === 1)
         : undefined;
+    const peekMember = !target && !entry && grouped.value && activeGroup.value === null;
     if (target) {
       if (target.read) return; // already read
       setRead(id, true);
@@ -482,19 +485,23 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     } else if (entry) {
       if (entry.read) return;
       setGroupedRead(id, true);
-      stickGroup(entryKey(entry)); // keep the standalone in Needs action until reopen
+      stickGroup(id); // keep the standalone in Needs action until reopen
       adjustCount(entry.priority, -1);
     } else if (!grouped.value) {
       return; // an unknown notification in the flat feed — nothing to do
     }
     try {
       await deps.transport.post(`/notifications/${encodeURIComponent(id)}/read`);
+      // A peek member has no local row/priority to delta, so reconcile the authoritative counts (the
+      // bell) without re-forming the stacks — keeps the count honest while staying session-stable.
+      if (peekMember) await fetchCounts();
     } catch (err) {
       if (err instanceof ApiError && err.status === 404) {
         // The notification no longer exists server-side (e.g. deleted via admin maintenance
         // while this feed stayed open). Drop the stale row instead of reverting — otherwise it
         // lingers, un-markable, because every future read POST 404s the same way. It's no longer
-        // an unread-existing notification, so the count decrement stands.
+        // an unread-existing notification, so the count decrement stands. A grouped entry self-heals
+        // on reopen (loadGrouped), so we leave it.
         if (target) remove(id);
         return;
       }
@@ -504,7 +511,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
         adjustCount(target.priority, +1); // revert the count delta too
       } else if (entry) {
         setGroupedRead(id, false);
-        unstickGroup(entryKey(entry));
+        unstickGroup(id);
         adjustCount(entry.priority, +1);
       }
       console.warn(`[feed] failed to mark ${id} read; reverted`);
@@ -522,8 +529,9 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     const target = items.value.find((n) => n.id === id);
     const entry =
       !target && grouped.value && activeGroup.value === null
-        ? groupedEntries.value.find((e) => e.id === id)
+        ? groupedEntries.value.find((e) => e.id === id && e.groupTotal === 1)
         : undefined;
+    const peekMember = !target && !entry && grouped.value && activeGroup.value === null;
     if (target) {
       if (!target.read) return; // already unread
     } else if (entry) {
@@ -532,18 +540,19 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
       return; // unknown in the flat feed — nothing to do
     }
     const wasSticky = readThisSession.value.has(id);
-    const wasStickyGroup = entry ? groupedReadThisSession.value.has(entryKey(entry)) : false;
+    const wasStickyGroup = entry ? groupedReadThisSession.value.has(id) : false;
     if (target) {
       setRead(id, false);
       unstick(id);
       adjustCount(target.priority, +1); // optimistic: one more unread of this priority
     } else if (entry) {
       setGroupedRead(id, false);
-      unstickGroup(entryKey(entry));
+      unstickGroup(id);
       adjustCount(entry.priority, +1);
     }
     try {
       await deps.transport.del(`/notifications/${encodeURIComponent(id)}/read`);
+      if (peekMember) await fetchCounts(); // reconcile the bell without re-forming the stacks
     } catch {
       if (target) {
         setRead(id, true); // revert — the server didn't clear it
@@ -551,7 +560,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
         adjustCount(target.priority, -1); // revert the count delta too
       } else if (entry) {
         setGroupedRead(id, true);
-        if (wasStickyGroup) stickGroup(entryKey(entry));
+        if (wasStickyGroup) stickGroup(id);
         adjustCount(entry.priority, -1);
       }
       console.warn(`[feed] failed to mark ${id} unread; reverted`);
@@ -583,19 +592,27 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
 
   /**
    * Mark an entire group read (a stack's "Mark all read"). Session-stable, like the single marks:
-   * optimistically flip the stack read + stick it (StackRow flips its loaded peek members locally) so it
-   * stays put in Needs action, shown read, until the panel reopens — then loadGrouped re-forms the stacks
-   * and the same-subject read stack absorbs it. Counts reconcile on that reopen (loadGrouped → fetchCounts).
+   * optimistically flip the UNREAD stack read + stick it (StackRow flips its loaded peek members locally)
+   * so it stays put in Needs action, shown read, until the panel reopens — then loadGrouped re-forms the
+   * stacks and the same-subject read stack absorbs it. The button lives on the unread stack's footer, so
+   * we target that entry specifically by its own id — a split subject also has a read stack with the same
+   * `groupKey`, which must NOT be touched. The bell reconciles via fetchCounts (no per-priority delta here).
    */
   async function markAllReadInGroup(key: string): Promise<void> {
     if (!key) return;
-    setGroupedRead(key, true);
-    stickGroup(key);
+    const target = groupedEntries.value.find((e) => e.groupKey === key && !e.read);
+    if (target) {
+      setGroupedRead(target.id, true);
+      stickGroup(target.id);
+    }
     try {
       await deps.transport.post("/notifications/read", { group: key });
+      await fetchCounts();
     } catch {
-      setGroupedRead(key, false);
-      unstickGroup(key);
+      if (target) {
+        setGroupedRead(target.id, false);
+        unstickGroup(target.id);
+      }
       console.warn("[feed] mark-group-read failed");
     }
   }

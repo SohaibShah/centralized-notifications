@@ -253,11 +253,65 @@ describe("feed store", () => {
     getMock.mockClear();
     await feed.markAllReadInGroup("dsr:#1042");
     expect(postMock).toHaveBeenCalledWith("/notifications/read", { group: "dsr:#1042" });
-    // No refetch — the stack stays until the panel reopens.
+    // No stacks refetch — the stack stays until the panel reopens.
     expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
-    // Optimistically flipped + stuck so it stays in Needs action, shown read.
+    // Optimistically flipped + stuck (keyed by the entry's own id, not the shared groupKey) so it stays
+    // in Needs action, shown read.
     expect(feed.groupedEntries[0]!.read).toBe(true);
-    expect(feed.groupedReadThisSession.has("dsr:#1042")).toBe(true);
+    expect(feed.groupedReadThisSession.has("g1")).toBe(true);
+    expect(feed.groupedReadThisSession.has("dsr:#1042")).toBe(false);
+  });
+
+  it("markAllReadInGroup flips ONLY the unread stack of a split subject, not the read sibling", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "unread-rep", read: false }),
+          groupKey: "dsr:#9",
+          groupLabel: "DSAR #9",
+          groupTotal: 2,
+          topPriority: "critical",
+        },
+        {
+          ...feedItem({ id: "read-rep", read: true }),
+          groupKey: "dsr:#9",
+          groupLabel: "DSAR #9",
+          groupTotal: 3,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    await feed.markAllReadInGroup("dsr:#9");
+    // Only the unread stack flips + sticks; the already-read sibling is untouched (no phantom duplicate).
+    expect(feed.groupedEntries.find((e) => e.id === "unread-rep")!.read).toBe(true);
+    expect(feed.groupedReadThisSession.has("unread-rep")).toBe(true);
+    expect(feed.groupedReadThisSession.has("read-rep")).toBe(false);
+  });
+
+  it("markAllReadInGroup reverts the flip + stick when the request fails", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "g1", read: false }),
+          groupKey: "dsr:#1042",
+          groupLabel: "DSAR #1042",
+          groupTotal: 4,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
+    postMock.mockRejectedValueOnce(new Error("boom"));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    await feed.markAllReadInGroup("dsr:#1042");
+    expect(feed.groupedEntries[0]!.read).toBe(false);
+    expect(feed.groupedReadThisSession.has("g1")).toBe(false);
   });
 
   it("setSort while drilled into a group re-sorts that group flat, not the stacks", async () => {
@@ -342,6 +396,85 @@ describe("feed store", () => {
     expect(feed.groupedReadThisSession.has("s1")).toBe(true);
     await feed.loadGrouped(); // panel reopen
     expect(feed.groupedReadThisSession.has("s1")).toBe(false);
+  });
+
+  const standaloneEntry = (over = {}) => ({
+    entries: [
+      {
+        ...feedItem({ id: "s1", read: false, priority: "high" }),
+        groupKey: undefined,
+        groupLabel: "S one",
+        groupTotal: 1,
+        topPriority: "high" as const,
+        ...over,
+      },
+    ],
+    nextCursor: null,
+  });
+
+  it("markRead of a grouped standalone decrements the unread count by its priority", async () => {
+    getMock.mockResolvedValue(standaloneEntry());
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    feed.counts.unread = 3;
+    feed.counts.unreadByPriority.high = 2;
+    await feed.markRead("s1");
+    expect(feed.counts.unread).toBe(2);
+    expect(feed.counts.unreadByPriority.high).toBe(1);
+  });
+
+  it("markRead of a grouped standalone reverts flip + stick + count when the request fails", async () => {
+    getMock.mockResolvedValue(standaloneEntry());
+    postMock.mockRejectedValueOnce(new Error("boom"));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    feed.counts.unread = 3;
+    feed.counts.unreadByPriority.high = 2;
+    await feed.markRead("s1");
+    expect(feed.groupedEntries[0]!.read).toBe(false);
+    expect(feed.groupedReadThisSession.has("s1")).toBe(false);
+    expect(feed.counts.unread).toBe(3); // count delta undone
+  });
+
+  it("markUnread of a grouped standalone reverts to read + re-sticks when the request fails", async () => {
+    getMock.mockResolvedValue(standaloneEntry({ read: true }));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    delMock.mockRejectedValueOnce(new Error("boom"));
+    await feed.markUnread("s1");
+    // Reverted back to read; the entry was not sticky before, so it must not be left stuck.
+    expect(feed.groupedEntries[0]!.read).toBe(true);
+    expect(feed.groupedReadThisSession.has("s1")).toBe(false);
+  });
+
+  it("a grouped peek-member read reconciles the bell via fetchCounts (no stacks refetch)", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "g1", read: false }),
+          groupKey: "dsr:#1",
+          groupLabel: "DSAR #1",
+          groupTotal: 3,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
+    await feed.markRead("peek-1"); // not a representative (groupTotal 3) → peek member
+    expect(postMock).toHaveBeenCalledWith("/notifications/peek-1/read");
+    // Reconciles counts, but never refetches the stacks (session-stable).
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("/notifications/counts"))).toBe(
+      true,
+    );
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+    expect(feed.groupedEntries[0]!.read).toBe(false); // the stack is untouched
   });
 
   it("enterGroup loads that group's members flat; exitGroup clears it", async () => {

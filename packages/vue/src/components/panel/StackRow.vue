@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ArrowRight, Check, ChevronRight, Layers } from "@lucide/vue";
+import { ArrowRight, Check, ChevronDown, Layers } from "@lucide/vue";
 import type {
   FeedNotification,
   GroupedEntry,
@@ -122,9 +122,13 @@ function memberWash(p: NotificationPriority): string {
         :size="16"
         aria-hidden="true"
         data-test="stack-glyph"
-        class="mt-0.5 shrink-0 text-faint"
+        class="shrink-0"
+        :class="entry.read ? 'text-faint' : 'text-muted'"
       />
-      <span class="min-w-0 flex-1 truncate font-sans text-[14px] font-semibold text-text">
+      <span
+        class="min-w-0 flex-1 truncate font-sans text-[14px]"
+        :class="entry.read ? 'font-normal text-muted' : 'font-semibold text-text'"
+      >
         {{ entry.groupLabel }}
       </span>
       <!-- Priority is conveyed by the wash (decorative); carry the word for SR / color-blind users. -->
@@ -136,17 +140,17 @@ function memberWash(p: NotificationPriority): string {
         >{{ entry.groupTotal }}</span
       >
       <Icon
-        :icon="ChevronRight"
+        :icon="ChevronDown"
         :size="14"
         aria-hidden="true"
         class="shrink-0 text-faint motion-safe:transition-transform"
-        :class="{ 'rotate-90': open }"
+        :class="{ 'rotate-180': open }"
       />
       <time
         data-test="stack-time"
         :datetime="entry.createdAt"
         :title="entry.createdAt"
-        class="shrink-0 font-mono text-[11px] tabular-nums text-faint"
+        class="shrink-0 font-mono text-[12px] tabular-nums text-faint"
         >{{ relativeTime(entry.createdAt) }}</time
       >
     </button>
@@ -177,7 +181,7 @@ function memberWash(p: NotificationPriority): string {
           v-for="m in peek ?? []"
           :key="m.id"
           class="nt-prio-line pl-6"
-          :class="memberWash(m.priority)"
+          :class="memberWash(m.priority) || 'hover:bg-sunken/50'"
         >
           <NotificationCardRenderer
             :notification="m"

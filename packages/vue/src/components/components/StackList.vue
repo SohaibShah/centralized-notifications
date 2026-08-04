@@ -29,7 +29,9 @@ const emit = defineEmits<{
 // Each entry is read-state-homogeneous (the grouped read partitions by read), so an unread stack
 // lands in Needs action and a read stack in Earlier — split on the entry's own read flag, EXCEPT a
 // stuck entry (read this session) holds its Needs-action spot until the panel reopens.
-const isStuck = (e: GroupedEntry): boolean => props.stuck.has(e.groupKey ?? e.id);
+// Keyed by the entry's own id (not groupKey): a split subject's read + unread stacks share a groupKey,
+// so only the specific entry that was marked read this session should be held in Needs action.
+const isStuck = (e: GroupedEntry): boolean => props.stuck.has(e.id);
 const needsAction = computed(() => props.entries.filter((e) => !e.read || isStuck(e)));
 const earlier = computed(() => props.entries.filter((e) => e.read && !isStuck(e)));
 const showEarlier = ref(true);
