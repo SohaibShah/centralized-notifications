@@ -35,7 +35,12 @@ const listQuerySchema = z.object({
     .optional()
     .transform(csvToList)
     .pipe(z.array(z.enum(NOTIFICATION_PRIORITIES)).max(4).optional()),
-  module: z.string().max(300).optional().transform(csvToList),
+  module: z
+    .string()
+    .max(300)
+    .optional()
+    .transform(csvToList)
+    .pipe(z.array(z.string().max(100)).max(20).optional()),
   // Read-state filter for a group drill-in (peek / "See all") — undefined = both. Kept undefined when
   // absent (false is a real value: "only read"), so parse explicitly rather than defaulting.
   read: z

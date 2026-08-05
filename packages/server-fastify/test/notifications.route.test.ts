@@ -186,8 +186,11 @@ test("grouped=true&priority=normal excludes groups with no normal members", asyn
     headers: { "x-test-user": "priya", "x-test-teams": "eng" },
   });
   expect(res.statusCode).toBe(200);
-  const body = res.json() as { entries: { topPriority: string }[] };
-  expect(body.entries.every((e) => e.topPriority === "normal")).toBe(true); // none of priya's seed
+  const body = res.json() as { entries: { id: string; topPriority: string }[] };
+  // Every surviving group is normal-topped, AND priya's seeded high notifications are excluded (robust
+  // even though the global feed is shared across test files — a normal filter can't surface a high group).
+  expect(body.entries.every((e) => e.topPriority === "normal")).toBe(true);
+  expect(body.entries.some((e) => e.id === globalId || e.id === actionId)).toBe(false);
 });
 
 test("grouped=true accepts a CSV of priorities", async () => {

@@ -314,11 +314,20 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     return p;
   }
 
+  // Monotonic generation for grouped page-1 loads. Every loadGrouped bumps it; a response whose token
+  // is no longer current is discarded — so rapid filter/sort toggles can't land an out-of-order page,
+  // and an in-flight loadMoreGrouped is invalidated when a fresh loadGrouped supersedes it.
+  let groupedReqSeq = 0;
+
   /**
    * Load the collapsed grouped feed (page 1) — one entry per stack/standalone. Replaces the grouped
    * window (not additive): the server owns the aggregates, so a refetch is always the source of truth.
+   * `filtering: true` is a priority/module-filter-driven refetch — it shows the skeleton (the visible
+   * stacks include groups that no longer match) and skips the counts refresh (the whole-dataset unread
+   * total doesn't depend on the filter).
    */
-  async function loadGrouped(opts: { flush?: boolean } = {}): Promise<void> {
+  async function loadGrouped(opts: { flush?: boolean; filtering?: boolean } = {}): Promise<void> {
+    const seq = ++groupedReqSeq;
     // A deliberate (re)load re-forms the stacks from server truth, so drop this-session read stickiness
     // (flat + grouped) — read items settle into Earlier and groups re-partition. This is the panel-reopen
     // path (the `showStacks` watch). An involuntary SSE-triggered refresh passes `flush: false` to keep
@@ -327,19 +336,21 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
       flushSessionReads();
       if (groupedReadThisSession.value.size > 0) groupedReadThisSession.value = new Set();
     }
-    // Only show the skeleton on a first/cold load — a warm refetch (e.g. an SSE-triggered refresh)
-    // keeps the current stacks visible rather than flashing the loading state.
-    if (status.value !== "ready") status.value = "loading";
+    // Show the skeleton on a first/cold load or a filter change (the visible stacks are now wrong); a
+    // warm sort/SSE refresh keeps the current stacks visible rather than flashing the loading state.
+    if (status.value !== "ready" || opts.filtering) status.value = "loading";
     error.value = null;
     try {
       const page = await deps.transport.get<GroupedPage>(
         `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}${groupFilterParams()}`,
       );
+      if (seq !== groupedReqSeq) return; // a newer filter/sort/reopen request superseded this one
       groupedEntries.value = Array.isArray(page?.entries) ? page.entries : [];
       groupedCursor.value = page?.nextCursor ?? null;
       status.value = "ready";
-      await fetchCounts();
+      if (!opts.filtering) await fetchCounts(); // counts don't depend on the priority/module filter
     } catch {
+      if (seq !== groupedReqSeq) return;
       status.value = "error";
       error.value = "Couldn't load your notifications. Check your connection and try again.";
     }
@@ -349,11 +360,15 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   async function loadMoreGrouped(): Promise<void> {
     if (loadingGrouped.value || !groupedCursor.value) return;
     loadingGrouped.value = true;
+    const seq = groupedReqSeq; // page-1 generation this continuation belongs to
     try {
       const cursor = encodeURIComponent(groupedCursor.value);
       const page = await deps.transport.get<GroupedPage>(
         `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}&cursor=${cursor}${groupFilterParams()}`,
       );
+      // Discard if a fresh loadGrouped (filter/sort/reopen) reset the window while we were in flight —
+      // otherwise we'd append a page keyed off the now-stale cursor onto the new result.
+      if (seq !== groupedReqSeq) return;
       groupedEntries.value = [...groupedEntries.value, ...page.entries];
       groupedCursor.value = page.nextCursor;
     } catch {
@@ -705,7 +720,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   // In grouped-stacks mode, priority/module filters are applied server-side, so a filter change must
   // refetch the stacks (page-1 reset). In flat mode `visibleItems` re-filters reactively — no refetch.
   function refetchIfGrouped(): void {
-    if (grouped.value && activeGroup.value === null) void loadGrouped();
+    if (grouped.value && activeGroup.value === null) void loadGrouped({ filtering: true });
   }
   function togglePriority(p: NotificationPriority): void {
     toggleInSet(priorities, p);

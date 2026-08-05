@@ -240,6 +240,33 @@ describe("feed store", () => {
     expect(last).toContain("module=dsr");
   });
 
+  it("discards a superseded grouped page so out-of-order responses can't win", async () => {
+    const gEntry = (id: string, gt: number, top: "low" | "high") => ({
+      ...feedItem({ id }),
+      groupKey: "g",
+      groupLabel: "G",
+      groupTotal: gt,
+      topPriority: top,
+    });
+    // First request stays pending; the second resolves immediately with the "latest" data.
+    let resolveStale!: (v: { entries: unknown[]; nextCursor: null }) => void;
+    const stalePage = new Promise<{ entries: unknown[]; nextCursor: null }>((r) => {
+      resolveStale = r;
+    });
+    getMock.mockReturnValueOnce(stalePage);
+    getMock.mockResolvedValueOnce({ entries: [gEntry("new", 1, "high")], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    const p1 = feed.loadGrouped({ filtering: true }); // seq 1 — pending (older)
+    const p2 = feed.loadGrouped({ filtering: true }); // seq 2 — resolves first (latest)
+    await p2;
+    expect(feed.groupedEntries.map((e) => e.id)).toEqual(["new"]);
+    // The stale first response lands last — it must be discarded, not clobber the latest.
+    resolveStale({ entries: [gEntry("stale", 9, "low")], nextCursor: null });
+    await p1;
+    expect(feed.groupedEntries.map((e) => e.id)).toEqual(["new"]);
+  });
+
   it("togglePriority in flat mode does NOT refetch the grouped stacks (client-side filtering)", async () => {
     getMock.mockResolvedValue(page([], null));
     const feed = makeFeed(); // grouped defaults false

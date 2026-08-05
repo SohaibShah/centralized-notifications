@@ -185,6 +185,27 @@ describe("InboxTab", () => {
     );
   });
 
+  it("shows the filtered-empty state (not 'all caught up') when a filter hides every group", async () => {
+    const transport = {
+      get: vi.fn(async (_url: string) => ({ entries: [], nextCursor: null })),
+      post: vi.fn(async () => ({})),
+      patch: vi.fn(async () => ({})),
+      del: vi.fn(async () => ({})),
+    } as unknown as NotificationsContext["transport"];
+    const ctx = buildTestContext({
+      transport,
+      summary: summaryState as unknown as NotificationsContext["summary"],
+    });
+    ctx.settings.flags.groupingEnabled = true;
+    ctx.preferences.prefs.groupingEnabled = true;
+    ctx.feed.togglePriority("critical"); // grouping stays on; the server returns no matching groups
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    await flushPromises();
+    expect(wrapper.find('[data-test="stack-header"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain("No notifications match your filters");
+    expect(wrapper.text()).not.toContain("You're all caught up");
+  });
+
   it("a text search forces the flat feed even when grouping is on", () => {
     const ctx = makeCtx();
     ctx.settings.flags.groupingEnabled = true;
