@@ -70,6 +70,10 @@ export interface GroupedArgs {
   cursor?: string;
   limit?: number;
   sort?: FeedSort;
+  /** Structured filters, applied to members BEFORE aggregation so counts/representatives recompute and
+   * a subject with no matching members drops out entirely. Empty/undefined = no filter. */
+  priorities?: NotificationPriority[];
+  modules?: string[];
 }
 export type GroupedResult =
   { ok: true; page: GroupedPage } | { ok: false; error: "invalid cursor" };
@@ -132,6 +136,19 @@ export async function listGrouped(query: QueryFn, args: GroupedArgs): Promise<Gr
   const audience = audienceWhere(args.principal, params);
   const mute = muteWhere(args.principal.userKey, params);
 
+  // Structured filters (priority/module) — applied inside the `scoped` CTE so the window aggregates
+  // (group_total/top_priority) recompute over only matching members and empty groups vanish. Pushed
+  // here (after mute, before the keyset/limit pushes) so the `$N` indices stay in order.
+  let filters = "";
+  if (args.priorities?.length) {
+    params.push(args.priorities);
+    filters += ` AND n.priority = ANY($${params.length}::text[])`;
+  }
+  if (args.modules?.length) {
+    params.push(args.modules);
+    filters += ` AND n.module = ANY($${params.length}::text[])`;
+  }
+
   // The representative (rn = 1) is always the group's most-recent member; `sort` only reorders the
   // representatives (and scopes the keyset), mirroring the flat feed.
   let keyset = "";
@@ -165,7 +182,7 @@ export async function listGrouped(query: QueryFn, args: GroupedArgs): Promise<Gr
        SELECT n.*, (r.user_key IS NOT NULL) AS read, COALESCE(n.group_key, n.id) AS entry_key
          FROM notifications n
          LEFT JOIN notification_reads r ON r.notification_id = n.id AND r.user_key = $1
-        WHERE n.suppressed = false AND ${audience} AND ${mute}
+        WHERE n.suppressed = false AND ${audience} AND ${mute}${filters}
      ),
      ranked AS (
        SELECT *,

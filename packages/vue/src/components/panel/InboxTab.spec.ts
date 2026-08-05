@@ -147,11 +147,49 @@ describe("InboxTab", () => {
     expect(wrapper.find('[data-test="stack-header"]').exists()).toBe(false);
   });
 
-  it("a filter chip active forces the flat feed even when grouping is on", () => {
+  it("keeps grouping on with a priority filter (server-filtered stacks) and sends the filter", async () => {
+    const get = vi.fn(async (_url: string) => ({
+      entries: [
+        {
+          ...feedItem({ id: "g1", title: "DSAR #1042 overdue", priority: "critical" }),
+          groupKey: "dsr:#1042",
+          groupLabel: "DSAR #1042",
+          groupTotal: 1,
+          topPriority: "critical",
+        },
+      ],
+      nextCursor: null,
+    }));
+    const transport = {
+      get,
+      post: vi.fn(async () => ({})),
+      patch: vi.fn(async () => ({})),
+      del: vi.fn(async () => ({})),
+    } as unknown as NotificationsContext["transport"];
+    const ctx = buildTestContext({
+      transport,
+      summary: summaryState as unknown as NotificationsContext["summary"],
+    });
+    ctx.settings.flags.groupingEnabled = true;
+    ctx.preferences.prefs.groupingEnabled = true;
+    const wrapper = mountWithProvider(InboxTab, { context: ctx });
+    await flushPromises();
+    ctx.feed.togglePriority("critical");
+    await flushPromises();
+    // Grouping stays on: the (server-filtered) stacks render — not the flat feed.
+    expect(wrapper.find('[data-test="stack-header"]').exists()).toBe(true);
+    // And the filter reached the grouped query.
+    const urls = get.mock.calls.map((c) => String(c[0]));
+    expect(urls.some((u) => u.includes("grouped=true") && u.includes("priority=critical"))).toBe(
+      true,
+    );
+  });
+
+  it("a text search forces the flat feed even when grouping is on", () => {
     const ctx = makeCtx();
     ctx.settings.flags.groupingEnabled = true;
     ctx.preferences.prefs.groupingEnabled = true;
-    ctx.feed.togglePriority("critical");
+    ctx.feed.query = "dsar"; // search can't apply to grouped aggregates → flat fallback
     const wrapper = mountWithProvider(InboxTab, { context: ctx });
     expect(wrapper.find('[data-test="stack-header"]').exists()).toBe(false);
   });

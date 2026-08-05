@@ -64,6 +64,39 @@ test("a subject with read + unread yields two entries, each counted by section",
   expect(nullKey.groupTotal).toBe(1);
 });
 
+test("priorities filter narrows each group to matching members and drops empty groups", async () => {
+  const res = await listGrouped(query, { principal: user, limit: 50, priorities: ["critical"] });
+  if (!res.ok) throw new Error(res.error);
+  // dsr:#1042 unread stack had a(normal)+b(critical); filtered to critical → only b survives.
+  const dsr = res.page.entries.filter((e) => e.groupKey === "dsr:#1042");
+  expect(dsr.length).toBe(1);
+  expect(dsr[0]!.groupTotal).toBe(1);
+  expect(dsr[0]!.topPriority).toBe("critical");
+  expect(dsr[0]!.read).toBe(false);
+  // Groups with no critical member disappear entirely.
+  expect(res.page.entries.some((e) => e.title.includes("Weekly"))).toBe(false);
+  expect(res.page.entries.some((e) => e.title.includes("2026-02-02"))).toBe(false);
+});
+
+test("multiple priorities include any-of; module filter scopes by module", async () => {
+  const both = await listGrouped(query, {
+    principal: user,
+    limit: 50,
+    priorities: ["critical", "normal"],
+  });
+  if (!both.ok) throw new Error(both.error);
+  // Now a(normal)+b(critical) both count → the unread dsr stack is back to 2.
+  const dsr = both.page.entries.find((e) => e.groupKey === "dsr:#1042" && !e.read)!;
+  expect(dsr.groupTotal).toBe(2);
+
+  const inDsr = await listGrouped(query, { principal: user, limit: 50, modules: ["dsr"] });
+  if (!inDsr.ok) throw new Error(inDsr.error);
+  expect(inDsr.page.entries.length).toBeGreaterThan(0); // all seed rows are module 'dsr'
+  const other = await listGrouped(query, { principal: user, limit: 50, modules: ["billing"] });
+  if (!other.ok) throw new Error(other.error);
+  expect(other.page.entries.length).toBe(0);
+});
+
 test("sort=priority-high brings the group with the most-severe member to the top", async () => {
   const res = await listGrouped(query, { principal: user, limit: 50, sort: "priority-high" });
   if (!res.ok) throw new Error(res.error);

@@ -304,6 +304,16 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     return activeGroupRead.value === null ? g : `${g}&read=${activeGroupRead.value}`;
   }
 
+  /** `&priority=<csv>&module=<csv>` for the active structured filters — applied server-side to the
+   * grouped stacks so groups show only matching members (and empty groups drop out). Empty when none. */
+  function groupFilterParams(): string {
+    let p = "";
+    if (priorities.value.size > 0)
+      p += `&priority=${encodeURIComponent([...priorities.value].join(","))}`;
+    if (modules.value.size > 0) p += `&module=${encodeURIComponent([...modules.value].join(","))}`;
+    return p;
+  }
+
   /**
    * Load the collapsed grouped feed (page 1) — one entry per stack/standalone. Replaces the grouped
    * window (not additive): the server owns the aggregates, so a refetch is always the source of truth.
@@ -323,7 +333,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     error.value = null;
     try {
       const page = await deps.transport.get<GroupedPage>(
-        `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}`,
+        `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}${groupFilterParams()}`,
       );
       groupedEntries.value = Array.isArray(page?.entries) ? page.entries : [];
       groupedCursor.value = page?.nextCursor ?? null;
@@ -342,7 +352,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     try {
       const cursor = encodeURIComponent(groupedCursor.value);
       const page = await deps.transport.get<GroupedPage>(
-        `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}&cursor=${cursor}`,
+        `/notifications?grouped=true&limit=${PAGE_SIZE}&sort=${sort.value}&cursor=${cursor}${groupFilterParams()}`,
       );
       groupedEntries.value = [...groupedEntries.value, ...page.entries];
       groupedCursor.value = page.nextCursor;
@@ -637,6 +647,9 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
   // "Anything narrowing the feed" — includes the search query, so the "All" chip and the
   // filtered-empty state reflect a live search too (a query is a filter as well).
   const isFiltered = computed(() => activeFilterCount.value > 0 || query.value.trim() !== "");
+  // A text search can't be applied to the server's grouped aggregates, so the panel falls back to the
+  // flat list while searching (priority/module filters DO compose with grouping — server-side).
+  const hasSearchQuery = computed(() => query.value.trim() !== "");
 
   const appliedPills = computed<FilterPill[]>(() => {
     const pills: FilterPill[] = [];
@@ -689,11 +702,18 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     set.value = next;
   }
 
+  // In grouped-stacks mode, priority/module filters are applied server-side, so a filter change must
+  // refetch the stacks (page-1 reset). In flat mode `visibleItems` re-filters reactively — no refetch.
+  function refetchIfGrouped(): void {
+    if (grouped.value && activeGroup.value === null) void loadGrouped();
+  }
   function togglePriority(p: NotificationPriority): void {
     toggleInSet(priorities, p);
+    refetchIfGrouped();
   }
   function toggleModule(m: string): void {
     toggleInSet(modules, m);
+    refetchIfGrouped();
   }
   function toggleUnreadOnly(): void {
     unreadOnly.value = !unreadOnly.value;
@@ -703,6 +723,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     modules.value = new Set();
     unreadOnly.value = false;
     query.value = ""; // the search query is a filter too — "Clear filters" clears it
+    refetchIfGrouped();
   }
   function removePill(pill: FilterPill): void {
     if (pill.type === "unread") unreadOnly.value = false;
@@ -740,6 +761,7 @@ export function createFeedState(deps: { transport: Transport; connectSse: SseFac
     availableModules,
     activeFilterCount,
     isFiltered,
+    hasSearchQuery,
     appliedPills,
     // derived
     visibleItems,

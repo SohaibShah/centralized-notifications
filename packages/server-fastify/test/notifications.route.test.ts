@@ -166,6 +166,62 @@ test("grouped=true honors a sort and returns collapsed entries", async () => {
   expect([...ranks]).toEqual([...ranks].sort((a, b) => a - b));
 });
 
+test("grouped=true&priority=high filters groups to that priority (every entry matches)", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&priority=high&limit=100",
+    headers: { "x-test-user": "priya", "x-test-teams": "eng" },
+  });
+  expect(res.statusCode).toBe(200);
+  const body = res.json() as { entries: { topPriority: string }[] };
+  expect(body.entries.length).toBeGreaterThan(0); // priya's seed is all high
+  // Filtering to high means each surviving group has only high members → topPriority is high.
+  expect(body.entries.every((e) => e.topPriority === "high")).toBe(true);
+});
+
+test("grouped=true&priority=normal excludes groups with no normal members", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&priority=normal&limit=100",
+    headers: { "x-test-user": "priya", "x-test-teams": "eng" },
+  });
+  expect(res.statusCode).toBe(200);
+  const body = res.json() as { entries: { topPriority: string }[] };
+  expect(body.entries.every((e) => e.topPriority === "normal")).toBe(true); // none of priya's seed
+});
+
+test("grouped=true accepts a CSV of priorities", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&priority=critical,high&limit=100",
+    headers: { "x-test-user": "priya", "x-test-teams": "eng" },
+  });
+  expect(res.statusCode).toBe(200);
+  const body = res.json() as { entries: { topPriority: string }[] };
+  expect(body.entries.every((e) => e.topPriority === "critical" || e.topPriority === "high")).toBe(
+    true,
+  );
+});
+
+test("grouped=true with an invalid priority value → 400", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&priority=bogus",
+    headers: { "x-test-user": "priya" },
+  });
+  expect(res.statusCode).toBe(400);
+});
+
+test("grouped=true&module=<unknown> returns no groups", async () => {
+  const res = await app.inject({
+    method: "GET",
+    url: "/notifications?grouped=true&module=no-such-module-xyz&limit=100",
+    headers: { "x-test-user": "priya", "x-test-teams": "eng" },
+  });
+  expect(res.statusCode).toBe(200);
+  expect((res.json() as { entries: unknown[] }).entries.length).toBe(0);
+});
+
 test("grouped + group together → 400", async () => {
   const res = await app.inject({
     method: "GET",

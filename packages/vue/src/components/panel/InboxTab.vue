@@ -72,14 +72,16 @@ const isMutedView = computed(() => feed.view === "muted");
 
 // --- grouping -------------------------------------------------------------
 const transport = useTransport();
-// Grouping is available when the admin flag AND the user preference are on, and no filter/search or
-// muted view is narrowing the feed (those force the flat list — a scope decision, see the spec).
+// Grouping is available when the admin flag AND the user preference are on, in the active view. Priority
+// and module filters COMPOSE with grouping (applied server-side to the stacks); a text search or the
+// unread-only toggle still fall back to the flat list (those aren't applied to the grouped aggregates).
 const groupingOn = computed(
   () =>
     settings.flags.groupingEnabled &&
     preferences.prefs.groupingEnabled &&
-    !feed.isFiltered &&
-    feed.view === "active",
+    feed.view === "active" &&
+    !feed.hasSearchQuery &&
+    !feed.unreadOnly,
 );
 // Show collapsed stacks only when grouping is on AND we're not drilled into a single group ("See all").
 const showStacks = computed(() => groupingOn.value && feed.activeGroup === null);
@@ -107,18 +109,27 @@ watch(
   { immediate: true },
 );
 
+// "You're all caught up" — genuinely nothing to show, no filter active. (Grouped uses the server-owned
+// groupedEntries; flat uses items.) Gated on !isFiltered so a filter that hides everything shows the
+// filtered-empty state below instead of a misleading "all caught up".
 const isEmpty = computed(
   () =>
     feed.view === "active" &&
     feed.activeGroup === null &&
     feed.status === "ready" &&
+    !feed.isFiltered &&
     (showStacks.value ? feed.groupedEntries.length === 0 : feed.items.length === 0),
 );
 const isMutedEmpty = computed(
   () => feed.view === "muted" && feed.status === "ready" && feed.items.length === 0,
 );
+// "No notifications match your filters" — a filter is active and nothing survives it. In grouped mode
+// the server already filtered (groupedEntries empty); in flat mode the client filter empties `groups`.
 const isFilteredEmpty = computed(
-  () => feed.status === "ready" && feed.items.length > 0 && feed.groups.length === 0,
+  () =>
+    feed.status === "ready" &&
+    feed.isFiltered &&
+    (showStacks.value ? feed.groupedEntries.length === 0 : feed.groups.length === 0),
 );
 
 // Toggle the panel between the normal feed and the muted view (what the user's snooze/mute rules

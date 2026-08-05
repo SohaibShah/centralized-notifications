@@ -222,6 +222,41 @@ describe("feed store", () => {
     expect(feed.groupedEntries[0]!.groupTotal).toBe(3);
   });
 
+  it("togglePriority/toggleModule in grouped mode refetch the stacks with the filters as params", async () => {
+    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
+    feed.togglePriority("critical");
+    feed.toggleModule("dsr");
+    await Promise.resolve();
+    const calls = getMock.mock.calls
+      .map((c) => String(c[0]))
+      .filter((u) => u.includes("grouped=true"));
+    expect(calls.length).toBeGreaterThan(0);
+    const last = calls[calls.length - 1]!;
+    expect(last).toContain("priority=critical");
+    expect(last).toContain("module=dsr");
+  });
+
+  it("togglePriority in flat mode does NOT refetch the grouped stacks (client-side filtering)", async () => {
+    getMock.mockResolvedValue(page([], null));
+    const feed = makeFeed(); // grouped defaults false
+    await feed.load();
+    getMock.mockClear();
+    feed.togglePriority("critical");
+    await Promise.resolve();
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+  });
+
+  it("hasSearchQuery reflects the trimmed search query", () => {
+    const feed = makeFeed();
+    expect(feed.hasSearchQuery).toBe(false);
+    feed.query = "  dsar ";
+    expect(feed.hasSearchQuery).toBe(true);
+  });
+
   it("setSort in grouped mode refetches the stacks in the new order", async () => {
     getMock.mockResolvedValue({ entries: [], nextCursor: null });
     const feed = makeFeed();

@@ -1,6 +1,6 @@
 import type { FastifyInstance, FastifyRequest, preHandlerHookHandler } from "fastify";
 import { z } from "zod";
-import { FEED_SORTS, FEED_VIEWS } from "@notifications/shared";
+import { FEED_SORTS, FEED_VIEWS, NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import {
   ActionsDisabledError,
   InvalidCursorError,
@@ -12,12 +12,30 @@ import {
 const MAX_LIMIT = 100;
 const DEFAULT_LIMIT = 25;
 
+// A CSV query param (e.g. ?priority=critical,high) → trimmed, non-empty parts, or undefined when absent.
+const csvToList = (v: string | undefined): string[] | undefined =>
+  v
+    ? v
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : undefined;
+
 const listQuerySchema = z.object({
   cursor: z.string().min(1).optional(),
   limit: z.coerce.number().int().min(1).max(MAX_LIMIT).default(DEFAULT_LIMIT),
   sort: z.enum(FEED_SORTS).default("newest"),
   view: z.enum(FEED_VIEWS).default("active"),
   group: z.string().min(1).max(300).optional(),
+  // Structured filters for the grouped stacks (composed with grouping): only these priorities/modules
+  // count toward a group; a group with no matching members drops out. Each priority is validated.
+  priority: z
+    .string()
+    .max(200)
+    .optional()
+    .transform(csvToList)
+    .pipe(z.array(z.enum(NOTIFICATION_PRIORITIES)).max(4).optional()),
+  module: z.string().max(300).optional().transform(csvToList),
   // Read-state filter for a group drill-in (peek / "See all") — undefined = both. Kept undefined when
   // absent (false is a real value: "only read"), so parse explicitly rather than defaulting.
   read: z
@@ -68,6 +86,8 @@ export function notificationReadRoutes(
           cursor: parsed.data.cursor,
           limit: parsed.data.limit,
           sort: parsed.data.sort,
+          priorities: parsed.data.priority,
+          modules: parsed.data.module,
         });
         return reply.code(200).send(page);
       }
