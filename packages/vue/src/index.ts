@@ -43,3 +43,10 @@ export type { FormSchema, FormField, FormValues } from "./forms/types";
 export { preferencesForm } from "./forms/preferences.form";
 export { resolveSnoozeUntil, SNOOZE_OPTIONS, muteStatusLabel } from "./preferences/snooze";
 export type { SnoozeOption } from "./preferences/snooze";
+
+// Theming: per-component `ui` overrides + the icon registry. Pass `:ui` / `:icons` to
+// <NotificationProvider> (global), or a `ui` prop to any component (per-instance). See
+// docs/frontend/theming.md for the component→part reference.
+export type { NotificationUi, ComponentUi } from "./theming/useUi";
+export { defaultIcons } from "./theming/icons";
+export type { IconName, IconRegistry } from "./theming/icons";
