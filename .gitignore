@@ -60,6 +60,19 @@ CLAUDE.local.md
 # --- Visual brainstorming companion scratch (local, not shared) ---
 .superpowers/
 
+# --- Non-source scratch/tooling cruft (keep the repo to source + agent config) ---
+# VS Code "VSCode Counter" line-count reports
+.VSCodeCounter/
+# Stray root-level screenshots (real UI assets live under a package's src/, not the repo root)
+/*.png
+/*.jpg
+/*.jpeg
+# Ad-hoc PR-notes scratch files (write the description in the PR, not a committed file)
+PR_NOTES_*.md
+# Redundant agent-skills mirror + its lockfile — the live skills live under .claude/
+.agents/
+skills-lock.json
+
 # --- Local dev data ---
 *.sqlite
 *.rdb
