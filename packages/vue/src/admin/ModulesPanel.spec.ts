@@ -166,4 +166,17 @@ describe("ModulesPanel", () => {
     await wrapper.get('[data-test="base-url-save-dsar"]').trigger("click");
     expect(patchMock).not.toHaveBeenCalledWith("/admin/modules/dsar", expect.anything());
   });
+
+  it("applies a ui override to the row part", async () => {
+    getMock.mockResolvedValue(buildMods());
+    const wrapper = mount(ModulesPanel, {
+      props: { ui: { row: "bg-black" } },
+      global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext({ transport }) } },
+    });
+    await flushPromises();
+    const rows = wrapper.findAll('[data-test^="toggle-"]');
+    expect(rows.length).toBeGreaterThan(0);
+    // The overridden row class lands on each module row.
+    expect(wrapper.html()).toContain("bg-black");
+  });
 });
