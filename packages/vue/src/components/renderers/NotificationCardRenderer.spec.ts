@@ -338,4 +338,27 @@ describe("NotificationCardRenderer", () => {
       expect(after.every((b) => b.attributes("disabled") !== undefined)).toBe(true);
     });
   });
+
+  describe("ui overrides", () => {
+    it("default root keeps its border; a ui.root override removes it", () => {
+      const def = mountCard(feedItem({ id: "u1" }));
+      expect(def.get("article").classes()).toContain("border-b");
+
+      const over = mount(NotificationCardRenderer, {
+        props: { notification: feedItem({ id: "u2" }), ui: { root: "border-0" } },
+        global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext({}) } },
+      });
+      expect(over.get("article").classes()).toContain("border-0");
+      expect(over.get("article").classes()).not.toContain("border-b");
+    });
+
+    it("ui.title overrides the title button classes", () => {
+      const over = mount(NotificationCardRenderer, {
+        props: { notification: feedItem({ id: "u3" }), ui: { title: "text-red-500" } },
+        global: { provide: { [NOTIFICATIONS_KEY]: buildTestContext({}) } },
+      });
+      const title = over.findAll("button").find((b) => b.classes().includes("text-red-500"));
+      expect(title).toBeTruthy();
+    });
+  });
 });

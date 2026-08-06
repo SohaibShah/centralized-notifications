@@ -2,7 +2,18 @@
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import type { FeedNotification, GroupedEntry, NotificationAction } from "@notifications/shared";
 import Spinner from "../../ui/Spinner.vue";
+import { useUi } from "../../theming/useUi";
 import StackRow from "../panel/StackRow.vue";
+
+const parts = {
+  root: "min-h-0 flex-1 overflow-y-auto",
+  sectionHeader:
+    "sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur",
+  sectionTitle: "font-display text-[13px] font-medium text-text",
+  count: "rounded-full bg-accent/10 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-accent",
+  showEarlier:
+    "rounded-full bg-sunken px-3.5 py-1.5 text-[12px] font-semibold text-accent transition-colors duration-100 hover:bg-accent/10",
+} as const;
 
 // The grouped feed: collapsed stacks split into Needs action (any unread member) / Earlier, mirroring
 // FeedList's section chrome + keyset pagination. Members and drill-in are handled by StackRow / the
@@ -16,6 +27,7 @@ const props = defineProps<{
   // Representative entry ids marked read *this session*. A stuck read entry stays in Needs action
   // (shown read) until the panel reopens — the grouped view is session-stable (see feed.ts).
   stuck: Set<string>;
+  ui?: Partial<Record<keyof typeof parts, string>>;
 }>();
 const emit = defineEmits<{
   loadMore: [];
@@ -31,6 +43,7 @@ const emit = defineEmits<{
 // stuck entry (read this session) holds its Needs-action spot until the panel reopens.
 // Keyed by the entry's own id (not groupKey): a split subject's read + unread stacks share a groupKey,
 // so only the specific entry that was marked read this session should be held in Needs action.
+const ui = useUi("stack-list", parts, () => props.ui);
 const isStuck = (e: GroupedEntry): boolean => props.stuck.has(e.id);
 const needsAction = computed(() => props.entries.filter((e) => !e.read || isStuck(e)));
 const earlier = computed(() => props.entries.filter((e) => e.read && !isStuck(e)));
@@ -56,17 +69,11 @@ onBeforeUnmount(() => observer?.disconnect());
 </script>
 
 <template>
-  <div ref="scroller" class="min-h-0 flex-1 overflow-y-auto">
+  <div ref="scroller" :class="ui('root')">
     <section v-if="needsAction.length">
-      <div
-        class="sticky top-0 z-10 flex items-center gap-2 border-b border-line bg-bg/95 px-4 py-2 backdrop-blur"
-      >
-        <h2 class="font-display text-[13px] font-medium text-text">Needs action</h2>
-        <span
-          v-if="props.unread > 0"
-          data-test="needs-action-count"
-          class="rounded-full bg-accent/10 px-1.5 py-0.5 font-mono text-[11px] tabular-nums text-accent"
-        >
+      <div :class="ui('sectionHeader')">
+        <h2 :class="ui('sectionTitle')">Needs action</h2>
+        <span v-if="props.unread > 0" data-test="needs-action-count" :class="ui('count')">
           {{ props.unread }} unread
         </span>
       </div>
@@ -88,7 +95,7 @@ onBeforeUnmount(() => observer?.disconnect());
         <button
           type="button"
           data-test="show-earlier"
-          class="rounded-full bg-sunken px-3.5 py-1.5 text-[12px] font-semibold text-accent transition-colors duration-100 hover:bg-accent/10"
+          :class="ui('showEarlier')"
           :aria-expanded="showEarlier"
           @click="showEarlier = !showEarlier"
         >

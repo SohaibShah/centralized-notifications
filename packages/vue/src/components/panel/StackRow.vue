@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ArrowRight, Check, ChevronDown, Layers } from "@lucide/vue";
 import type {
   FeedNotification,
   GroupedEntry,
@@ -12,7 +11,27 @@ import Icon from "../../ui/Icon.vue";
 import Spinner from "../../ui/Spinner.vue";
 import { priorityLabel, stackWashClass } from "../../design/tokens";
 import { relativeTime } from "../../lib/time";
+import { useUi } from "../../theming/useUi";
 import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue";
+
+const parts = {
+  root: "border-b border-line",
+  header:
+    "relative flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100",
+  glyph: "shrink-0",
+  label: "min-w-0 flex-1 truncate font-sans text-[14px]",
+  count:
+    "shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted",
+  chevron: "shrink-0 text-faint motion-safe:transition-transform",
+  time: "shrink-0 font-mono text-[12px] tabular-nums text-faint",
+  member: "nt-prio-line pl-6",
+  footer:
+    "-mt-px flex items-center justify-between gap-2 border-t border-line bg-surface px-4 py-2",
+  markAll:
+    "inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:bg-sunken",
+  seeAll:
+    "inline-flex items-center gap-1 text-[12px] font-semibold text-accent transition-colors hover:underline",
+} as const;
 
 // A collapsed notification stack: one group's header + an inline peek of its most-recent members, with
 // a "See all" that hands the group key up so the panel can drill in. Fetches the peek lazily via the
@@ -22,6 +41,7 @@ import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue"
 const props = defineProps<{
   entry: GroupedEntry;
   transport: { get: <T>(url: string) => Promise<T> };
+  ui?: Partial<Record<keyof typeof parts, string>>;
 }>();
 const emit = defineEmits<{
   open: [notification: FeedNotification];
@@ -30,6 +50,8 @@ const emit = defineEmits<{
   "mark-all-read": [key: string];
   "see-all": [key: string, label: string, read: boolean];
 }>();
+
+const ui = useUi("stack", parts, () => props.ui);
 
 const PEEK = 3;
 const open = ref(false);
@@ -110,29 +132,26 @@ function memberWash(p: NotificationPriority): string {
   <!-- Every entry renders as a group — even a single notification is a "group of one" (count 1), for a
        consistent collapsed-subject presentation. Expand to reveal the member(s); the footer offers
        "See all" (+ "Mark all read" while unread). -->
-  <div data-test="stack" class="border-b border-line">
+  <div data-test="stack" :class="ui('root')">
     <!-- Header reads as a plain notification (a group glyph where a card's read-circle sits), no left
          lines — so it never looks threaded under the card above it. Priority is the wash. -->
     <button
       type="button"
       data-test="stack-header"
-      class="relative flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100"
-      :class="[headerBg]"
+      :class="[ui('header'), headerBg]"
       :aria-expanded="open"
       :aria-controls="open ? peekId : undefined"
       @click="toggle"
     >
       <Icon
-        :icon="Layers"
+        name="layers"
         :size="16"
         aria-hidden="true"
         data-test="stack-glyph"
-        class="shrink-0"
-        :class="entry.read ? 'text-faint' : 'text-muted'"
+        :class="[ui('glyph'), entry.read ? 'text-faint' : 'text-muted']"
       />
       <span
-        class="min-w-0 flex-1 truncate font-sans text-[14px]"
-        :class="entry.read ? 'font-normal text-muted' : 'font-semibold text-text'"
+        :class="[ui('label'), entry.read ? 'font-normal text-muted' : 'font-semibold text-text']"
       >
         {{ entry.groupLabel || entry.title }}
       </span>
@@ -141,21 +160,20 @@ function memberWash(p: NotificationPriority): string {
       <span
         data-test="stack-total"
         :aria-label="`${entry.groupTotal} in this group`"
-        class="shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted"
+        :class="ui('count')"
         >{{ entry.groupTotal }}</span
       >
       <Icon
-        :icon="ChevronDown"
+        name="chevron-down"
         :size="14"
         aria-hidden="true"
-        class="shrink-0 text-faint motion-safe:transition-transform"
-        :class="{ 'rotate-180': open }"
+        :class="[ui('chevron'), { 'rotate-180': open }]"
       />
       <time
         data-test="stack-time"
         :datetime="entry.createdAt"
         :title="entry.createdAt"
-        class="shrink-0 font-mono text-[12px] tabular-nums text-faint"
+        :class="ui('time')"
         >{{ relativeTime(entry.createdAt) }}</time
       >
     </button>
@@ -185,8 +203,7 @@ function memberWash(p: NotificationPriority): string {
         <div
           v-for="m in peek ?? []"
           :key="m.id"
-          class="nt-prio-line pl-6"
-          :class="memberWash(m.priority) || 'hover:bg-sunken/50'"
+          :class="[ui('member'), memberWash(m.priority) || 'hover:bg-sunken/50']"
         >
           <NotificationCardRenderer
             :notification="m"
@@ -204,27 +221,27 @@ function memberWash(p: NotificationPriority): string {
     <div
       v-if="open && (!entry.read || entry.groupKey)"
       data-test="stack-footer"
-      class="-mt-px flex items-center justify-between gap-2 border-t border-line bg-surface px-4 py-2"
+      :class="ui('footer')"
     >
       <button
         v-if="!entry.read"
         type="button"
         data-test="stack-mark-all"
-        class="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:bg-sunken"
+        :class="ui('markAll')"
         @click="markAll()"
       >
-        <Icon :icon="Check" :size="12" /> Mark all read
+        <Icon name="check" :size="12" /> Mark all read
       </button>
       <span v-else aria-hidden="true" />
       <button
         v-if="entry.groupKey"
         type="button"
         data-test="stack-see-all"
-        class="inline-flex items-center gap-1 text-[12px] font-semibold text-accent transition-colors hover:underline"
+        :class="ui('seeAll')"
         @click="emit('see-all', entry.groupKey, entry.groupLabel ?? '', entry.read)"
       >
         See all
-        <Icon :icon="ArrowRight" :size="13" aria-hidden="true" />
+        <Icon name="arrow-right" :size="13" aria-hidden="true" />
       </button>
     </div>
   </div>

@@ -1,13 +1,25 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ChevronDown, Circle, CircleCheck } from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Icon from "../../ui/Icon.vue";
 import Spinner from "../../ui/Spinner.vue";
-import { actionIcon } from "../../design/icons";
 import { priorityLabel, priorityTextClass } from "../../design/tokens";
 import { exactTime, relativeTime } from "../../lib/time";
 import { useActions, useSettings } from "../../provider/context";
+import { useUi } from "../../theming/useUi";
+
+const parts = {
+  root: "group border-b border-line px-4 py-2.5 transition-colors duration-100",
+  readToggle: "mt-0.5 shrink-0 rounded-full transition-colors duration-100",
+  title: "block w-full text-left font-sans text-[14px]",
+  caret: "shrink-0 self-center text-faint transition-transform duration-150",
+  time: "shrink-0 font-mono text-[12px] tabular-nums text-faint",
+  description: "mt-0.5 text-[13px] leading-relaxed text-muted",
+  meta: "mt-1 flex items-center gap-x-2 text-[12px] text-faint",
+  priority: "shrink-0 font-mono text-[11px] uppercase tracking-wide",
+  action:
+    "inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken disabled:pointer-events-none disabled:opacity-50",
+} as const;
 
 // Config-driven feed row. Compact by default; clicking anywhere on the card (body or title)
 // opens it — expands any extra content (actions or a long body) AND marks it read
@@ -20,13 +32,18 @@ import { useActions, useSettings } from "../../provider/context";
 // member (StackRow), where per-member priority is already carried by the stack's inner priority line
 // + the priority-label text — the card's own strip would be a second, colliding vertical. Default
 // (flat feed) keeps the full emphasis.
-const props = defineProps<{ notification: FeedNotification; flush?: boolean }>();
+const props = defineProps<{
+  notification: FeedNotification;
+  flush?: boolean;
+  ui?: Partial<Record<keyof typeof parts, string>>;
+}>();
 const emit = defineEmits<{
   open: [notification: FeedNotification];
   action: [action: NotificationAction, notification: FeedNotification, index: number];
   unread: [notification: FeedNotification];
 }>();
 
+const ui = useUi("card", parts, () => props.ui);
 const settings = useSettings();
 const { isPending, isLocked, resultFor } = useActions();
 
@@ -81,20 +98,17 @@ function toggleRead() {
 </script>
 
 <template>
-  <article
-    class="group border-b border-line px-4 py-2.5 transition-colors duration-100"
-    :class="[{ 'animate-enter': isFresh }, cardEmphasis]"
-  >
+  <article :class="[ui('root'), { 'animate-enter': isFresh }, cardEmphasis]">
     <div class="flex cursor-pointer gap-3" @click="activate">
       <button
         type="button"
         data-test="read-toggle"
-        class="mt-0.5 shrink-0 rounded-full transition-colors duration-100"
+        :class="ui('readToggle')"
         :aria-label="item.read ? 'Mark as unread' : 'Mark as read'"
         @click.stop="toggleRead"
       >
         <Icon
-          :icon="item.read ? CircleCheck : Circle"
+          :name="item.read ? 'circle-check' : 'circle'"
           :size="16"
           :class="
             item.read
@@ -109,8 +123,8 @@ function toggleRead() {
           <h3 class="min-w-0 flex-1">
             <button
               type="button"
-              class="block w-full text-left font-sans text-[14px]"
               :class="[
+                ui('title'),
                 item.read ? 'font-normal text-muted' : 'font-semibold text-text',
                 expanded ? 'break-words' : 'truncate',
               ]"
@@ -123,17 +137,12 @@ function toggleRead() {
           </h3>
           <Icon
             v-if="canExpand"
-            :icon="ChevronDown"
+            name="chevron-down"
             :size="14"
             data-test="expand-caret"
-            class="shrink-0 self-center text-faint transition-transform duration-150"
-            :class="{ 'rotate-180': expanded }"
+            :class="[ui('caret'), { 'rotate-180': expanded }]"
           />
-          <time
-            class="shrink-0 font-mono text-[12px] tabular-nums text-faint"
-            :datetime="item.createdAt"
-            :title="exactTime(item.createdAt)"
-          >
+          <time :class="ui('time')" :datetime="item.createdAt" :title="exactTime(item.createdAt)">
             {{ relativeTime(item.createdAt) }}
           </time>
         </div>
@@ -141,15 +150,14 @@ function toggleRead() {
         <p
           v-if="item.description"
           data-test="card-body"
-          class="mt-0.5 text-[13px] leading-relaxed text-muted"
-          :class="expanded ? 'whitespace-pre-line break-words' : 'truncate'"
+          :class="[ui('description'), expanded ? 'whitespace-pre-line break-words' : 'truncate']"
         >
           {{ item.description }}
         </p>
 
         <!-- Single-line meta row: the module/category text truncates in a flex-1 group so the
              right-hand priority label keeps a stable position on every card. -->
-        <div class="mt-1 flex items-center gap-x-2 text-[12px] text-faint">
+        <div :class="ui('meta')">
           <div class="flex min-w-0 flex-1 items-center gap-x-2">
             <span class="shrink-0 font-mono uppercase tracking-wide">{{ item.module }}</span>
             <template v-if="item.category">
@@ -159,8 +167,7 @@ function toggleRead() {
           </div>
           <span
             data-test="priority-label"
-            class="shrink-0 font-mono text-[11px] uppercase tracking-wide"
-            :class="priorityTextClass[item.priority]"
+            :class="[ui('priority'), priorityTextClass[item.priority]]"
           >
             {{ priorityLabel[item.priority] }}
           </span>
@@ -178,13 +185,13 @@ function toggleRead() {
           v-if="action.kind !== 'dispatch' || settings.flags.actionsEnabled"
           type="button"
           data-test="action"
-          class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 text-[12px] font-medium text-text transition-colors duration-100 hover:bg-sunken disabled:pointer-events-none disabled:opacity-50"
+          :class="ui('action')"
           :disabled="action.kind === 'dispatch' && isLocked(item.id)"
           :aria-busy="action.kind === 'dispatch' && isPending(item.id, i) ? 'true' : undefined"
           @click.stop="emit('action', action, item, i)"
         >
           <Spinner v-if="action.kind === 'dispatch' && isPending(item.id, i)" :size="13" />
-          <Icon v-else-if="actionIcon(action.icon)" :icon="actionIcon(action.icon)!" :size="13" />
+          <Icon v-else-if="action.icon" :name="action.icon" :size="13" />
           {{ action.label }}
         </button>
         <span

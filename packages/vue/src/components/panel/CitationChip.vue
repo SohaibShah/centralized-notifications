@@ -2,12 +2,26 @@
 import { ref } from "vue";
 import type { ChatSource } from "@notifications/shared";
 import { formatRelativeAge } from "@notifications/shared";
-import { actionIcon } from "../../design/icons";
 import Icon from "../../ui/Icon.vue";
 import Spinner from "../../ui/Spinner.vue";
 import { useActions } from "../../provider/context";
+import { useUi } from "../../theming/useUi";
 
-const props = defineProps<{ source: ChatSource }>();
+const parts = {
+  root: "inline-flex flex-col align-baseline",
+  toggle:
+    "ai-bubble-border inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] font-medium text-text hover:bg-sunken",
+  dot: "size-1.5 rounded-full",
+  popover:
+    "mt-1 flex flex-col gap-1.5 rounded-md border border-line bg-surface px-2.5 py-2 text-[12px]",
+  action:
+    "inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 font-medium text-text transition-colors duration-100 hover:bg-sunken disabled:pointer-events-none disabled:opacity-50",
+} as const;
+const props = defineProps<{
+  source: ChatSource;
+  ui?: Partial<Record<keyof typeof parts, string>>;
+}>();
+const ui = useUi("citation-chip", parts, () => props.ui);
 const open = ref(false);
 const { runAction, isPending, isLocked, resultFor } = useActions();
 
@@ -21,22 +35,19 @@ const dotClass: Record<ChatSource["priority"], string> = {
 </script>
 
 <template>
-  <span class="inline-flex flex-col align-baseline">
+  <span :class="ui('root')">
     <button
       type="button"
       data-test="chip-toggle"
-      class="ai-bubble-border inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[12px] font-medium text-text hover:bg-sunken"
+      :class="ui('toggle')"
       :aria-expanded="open"
       @click="open = !open"
     >
-      <span class="size-1.5 rounded-full" :class="dotClass[props.source.priority]" />
+      <span :class="[ui('dot'), dotClass[props.source.priority]]" />
       {{ props.source.title }}
     </button>
 
-    <span
-      v-if="open"
-      class="mt-1 flex flex-col gap-1.5 rounded-md border border-line bg-surface px-2.5 py-2 text-[12px]"
-    >
+    <span v-if="open" :class="ui('popover')">
       <span class="text-muted"
         >{{ props.source.priority }} · {{ formatRelativeAge(props.source.ageMinutes) }} old</span
       >
@@ -49,7 +60,7 @@ const dotClass: Record<ChatSource["priority"], string> = {
           <button
             type="button"
             data-test="chip-action"
-            class="inline-flex items-center gap-1.5 rounded-md border border-line-strong bg-surface px-2.5 py-1 font-medium text-text transition-colors duration-100 hover:bg-sunken disabled:pointer-events-none disabled:opacity-50"
+            :class="ui('action')"
             :disabled="action.kind === 'dispatch' && isLocked(props.source.id)"
             :aria-busy="
               action.kind === 'dispatch' && isPending(props.source.id, i) ? 'true' : undefined
@@ -60,7 +71,7 @@ const dotClass: Record<ChatSource["priority"], string> = {
               v-if="action.kind === 'dispatch' && isPending(props.source.id, i)"
               :size="13"
             />
-            <Icon v-else-if="actionIcon(action.icon)" :icon="actionIcon(action.icon)!" :size="13" />
+            <Icon v-else-if="action.icon" :name="action.icon" :size="13" />
             {{ action.label }}
           </button>
           <span
