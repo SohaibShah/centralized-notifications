@@ -202,7 +202,7 @@ async function toggle(m: AdminModule): Promise<void> {
               :aria-checked="m.enabled"
               :aria-label="`${m.enabled ? 'Disable' : 'Enable'} ${m.label}`"
               :data-test="`toggle-${m.key}`"
-              :class="[ui('toggle'), m.enabled ? 'bg-accent' : 'bg-line-strong']"
+              :class="ui('toggle', m.enabled ? 'bg-accent' : 'bg-line-strong')"
               @click="toggle(m)"
             >
               <span

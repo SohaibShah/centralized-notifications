@@ -20,12 +20,13 @@ Override them in your own stylesheet (or inline) to re-theme globally:
   --nt-color-accent: #6d28d9;
   --nt-color-bg: #0b0b0f;
   --nt-radius-md: 0; /* square corners everywhere */
-  --nt-border-width: 0; /* borderless everywhere */
+  --nt-color-line: transparent; /* hide 1px hairline borders globally */
 }
 ```
 
 The full token list is in `packages/vue/src/styles/lib.css`. Dark mode is just a different set
-of `--nt-*` values (see `styles/presets/dark.css`).
+of `--nt-*` values (see `styles/presets/dark.css`). To fully remove borders on specific surfaces
+(not just hide their color), use a `ui` override — e.g. `ui: { card: { root: 'border-0' } }`.
 
 ## 2. Per-part `ui` overrides
 
@@ -54,8 +55,11 @@ default `border rounded-md`.
 
 Precedence (last wins): component default → provider `ui[component]` → instance `ui`.
 
-Types are exported (`NotificationUi`, `ComponentUi`) so the map is autocompleted and a misspelled
-component or part is a compile error.
+The per-instance `ui` prop is fully typed (`ComponentUi<…>`) — a misspelled part is a compile
+error. The **global** provider map (`NotificationUi`) is `Record<string, Record<string, string>>`,
+so its component and part keys are **not** type-checked: a typo like `ui: { bel: { root } }`
+compiles and silently does nothing. Use the reference table below as the source of truth for
+global keys.
 
 ### Component → part reference
 
@@ -123,11 +127,12 @@ All icons resolve by **name** through a registry (defaults in `theming/icons.ts`
 
 ## Escape hatches summary
 
-| I want to…                            | Use                                                                   |
-| ------------------------------------- | --------------------------------------------------------------------- |
-| Recolor / dark mode                   | `--nt-color-*` tokens                                                 |
-| Square corners / no borders, globally | `--nt-radius-*` / `--nt-border-width` tokens                          |
-| Restyle one part of one component     | instance `ui` prop                                                    |
-| Restyle a part across the whole app   | provider `:ui` map                                                    |
-| Different icon set                    | provider `:icons` map                                                 |
-| Hide an icon                          | `:icons` `{ name: false }` (global) or `ui.icon: 'hidden'` (instance) |
+| I want to…                          | Use                                                                               |
+| ----------------------------------- | --------------------------------------------------------------------------------- |
+| Recolor / dark mode                 | `--nt-color-*` tokens                                                             |
+| Square corners, globally            | `--nt-radius-*` tokens                                                            |
+| Remove borders                      | `--nt-color-line: transparent` (hide) or a `ui` override with `border-0` (remove) |
+| Restyle one part of one component   | instance `ui` prop                                                                |
+| Restyle a part across the whole app | provider `:ui` map                                                                |
+| Different icon set                  | provider `:icons` map                                                             |
+| Hide an icon                        | `:icons` `{ name: false }` (global) or `ui.icon: 'hidden'` (instance)             |

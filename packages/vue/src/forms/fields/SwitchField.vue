@@ -38,10 +38,10 @@ const on = computed(() => model.value === true);
       :aria-checked="on"
       :aria-label="field.label"
       :data-test="`switch-${field.name}`"
-      :class="[ui('track'), on ? 'bg-accent' : 'bg-line-strong']"
+      :class="ui('track', on ? 'bg-accent' : 'bg-line-strong')"
       @click="model = !on"
     >
-      <span :class="[ui('thumb'), on ? 'right-0.5' : 'left-0.5']" />
+      <span :class="ui('thumb', on ? 'right-0.5' : 'left-0.5')" />
     </button>
   </div>
 </template>

@@ -196,12 +196,14 @@ async function resume(row: Row): Promise<void> {
             <button
               type="button"
               data-test="mute-toggle"
-              :class="[
-                ui('muteToggle'),
-                ruleFor(row.kind, row.target)?.mutedUntil === null
-                  ? 'border-accent/30 bg-accent/10 text-accent'
-                  : 'border-line-strong bg-surface text-text hover:bg-sunken',
-              ]"
+              :class="
+                ui(
+                  'muteToggle',
+                  ruleFor(row.kind, row.target)?.mutedUntil === null
+                    ? 'border-accent/30 bg-accent/10 text-accent'
+                    : 'border-line-strong bg-surface text-text hover:bg-sunken',
+                )
+              "
               :aria-pressed="ruleFor(row.kind, row.target)?.mutedUntil === null"
               @click="ruleFor(row.kind, row.target)?.mutedUntil === null ? resume(row) : mute(row)"
             >

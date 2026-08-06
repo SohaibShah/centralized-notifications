@@ -58,10 +58,7 @@ onMounted(() => {
         role="tab"
         :aria-selected="tab === 'inbox'"
         aria-controls="notif-tabpanel"
-        :class="[
-          ui('tab'),
-          tab === 'inbox' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text',
-        ]"
+        :class="ui('tab', tab === 'inbox' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text')"
         @click="tab = 'inbox'"
       >
         Inbox
@@ -73,11 +70,13 @@ onMounted(() => {
         role="tab"
         :aria-selected="tab === 'assistant'"
         aria-controls="notif-tabpanel"
-        :class="[
-          ui('tab'),
-          'inline-flex items-center gap-1',
-          tab === 'assistant' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text',
-        ]"
+        :class="
+          ui(
+            'tab',
+            'inline-flex items-center gap-1',
+            tab === 'assistant' ? 'bg-accent/10 text-accent' : 'text-muted hover:text-text',
+          )
+        "
         @click="tab = 'assistant'"
       >
         <span data-test="ask-ai-label" class="text-ai">Ask AI</span>
@@ -88,10 +87,9 @@ onMounted(() => {
         <button
           v-if="tab === 'inbox'"
           type="button"
-          :class="[
-            ui('iconButton'),
-            searchOpen || feed.query ? 'text-accent' : 'text-faint hover:text-text',
-          ]"
+          :class="
+            ui('iconButton', searchOpen || feed.query ? 'text-accent' : 'text-faint hover:text-text')
+          "
           aria-label="Search notifications"
           :aria-expanded="searchOpen"
           @click="toggleSearch"
@@ -101,7 +99,7 @@ onMounted(() => {
         <FilterMenu v-if="tab === 'inbox'" />
         <button
           type="button"
-          :class="[ui('iconButton'), 'text-faint hover:text-text']"
+          :class="ui('iconButton', 'text-faint hover:text-text')"
           aria-label="Close notifications"
           @click="$emit('close')"
         >

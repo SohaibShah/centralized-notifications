@@ -138,7 +138,7 @@ function memberWash(p: NotificationPriority): string {
     <button
       type="button"
       data-test="stack-header"
-      :class="[ui('header'), headerBg]"
+      :class="ui('header', headerBg)"
       :aria-expanded="open"
       :aria-controls="open ? peekId : undefined"
       @click="toggle"
@@ -148,10 +148,10 @@ function memberWash(p: NotificationPriority): string {
         :size="16"
         aria-hidden="true"
         data-test="stack-glyph"
-        :class="[ui('glyph'), entry.read ? 'text-faint' : 'text-muted']"
+        :class="ui('glyph', entry.read ? 'text-faint' : 'text-muted')"
       />
       <span
-        :class="[ui('label'), entry.read ? 'font-normal text-muted' : 'font-semibold text-text']"
+        :class="ui('label', entry.read ? 'font-normal text-muted' : 'font-semibold text-text')"
       >
         {{ entry.groupLabel || entry.title }}
       </span>
@@ -167,7 +167,7 @@ function memberWash(p: NotificationPriority): string {
         name="chevron-down"
         :size="14"
         aria-hidden="true"
-        :class="[ui('chevron'), { 'rotate-180': open }]"
+        :class="ui('chevron', { 'rotate-180': open })"
       />
       <time
         data-test="stack-time"
@@ -203,7 +203,7 @@ function memberWash(p: NotificationPriority): string {
         <div
           v-for="m in peek ?? []"
           :key="m.id"
-          :class="[ui('member'), memberWash(m.priority) || 'hover:bg-sunken/50']"
+          :class="ui('member', memberWash(m.priority) || 'hover:bg-sunken/50')"
         >
           <NotificationCardRenderer
             :notification="m"

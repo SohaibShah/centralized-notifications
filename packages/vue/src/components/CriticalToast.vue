@@ -56,8 +56,8 @@ watch(paused, (isPaused, wasPaused) => {
     @focusout="focused = false"
   >
     <div class="flex items-center gap-2">
-      <span :class="[ui('dot'), priorityDotClass[toast.priority]]" aria-hidden="true" />
-      <span :class="[ui('priority'), priorityTextClass[toast.priority]]">{{
+      <span :class="ui('dot', priorityDotClass[toast.priority])" aria-hidden="true" />
+      <span :class="ui('priority', priorityTextClass[toast.priority])">{{
         priorityLabel[toast.priority]
       }}</span>
       <button

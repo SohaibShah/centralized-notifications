@@ -43,7 +43,7 @@ const dotClass: Record<ChatSource["priority"], string> = {
       :aria-expanded="open"
       @click="open = !open"
     >
-      <span :class="[ui('dot'), dotClass[props.source.priority]]" />
+      <span :class="ui('dot', dotClass[props.source.priority])" />
       {{ props.source.title }}
     </button>
 

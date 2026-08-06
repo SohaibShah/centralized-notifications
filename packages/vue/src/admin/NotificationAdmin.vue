@@ -39,12 +39,14 @@ const items: { id: Section; label: string; icon: string }[] = [
         v-for="it in items"
         :key="it.id"
         type="button"
-        :class="[
-          ui('navItem'),
-          section === it.id
-            ? 'bg-accent/10 text-accent'
-            : 'text-muted hover:bg-sunken hover:text-text',
-        ]"
+        :class="
+          ui(
+            'navItem',
+            section === it.id
+              ? 'bg-accent/10 text-accent'
+              : 'text-muted hover:bg-sunken hover:text-text',
+          )
+        "
         :aria-current="section === it.id ? 'page' : undefined"
         @click="section = it.id"
       >

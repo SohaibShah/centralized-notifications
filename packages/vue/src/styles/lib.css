@@ -82,8 +82,6 @@
   --nt-radius-sm: 6px;
   --nt-radius-md: 9px;
   --nt-radius-lg: 12px;
-  /* Width of component borders — set to 0 (with --nt-radius-* : 0) for a flat, borderless library. */
-  --nt-border-width: 1px;
   --nt-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Scoped `--color-*` aliases for the custom classes below (.prio-*, .ai-*, .animate-enter) that
@@ -160,14 +158,6 @@
 }
 
 /* ── Custom component classes (reference var(--color-*) → the scoped --nt-* tokens) ── */
-
-/* Border that honors the --nt-border-width token — a component uses `border-token` (with a
-   `border-*` color utility) instead of Tailwind's fixed `border`, so a host setting
-   --nt-border-width: 0 removes borders library-wide without touching any `ui` override. */
-.border-token {
-  border-width: var(--nt-border-width);
-  border-style: solid;
-}
 
 @keyframes enter-rise {
   from {

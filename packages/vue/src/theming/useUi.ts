@@ -1,4 +1,5 @@
 import { inject, type InjectionKey, type Ref } from "vue";
+import type { ClassValue } from "clsx";
 import { cn } from "../lib/cn";
 
 /** A single component's per-part override map (part name → extra/overriding classes). */
@@ -25,14 +26,19 @@ export function useComponentUi(component: string): (part: string) => string | un
 /**
  * Resolves a component's parts to merged class strings. Layers, later winning (via `cn`, which
  * is tailwind-merge-configured so an override like `rounded-none` replaces a default `rounded-md`):
- *   part default  ←  provider global ui[component][part]  ←  instance ui[part]
- * `instanceUi` is a getter so the instance prop stays reactive.
+ *   part default  ←  dynamic/state classes (`extra`)  ←  provider global ui[component][part]  ←  instance ui[part]
+ * Pass a part's dynamic/state classes as trailing `extra` args (e.g. a priority wash or an active
+ * state) rather than appending them in a Vue `:class` array — that keeps them INSIDE the same `cn`
+ * merge, so a host `ui` override still wins over the state class (appending them after `ui('part')`
+ * would leave both un-deduped and let the state class win on source order). `instanceUi` is a getter
+ * so the instance prop stays reactive.
  */
 export function useUi<P extends Record<string, string>>(
   component: string,
   parts: P,
   instanceUi?: () => ComponentUi<P> | undefined,
-): (part: keyof P) => string {
+): (part: keyof P, ...extra: ClassValue[]) => string {
   const globalUi = useComponentUi(component);
-  return (part) => cn(parts[part], globalUi(part as string), instanceUi?.()?.[part]);
+  return (part, ...extra) =>
+    cn(parts[part], ...extra, globalUi(part as string), instanceUi?.()?.[part]);
 }

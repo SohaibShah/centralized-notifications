@@ -43,7 +43,7 @@ const errorId = computed(() => `${fieldId.value}-error`);
       :name="field.name"
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="error ? errorId : undefined"
-      :class="[ui('select'), error ? 'border-danger' : 'border-line-strong']"
+      :class="ui('select', error ? 'border-danger' : 'border-line-strong')"
     >
       <option v-for="opt in field.options" :key="opt.value" :value="opt.value">
         {{ opt.label }}

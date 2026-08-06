@@ -307,10 +307,9 @@ async function onAction(
       <button
         type="button"
         data-test="muted-view-toggle"
-        :class="[
-          ui('mutedToggle'),
-          isMutedView ? 'bg-sunken text-text' : 'text-faint hover:bg-sunken hover:text-muted',
-        ]"
+        :class="
+          ui('mutedToggle', isMutedView ? 'bg-sunken text-text' : 'text-faint hover:bg-sunken hover:text-muted')
+        "
         :aria-pressed="isMutedView"
         :title="isMutedView ? 'Hide muted notifications' : 'Show muted notifications'"
         :aria-label="isMutedView ? 'Hide muted notifications' : 'Show muted notifications'"

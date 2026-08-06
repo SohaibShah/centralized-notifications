@@ -60,7 +60,7 @@ const inputType = computed(() => (props.field.type === "textarea" ? "text" : pro
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="error ? errorId : undefined"
       rows="3"
-      :class="[ui('input'), error ? 'border-danger' : 'border-line-strong']"
+      :class="ui('input', error ? 'border-danger' : 'border-line-strong')"
     />
     <input
       v-else
@@ -75,7 +75,7 @@ const inputType = computed(() => (props.field.type === "textarea" ? "text" : pro
       :list="field.options?.length ? `${fieldId}-list` : undefined"
       :aria-invalid="error ? 'true' : undefined"
       :aria-describedby="error ? errorId : undefined"
-      :class="[ui('input'), error ? 'border-danger' : 'border-line-strong']"
+      :class="ui('input', error ? 'border-danger' : 'border-line-strong')"
     />
     <datalist v-if="field.options?.length" :id="`${fieldId}-list`">
       <option v-for="opt in field.options" :key="opt.value" :value="opt.value" />

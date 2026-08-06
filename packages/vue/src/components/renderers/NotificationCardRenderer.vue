@@ -98,7 +98,7 @@ function toggleRead() {
 </script>
 
 <template>
-  <article :class="[ui('root'), { 'animate-enter': isFresh }, cardEmphasis]">
+  <article :class="ui('root', { 'animate-enter': isFresh }, cardEmphasis)">
     <div class="flex cursor-pointer gap-3" @click="activate">
       <button
         type="button"
@@ -123,11 +123,13 @@ function toggleRead() {
           <h3 class="min-w-0 flex-1">
             <button
               type="button"
-              :class="[
-                ui('title'),
-                item.read ? 'font-normal text-muted' : 'font-semibold text-text',
-                expanded ? 'break-words' : 'truncate',
-              ]"
+              :class="
+                ui(
+                  'title',
+                  item.read ? 'font-normal text-muted' : 'font-semibold text-text',
+                  expanded ? 'break-words' : 'truncate',
+                )
+              "
               :title="item.title"
               :aria-expanded="canExpand ? expanded : undefined"
               @click.stop="activate"
@@ -140,7 +142,7 @@ function toggleRead() {
             name="chevron-down"
             :size="14"
             data-test="expand-caret"
-            :class="[ui('caret'), { 'rotate-180': expanded }]"
+            :class="ui('caret', { 'rotate-180': expanded })"
           />
           <time :class="ui('time')" :datetime="item.createdAt" :title="exactTime(item.createdAt)">
             {{ relativeTime(item.createdAt) }}
@@ -150,7 +152,7 @@ function toggleRead() {
         <p
           v-if="item.description"
           data-test="card-body"
-          :class="[ui('description'), expanded ? 'whitespace-pre-line break-words' : 'truncate']"
+          :class="ui('description', expanded ? 'whitespace-pre-line break-words' : 'truncate')"
         >
           {{ item.description }}
         </p>
@@ -167,7 +169,7 @@ function toggleRead() {
           </div>
           <span
             data-test="priority-label"
-            :class="[ui('priority'), priorityTextClass[item.priority]]"
+            :class="ui('priority', priorityTextClass[item.priority])"
           >
             {{ priorityLabel[item.priority] }}
           </span>
