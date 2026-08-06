@@ -7,6 +7,13 @@ import SwitchField from "./fields/SwitchField.vue";
 import TextField from "./fields/TextField.vue";
 import type { FormSchema, FormValues } from "./types";
 import { buildSchema } from "./validation";
+import { useUi } from "../theming/useUi";
+
+const parts = {
+  root: "flex flex-col gap-4",
+  heading: "mt-6 font-mono text-[11px] font-semibold uppercase tracking-wide text-muted first:mt-0",
+  error: "text-[13px] text-danger",
+} as const;
 
 // The one shared form component: walk a schema, render a field per entry, validate on
 // submit from the schema-generated zod, and emit clean values. New field types get a
@@ -19,7 +26,9 @@ const props = defineProps<{
   error?: string | null;
   /** Seed values (e.g. current settings loaded from the server) before user edits. */
   initialValues?: FormValues;
+  ui?: Partial<Record<keyof typeof parts, string>>;
 }>();
+const ui = useUi("form", parts, () => props.ui);
 const emit = defineEmits<{ submit: [values: FormValues] }>();
 
 const isBooleanField = (type: FormSchema["fields"][number]["type"]): boolean =>
@@ -88,13 +97,9 @@ function handleSubmit() {
 </script>
 
 <template>
-  <form ref="formEl" novalidate class="flex flex-col gap-4" @submit.prevent="handleSubmit">
+  <form ref="formEl" novalidate :class="ui('root')" @submit.prevent="handleSubmit">
     <template v-for="item in renderItems" :key="item.key">
-      <p
-        v-if="item.kind === 'heading'"
-        data-test="form-group-heading"
-        class="mt-6 font-mono text-[11px] font-semibold uppercase tracking-wide text-muted first:mt-0"
-      >
+      <p v-if="item.kind === 'heading'" data-test="form-group-heading" :class="ui('heading')">
         {{ item.label }}
       </p>
       <template v-else>
@@ -119,7 +124,7 @@ function handleSubmit() {
       </template>
     </template>
 
-    <p v-if="error" role="alert" aria-live="polite" class="text-[13px] text-danger">{{ error }}</p>
+    <p v-if="error" role="alert" aria-live="polite" :class="ui('error')">{{ error }}</p>
 
     <!-- "end": the button wraps its label and right-aligns (settings/admin). "full" (default): a
          full-width button for prominent single-action forms like login. -->
