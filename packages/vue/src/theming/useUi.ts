@@ -1,5 +1,5 @@
 import { inject, type InjectionKey, type Ref } from "vue";
-import { cn } from "./cn";
+import { cn } from "../lib/cn";
 
 /** A single component's per-part override map (part name → extra/overriding classes). */
 export type ComponentUi<P> = Partial<Record<keyof P, string>>;
