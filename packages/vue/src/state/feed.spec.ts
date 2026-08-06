@@ -222,6 +222,68 @@ describe("feed store", () => {
     expect(feed.groupedEntries[0]!.groupTotal).toBe(3);
   });
 
+  it("togglePriority/toggleModule in grouped mode refetch the stacks with the filters as params", async () => {
+    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
+    feed.togglePriority("critical");
+    feed.toggleModule("dsr");
+    await Promise.resolve();
+    const calls = getMock.mock.calls
+      .map((c) => String(c[0]))
+      .filter((u) => u.includes("grouped=true"));
+    expect(calls.length).toBeGreaterThan(0);
+    const last = calls[calls.length - 1]!;
+    expect(last).toContain("priority=critical");
+    expect(last).toContain("module=dsr");
+  });
+
+  it("discards a superseded grouped page so out-of-order responses can't win", async () => {
+    const gEntry = (id: string, gt: number, top: "low" | "high") => ({
+      ...feedItem({ id }),
+      groupKey: "g",
+      groupLabel: "G",
+      groupTotal: gt,
+      topPriority: top,
+    });
+    // First request stays pending; the second resolves immediately with the "latest" data.
+    let resolveStale!: (v: { entries: unknown[]; nextCursor: null }) => void;
+    const stalePage = new Promise<{ entries: unknown[]; nextCursor: null }>((r) => {
+      resolveStale = r;
+    });
+    getMock.mockReturnValueOnce(stalePage);
+    getMock.mockResolvedValueOnce({ entries: [gEntry("new", 1, "high")], nextCursor: null });
+    const feed = makeFeed();
+    feed.grouped = true;
+    const p1 = feed.loadGrouped({ filtering: true }); // seq 1 — pending (older)
+    const p2 = feed.loadGrouped({ filtering: true }); // seq 2 — resolves first (latest)
+    await p2;
+    expect(feed.groupedEntries.map((e) => e.id)).toEqual(["new"]);
+    // The stale first response lands last — it must be discarded, not clobber the latest.
+    resolveStale({ entries: [gEntry("stale", 9, "low")], nextCursor: null });
+    await p1;
+    expect(feed.groupedEntries.map((e) => e.id)).toEqual(["new"]);
+  });
+
+  it("togglePriority in flat mode does NOT refetch the grouped stacks (client-side filtering)", async () => {
+    getMock.mockResolvedValue(page([], null));
+    const feed = makeFeed(); // grouped defaults false
+    await feed.load();
+    getMock.mockClear();
+    feed.togglePriority("critical");
+    await Promise.resolve();
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+  });
+
+  it("hasSearchQuery reflects the trimmed search query", () => {
+    const feed = makeFeed();
+    expect(feed.hasSearchQuery).toBe(false);
+    feed.query = "  dsar ";
+    expect(feed.hasSearchQuery).toBe(true);
+  });
+
   it("setSort in grouped mode refetches the stacks in the new order", async () => {
     getMock.mockResolvedValue({ entries: [], nextCursor: null });
     const feed = makeFeed();
@@ -234,13 +296,84 @@ describe("feed store", () => {
     expect(String(call![0])).toContain("sort=priority-high");
   });
 
-  it("markAllReadInGroup posts { group } and refetches the stacks", async () => {
-    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+  it("markAllReadInGroup posts { group }, sticks the stack, and does NOT refetch (session-stable)", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "g1", read: false }),
+          groupKey: "dsr:#1042",
+          groupLabel: "DSAR #1042",
+          groupTotal: 4,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
     const feed = makeFeed();
     feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
     await feed.markAllReadInGroup("dsr:#1042");
     expect(postMock).toHaveBeenCalledWith("/notifications/read", { group: "dsr:#1042" });
-    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
+    // No stacks refetch — the stack stays until the panel reopens.
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+    // Optimistically flipped + stuck (keyed by the entry's own id, not the shared groupKey) so it stays
+    // in Needs action, shown read.
+    expect(feed.groupedEntries[0]!.read).toBe(true);
+    expect(feed.groupedReadThisSession.has("g1")).toBe(true);
+    expect(feed.groupedReadThisSession.has("dsr:#1042")).toBe(false);
+  });
+
+  it("markAllReadInGroup flips ONLY the unread stack of a split subject, not the read sibling", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "unread-rep", read: false }),
+          groupKey: "dsr:#9",
+          groupLabel: "DSAR #9",
+          groupTotal: 2,
+          topPriority: "critical",
+        },
+        {
+          ...feedItem({ id: "read-rep", read: true }),
+          groupKey: "dsr:#9",
+          groupLabel: "DSAR #9",
+          groupTotal: 3,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    await feed.markAllReadInGroup("dsr:#9");
+    // Only the unread stack flips + sticks; the already-read sibling is untouched (no phantom duplicate).
+    expect(feed.groupedEntries.find((e) => e.id === "unread-rep")!.read).toBe(true);
+    expect(feed.groupedReadThisSession.has("unread-rep")).toBe(true);
+    expect(feed.groupedReadThisSession.has("read-rep")).toBe(false);
+  });
+
+  it("markAllReadInGroup reverts the flip + stick when the request fails", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "g1", read: false }),
+          groupKey: "dsr:#1042",
+          groupLabel: "DSAR #1042",
+          groupTotal: 4,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
+    postMock.mockRejectedValueOnce(new Error("boom"));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    await feed.markAllReadInGroup("dsr:#1042");
+    expect(feed.groupedEntries[0]!.read).toBe(false);
+    expect(feed.groupedReadThisSession.has("g1")).toBe(false);
   });
 
   it("setSort while drilled into a group re-sorts that group flat, not the stacks", async () => {
@@ -258,13 +391,177 @@ describe("feed store", () => {
     expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
   });
 
-  it("markRead in grouped mode persists a card outside the flat window, then refetches stacks", async () => {
-    getMock.mockResolvedValue({ entries: [], nextCursor: null });
+  it("markRead of a grouped standalone flips it, sticks it, and does NOT refetch (session-stable)", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "s1", read: false, priority: "high" }),
+          groupKey: undefined,
+          groupLabel: "S one",
+          groupTotal: 1,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
     const feed = makeFeed();
     feed.grouped = true;
-    await feed.markRead("peek-1"); // a peek member / single-entry card — never in the flat `items`
+    await feed.loadGrouped();
+    getMock.mockClear();
+    await feed.markRead("s1");
+    expect(postMock).toHaveBeenCalledWith("/notifications/s1/read");
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+    expect(feed.groupedEntries[0]!.read).toBe(true); // shown read
+    expect(feed.groupedReadThisSession.has("s1")).toBe(true); // but stuck → stays in Needs action
+  });
+
+  it("markRead of a peek member (absent from entries) persists without refetching or touching entries", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "g1", read: false }),
+          groupKey: "dsr:#1",
+          groupLabel: "DSAR #1",
+          groupTotal: 3,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
+    await feed.markRead("peek-1"); // a peek member — never in `items` nor an entry
     expect(postMock).toHaveBeenCalledWith("/notifications/peek-1/read");
-    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(true);
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+    expect(feed.groupedEntries[0]!.read).toBe(false); // the stack is untouched (no collapse / re-split)
+  });
+
+  it("loadGrouped clears session read-stickiness so groups re-form on reopen", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "s1", read: false }),
+          groupKey: undefined,
+          groupLabel: "S one",
+          groupTotal: 1,
+          topPriority: "normal",
+        },
+      ],
+      nextCursor: null,
+    });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    await feed.markRead("s1");
+    expect(feed.groupedReadThisSession.has("s1")).toBe(true);
+    await feed.loadGrouped(); // panel reopen
+    expect(feed.groupedReadThisSession.has("s1")).toBe(false);
+  });
+
+  const standaloneEntry = (over = {}) => ({
+    entries: [
+      {
+        ...feedItem({ id: "s1", read: false, priority: "high" }),
+        groupKey: undefined,
+        groupLabel: "S one",
+        groupTotal: 1,
+        topPriority: "high" as const,
+        ...over,
+      },
+    ],
+    nextCursor: null,
+  });
+
+  it("markRead of a grouped standalone decrements the unread count by its priority", async () => {
+    getMock.mockResolvedValue(standaloneEntry());
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    feed.counts.unread = 3;
+    feed.counts.unreadByPriority.high = 2;
+    await feed.markRead("s1");
+    expect(feed.counts.unread).toBe(2);
+    expect(feed.counts.unreadByPriority.high).toBe(1);
+  });
+
+  it("markRead of a grouped standalone reverts flip + stick + count when the request fails", async () => {
+    getMock.mockResolvedValue(standaloneEntry());
+    postMock.mockRejectedValueOnce(new Error("boom"));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    feed.counts.unread = 3;
+    feed.counts.unreadByPriority.high = 2;
+    await feed.markRead("s1");
+    expect(feed.groupedEntries[0]!.read).toBe(false);
+    expect(feed.groupedReadThisSession.has("s1")).toBe(false);
+    expect(feed.counts.unread).toBe(3); // count delta undone
+  });
+
+  it("markUnread of a grouped standalone flips it to unread in the store (moves back to Needs action)", async () => {
+    getMock.mockResolvedValue(standaloneEntry({ read: true }));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    expect(feed.groupedEntries[0]!.read).toBe(true);
+    await feed.markUnread("s1");
+    expect(feed.groupedEntries[0]!.read).toBe(false); // now unread → StackList puts it in Needs action
+  });
+
+  it("flips the grouped entry even when a stale flat `items` window still holds the same id", async () => {
+    // Repro of the "no reaction" bug: a prior drill-in left `items` populated with this id. In grouped
+    // stacks mode the visible row is the grouped entry, so the flat window must be ignored.
+    getMock.mockResolvedValueOnce(page([feedItem({ id: "s1", read: true })], null));
+    const feed = makeFeed();
+    await feed.load(); // stale flat window now contains s1
+    expect(feed.items.some((n) => n.id === "s1")).toBe(true);
+    feed.grouped = true;
+    getMock.mockResolvedValueOnce(standaloneEntry({ read: true }));
+    await feed.loadGrouped();
+    await feed.markUnread("s1");
+    // The GROUPED card flips (not just the invisible flat item).
+    expect(feed.groupedEntries[0]!.read).toBe(false);
+  });
+
+  it("markUnread of a grouped standalone reverts to read + re-sticks when the request fails", async () => {
+    getMock.mockResolvedValue(standaloneEntry({ read: true }));
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    delMock.mockRejectedValueOnce(new Error("boom"));
+    await feed.markUnread("s1");
+    // Reverted back to read; the entry was not sticky before, so it must not be left stuck.
+    expect(feed.groupedEntries[0]!.read).toBe(true);
+    expect(feed.groupedReadThisSession.has("s1")).toBe(false);
+  });
+
+  it("a grouped peek-member read reconciles the bell via fetchCounts (no stacks refetch)", async () => {
+    getMock.mockResolvedValue({
+      entries: [
+        {
+          ...feedItem({ id: "g1", read: false }),
+          groupKey: "dsr:#1",
+          groupLabel: "DSAR #1",
+          groupTotal: 3,
+          topPriority: "high",
+        },
+      ],
+      nextCursor: null,
+    });
+    const feed = makeFeed();
+    feed.grouped = true;
+    await feed.loadGrouped();
+    getMock.mockClear();
+    await feed.markRead("peek-1"); // not a representative (groupTotal 3) → peek member
+    expect(postMock).toHaveBeenCalledWith("/notifications/peek-1/read");
+    // Reconciles counts, but never refetches the stacks (session-stable).
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("/notifications/counts"))).toBe(
+      true,
+    );
+    expect(getMock.mock.calls.some((c) => String(c[0]).includes("grouped=true"))).toBe(false);
+    expect(feed.groupedEntries[0]!.read).toBe(false); // the stack is untouched
   });
 
   it("enterGroup loads that group's members flat; exitGroup clears it", async () => {

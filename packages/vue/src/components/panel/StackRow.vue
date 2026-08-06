@@ -1,22 +1,24 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { ArrowRight, Check, ChevronRight } from "@lucide/vue";
+import { ArrowRight, Check, ChevronDown, Layers } from "@lucide/vue";
 import type {
   FeedNotification,
   GroupedEntry,
   NotificationAction,
   NotificationPage,
+  NotificationPriority,
 } from "@notifications/shared";
 import Icon from "../../ui/Icon.vue";
 import Spinner from "../../ui/Spinner.vue";
-import { priorityDotClass, priorityLabel } from "../../design/tokens";
+import { priorityLabel, stackWashClass } from "../../design/tokens";
 import { relativeTime } from "../../lib/time";
 import NotificationCardRenderer from "../renderers/NotificationCardRenderer.vue";
 
-// A collapsed notification stack: one group's header + an inline peek of its most-recent members,
-// with a "See all" that hands the group key up so the panel can drill in. Fetches the peek lazily via
-// the injected transport (parent passes it from useTransport). A single-member entry renders as a
-// plain card — no stack chrome.
+// A collapsed notification stack: one group's header + an inline peek of its most-recent members, with
+// a "See all" that hands the group key up so the panel can drill in. Fetches the peek lazily via the
+// injected transport (parent passes it from useTransport). EVERY entry renders this way — a single
+// notification is just a "group of one" (count 1) whose sole member is the entry itself (no fetch), for
+// one consistent presentation across single and multi-notification subjects.
 const props = defineProps<{
   entry: GroupedEntry;
   transport: { get: <T>(url: string) => Promise<T> };
@@ -35,11 +37,21 @@ const peek = ref<FeedNotification[] | null>(null);
 const loading = ref(false);
 const peekError = ref(false);
 
-// A stable id so the header's aria-controls can point at the expanded peek region.
-const peekId = computed(() => `stack-peek-${props.entry.groupKey ?? props.entry.id}`);
+// A stable, UNIQUE id so the header's aria-controls points at this stack's peek region — keyed by the
+// entry's own id, not groupKey (a split subject's read + unread stacks share a groupKey, which would
+// collide the DOM id / aria-controls of two rows on screen at once).
+const peekId = computed(() => `stack-peek-${props.entry.id}`);
 
-async function fetchPeek(): Promise<void> {
-  if (!props.entry.groupKey) return;
+async function loadPeek(): Promise<void> {
+  // A group of one: the entry IS its sole member — show it directly, no fetch.
+  if (props.entry.groupTotal === 1) {
+    peek.value = [props.entry];
+    return;
+  }
+  if (!props.entry.groupKey) {
+    peek.value = [];
+    return;
+  }
   loading.value = true;
   peekError.value = false;
   try {
@@ -56,11 +68,12 @@ async function fetchPeek(): Promise<void> {
 
 async function toggle(): Promise<void> {
   open.value = !open.value;
-  if (open.value && peek.value === null && !loading.value) await fetchPeek();
+  if (open.value && peek.value === null && !loading.value) await loadPeek();
 }
 
-// Optimistically flip a peek member's read flag so its card responds instantly; the panel then
-// persists the change and refetches the stacks (their counts/split are server-derived).
+// Optimistically flip a peek member's read flag so its card responds instantly; the panel persists it
+// but does NOT re-form the stacks — the grouped view is session-stable, so the member stays under this
+// header until the panel reopens (see feed.ts markRead / loadGrouped).
 function flipPeekRead(id: string, read: boolean): void {
   if (peek.value) peek.value = peek.value.map((m) => (m.id === id ? { ...m, read } : m));
 }
@@ -72,125 +85,145 @@ function onMemberUnread(n: FeedNotification): void {
   flipPeekRead(n.id, false);
   emit("unread", n);
 }
+// Whole-group "Mark all read": flip every loaded peek member read locally too, so the open stack shows
+// read but stays put (the parent marks the group read + sticky; it re-forms only on reopen).
+function markAll(): void {
+  if (peek.value) peek.value = peek.value.map((m) => ({ ...m, read: true }));
+  emit("mark-all-read", props.entry.groupKey ?? "");
+}
+
+// The header reads as a plain notification (no stack-lines) — priority is its wash. Washed headers
+// (critical/high) keep the wash at rest, hover (via `.nt-wash-*:hover`), and when open — so we do NOT
+// also apply the neutral bg-sunken utilities there (they'd fight the wash and turn an open critical
+// header grey). Unwashed headers (normal/low) get the sunken hover/open feedback instead.
+const headerWash = computed(() => stackWashClass[props.entry.topPriority]);
+const headerBg = computed(() =>
+  headerWash.value ? headerWash.value : open.value ? "bg-sunken/50" : "hover:bg-sunken/50",
+);
+// Each member's priority is shown by a flush wash on its row (the two stack-lines are neutral).
+function memberWash(p: NotificationPriority): string {
+  return stackWashClass[p];
+}
 </script>
 
 <template>
-  <!-- A single-member entry is just a card. -->
-  <NotificationCardRenderer
-    v-if="entry.groupTotal === 1"
-    :notification="entry"
-    @open="(n) => emit('open', n)"
-    @action="(a, n, i) => emit('action', a, n, i)"
-    @unread="(n) => emit('unread', n)"
-  />
-
-  <div v-else class="border-b border-line">
-    <!-- Collapsed: an iOS/macOS-style stack — the representative card sits above one or two faux card
-         edges peeking beneath. Expanded: the edges recede and an accent rail marks "inside this group". -->
-    <div class="relative px-2 pt-1.5" :class="!open ? 'pb-3' : 'pb-1.5'">
-      <template v-if="!open">
-        <span
-          aria-hidden="true"
-          class="pointer-events-none absolute inset-x-4 bottom-1.5 h-3 rounded-b-lg border border-t-0 border-line bg-sunken/60"
-        />
-        <span
-          aria-hidden="true"
-          class="pointer-events-none absolute inset-x-6 bottom-0.5 h-3 rounded-b-lg border border-t-0 border-line bg-sunken/30"
-        />
-      </template>
-      <button
-        type="button"
-        data-test="stack-header"
-        class="relative z-10 flex w-full items-center gap-2.5 rounded-lg border px-4 py-3 text-left transition-colors"
-        :class="
-          open
-            ? 'border-line-strong bg-sunken/40 shadow-[inset_2px_0_0_var(--color-accent)]'
-            : 'border-line bg-surface hover:bg-sunken/60'
-        "
-        :aria-expanded="open"
-        :aria-controls="open ? peekId : undefined"
-        @click="toggle"
+  <!-- Every entry renders as a group — even a single notification is a "group of one" (count 1), for a
+       consistent collapsed-subject presentation. Expand to reveal the member(s); the footer offers
+       "See all" (+ "Mark all read" while unread). -->
+  <div data-test="stack" class="border-b border-line">
+    <!-- Header reads as a plain notification (a group glyph where a card's read-circle sits), no left
+         lines — so it never looks threaded under the card above it. Priority is the wash. -->
+    <button
+      type="button"
+      data-test="stack-header"
+      class="relative flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors duration-100"
+      :class="[headerBg]"
+      :aria-expanded="open"
+      :aria-controls="open ? peekId : undefined"
+      @click="toggle"
+    >
+      <Icon
+        :icon="Layers"
+        :size="16"
+        aria-hidden="true"
+        data-test="stack-glyph"
+        class="shrink-0"
+        :class="entry.read ? 'text-faint' : 'text-muted'"
+      />
+      <span
+        class="min-w-0 flex-1 truncate font-sans text-[14px]"
+        :class="entry.read ? 'font-normal text-muted' : 'font-semibold text-text'"
       >
-        <Icon
-          :icon="ChevronRight"
-          :size="14"
-          aria-hidden="true"
-          class="shrink-0 text-faint motion-safe:transition-transform"
-          :class="{ 'rotate-90': open }"
-        />
-        <span
-          aria-hidden="true"
-          class="size-2 shrink-0 rounded-full"
-          :class="priorityDotClass[entry.topPriority]"
-        />
-        <!-- Priority is color-only in the dot above; carry the word for SR / color-blind users. -->
-        <span class="sr-only">{{ priorityLabel[entry.topPriority] }} priority</span>
-        <span class="min-w-0 flex-1 truncate font-sans text-[13px] font-semibold text-text">
-          {{ entry.groupLabel }}
-        </span>
-        <time
-          data-test="stack-time"
-          :datetime="entry.createdAt"
-          :title="entry.createdAt"
-          class="shrink-0 font-mono text-[11px] tabular-nums text-faint"
-          >{{ relativeTime(entry.createdAt) }}</time
-        >
-        <span
-          data-test="stack-total"
-          :aria-label="`${entry.groupTotal} in this group`"
-          class="shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted"
-          >{{ entry.groupTotal }}</span
-        >
-      </button>
-    </div>
+        {{ entry.groupLabel || entry.title }}
+      </span>
+      <!-- Priority is conveyed by the wash (decorative); carry the word for SR / color-blind users. -->
+      <span class="sr-only">{{ priorityLabel[entry.topPriority] }} priority</span>
+      <span
+        data-test="stack-total"
+        :aria-label="`${entry.groupTotal} in this group`"
+        class="shrink-0 rounded-full bg-sunken px-2 py-0.5 font-mono text-[11px] tabular-nums text-muted"
+        >{{ entry.groupTotal }}</span
+      >
+      <Icon
+        :icon="ChevronDown"
+        :size="14"
+        aria-hidden="true"
+        class="shrink-0 text-faint motion-safe:transition-transform"
+        :class="{ 'rotate-180': open }"
+      />
+      <time
+        data-test="stack-time"
+        :datetime="entry.createdAt"
+        :title="entry.createdAt"
+        class="shrink-0 font-mono text-[12px] tabular-nums text-faint"
+        >{{ relativeTime(entry.createdAt) }}</time
+      >
+    </button>
 
-    <div v-if="open" :id="peekId" data-test="stack-peek" class="bg-surface">
-      <!-- Whole-group "Mark all read" — only meaningful on an unread stack. -->
-      <div v-if="!entry.read" class="flex justify-end border-t border-line px-4 py-1.5">
-        <button
-          type="button"
-          data-test="stack-mark-all"
-          class="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:bg-sunken"
-          @click="emit('mark-all-read', entry.groupKey ?? '')"
-        >
-          <Icon :icon="Check" :size="12" /> Mark all read
-        </button>
-      </div>
-      <div v-if="loading" class="flex items-center gap-2 px-11 py-3 text-[12px] text-muted">
+    <!-- Members region carries the two neutral stack-lines (`.nt-thread` outer + `.nt-prio-line`
+         inner per member); the footer sits OUTSIDE it, so it has no lines. -->
+    <div v-if="open" :id="peekId" data-test="stack-peek" class="nt-thread">
+      <div v-if="loading" class="flex items-center gap-2 py-3 pl-11 text-[12px] text-muted">
         <Spinner :size="12" /> Loading…
       </div>
       <div
         v-else-if="peekError"
         data-test="stack-peek-error"
-        class="flex items-center gap-2 px-11 py-3 text-[12px] text-muted"
+        class="flex items-center gap-2 py-3 pl-11 text-[12px] text-muted"
       >
         <span>Couldn't load these.</span>
-        <button type="button" class="font-semibold text-accent underline" @click="fetchPeek()">
+        <button type="button" class="font-semibold text-accent underline" @click="loadPeek()">
           Try again
         </button>
       </div>
-      <div v-else-if="(peek ?? []).length === 0" class="px-11 py-3 text-[12px] text-muted">
+      <div v-else-if="(peek ?? []).length === 0" class="py-3 pl-11 text-[12px] text-muted">
         Nothing left in this group.
       </div>
-      <!-- Members are the real feed card — collapsed by default, expandable in place to their actions,
-           exactly like the main feed (one card renderer, no divergent stack-only markup). -->
+      <!-- Members are the real feed card, nested (indented) behind two neutral edges; each member's
+           priority is the flush wash on its row. Collapsed by default, expandable like the main feed. -->
       <div v-else>
-        <NotificationCardRenderer
+        <div
           v-for="m in peek ?? []"
           :key="m.id"
-          :notification="m"
-          @open="onMemberRead"
-          @action="(a, n, i) => emit('action', a, n, i)"
-          @unread="onMemberUnread"
-        />
+          class="nt-prio-line pl-6"
+          :class="memberWash(m.priority) || 'hover:bg-sunken/50'"
+        >
+          <NotificationCardRenderer
+            :notification="m"
+            flush
+            @open="onMemberRead"
+            @action="(a, n, i) => emit('action', a, n, i)"
+            @unread="onMemberUnread"
+          />
+        </div>
       </div>
+    </div>
+
+    <!-- Footer: a control row, not a card — OUTSIDE the thread, so it carries no lines. Shown while open
+         when there's an action to offer (Mark all read while unread, and/or See all for a real group). -->
+    <div
+      v-if="open && (!entry.read || entry.groupKey)"
+      data-test="stack-footer"
+      class="-mt-px flex items-center justify-between gap-2 border-t border-line bg-surface px-4 py-2"
+    >
       <button
+        v-if="!entry.read"
+        type="button"
+        data-test="stack-mark-all"
+        class="inline-flex items-center gap-1 rounded-md border border-line px-2 py-1 font-mono text-[11px] uppercase tracking-wide text-accent transition-colors duration-100 hover:bg-sunken"
+        @click="markAll()"
+      >
+        <Icon :icon="Check" :size="12" /> Mark all read
+      </button>
+      <span v-else aria-hidden="true" />
+      <button
+        v-if="entry.groupKey"
         type="button"
         data-test="stack-see-all"
-        class="flex w-full items-center justify-center gap-1 border-t border-line px-4 py-2 text-center text-[12px] font-semibold text-accent transition-colors hover:bg-sunken"
-        @click="emit('see-all', entry.groupKey ?? '', entry.groupLabel ?? '', entry.read)"
+        class="inline-flex items-center gap-1 text-[12px] font-semibold text-accent transition-colors hover:underline"
+        @click="emit('see-all', entry.groupKey, entry.groupLabel ?? '', entry.read)"
       >
-        See all in this group
+        See all
         <Icon :icon="ArrowRight" :size="13" aria-hidden="true" />
       </button>
     </div>

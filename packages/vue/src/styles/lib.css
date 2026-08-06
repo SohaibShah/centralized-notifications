@@ -26,6 +26,7 @@
   --color-faint: var(--nt-color-faint);
   --color-line: var(--nt-color-line);
   --color-line-strong: var(--nt-color-line-strong);
+  --color-neutral: var(--nt-color-neutral);
   --color-accent: var(--nt-color-accent);
   --color-accent-ink: var(--nt-color-accent-ink);
   --color-danger: var(--nt-color-danger);
@@ -61,6 +62,8 @@
   --nt-color-faint: oklch(0.55 0.018 70);
   --nt-color-line: oklch(0.9 0.012 80);
   --nt-color-line-strong: oklch(0.87 0.014 80);
+  /* Stack "thread" line — a warm grey a step darker than line-strong so the stack reads as a thread. */
+  --nt-color-neutral: oklch(0.8 0.028 85);
 
   --nt-color-accent: oklch(0.45 0.09 155);
   --nt-color-accent-ink: oklch(0.98 0.01 155);
@@ -93,6 +96,7 @@
   --color-faint: var(--nt-color-faint);
   --color-line: var(--nt-color-line);
   --color-line-strong: var(--nt-color-line-strong);
+  --color-neutral: var(--nt-color-neutral);
   --color-accent: var(--nt-color-accent);
   --color-accent-ink: var(--nt-color-accent-ink);
   --color-danger: var(--nt-color-danger);
@@ -181,6 +185,58 @@
   box-shadow: inset 3px 0 0 var(--color-warning-strong);
 }
 .prio-high:hover {
+  background: color-mix(in oklab, var(--color-warning) 16%, transparent);
+}
+
+/* ── Grouped-stack chrome (see StackRow.vue) ──
+   The expanded stack's MEMBERS live in the same flat list as the default cards, threaded by two left
+   lines — an OUTER neutral "thread" (.nt-thread) down the whole members region, and an INNER neutral
+   segment per member (.nt-prio-line). Both lines are neutral and priority-INDEPENDENT; a member's
+   priority is shown by a flush wash (.nt-wash-*) on its row. The header carries no lines (it reads as
+   a plain notification) and the footer sits outside .nt-thread, so neither shows these lines. */
+.nt-thread {
+  position: relative;
+}
+.nt-thread::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(--color-neutral);
+}
+.nt-prio-line {
+  position: relative;
+}
+.nt-prio-line::before {
+  content: "";
+  position: absolute;
+  left: 10px;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  border-radius: 1px;
+  background: var(
+    --color-line-strong
+  ); /* a lighter neutral — reads as the inner (second) thread line */
+}
+/* Wash mirrors the default card's `.prio-*` precedent (unlayered, with a :hover step) so a washed
+   header/member keeps its priority tint at rest, on hover, AND when open — the header wash = top
+   priority in both states, and each member's wash = its own priority. Normal/low headers have no wash
+   and instead take the bg-sunken hover/open utilities (see `headerBg` in StackRow.vue); the two are
+   never applied to the same element, so there's no cascade fight with the layered utilities. */
+.nt-wash-critical {
+  background: color-mix(in oklab, var(--color-danger) 8%, transparent);
+}
+.nt-wash-critical:hover {
+  background: color-mix(in oklab, var(--color-danger) 14%, transparent);
+}
+.nt-wash-high {
+  background: color-mix(in oklab, var(--color-warning) 10%, transparent);
+}
+.nt-wash-high:hover {
   background: color-mix(in oklab, var(--color-warning) 16%, transparent);
 }
 

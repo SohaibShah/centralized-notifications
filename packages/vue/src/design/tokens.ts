@@ -38,3 +38,14 @@ export const priorityRank: Record<NotificationPriority, number> = {
   normal: 2,
   low: 3,
 };
+
+/**
+ * Grouped-stack row wash by priority (see StackRow.vue) — critical/high get a faint flush behind the
+ * (neutral) stack-lines; normal/low stay quiet (no wash). Paired with `.nt-wash-*` in lib.css.
+ */
+export const stackWashClass: Record<NotificationPriority, string> = {
+  critical: "nt-wash-critical",
+  high: "nt-wash-high",
+  normal: "",
+  low: "",
+};

@@ -79,23 +79,25 @@ describe("StackRow", () => {
     expect(w.get(".mem").attributes("data-read")).toBe("true");
   });
 
-  it("a single-entry card forwards unread", async () => {
+  it("a group of one expands to the entry itself (no fetch) and forwards its unread", async () => {
+    const get = vi.fn();
     const w = mount(StackRow, {
-      props: {
-        entry: entry({ groupTotal: 1, groupKey: undefined, read: true }),
-        transport: { get: vi.fn() },
-      },
+      props: { entry: entry({ groupTotal: 1, read: true }), transport: { get } },
       global: {
         stubs: {
           NotificationCardRenderer: {
             props: ["notification"],
             emits: ["open", "action", "unread"],
-            template: `<button data-test="single" @click="$emit('unread', notification)" />`,
+            template: `<button class="mem" @click="$emit('unread', notification)" />`,
           },
         },
       },
     });
-    await w.get('[data-test="single"]').trigger("click");
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(get).not.toHaveBeenCalled(); // a group of one needs no network — the entry is its member
+    expect(w.findAll(".mem").length).toBe(1);
+    await w.get(".mem").trigger("click");
     expect(w.emitted("unread")).toBeTruthy();
   });
 
@@ -138,12 +140,121 @@ describe("StackRow", () => {
     expect(get).toHaveBeenCalledTimes(2);
   });
 
-  it("renders a plain card (no stack chrome) when groupTotal is 1", () => {
+  it("renders a group of one as a stack (header + count 1), not a plain card", () => {
     const w = mount(StackRow, {
-      props: { entry: entry({ groupTotal: 1, groupKey: undefined }), transport: { get: vi.fn() } },
-      // The card renderer pulls from provider context; stub it — we only assert the stack chrome is gone.
+      props: { entry: entry({ groupTotal: 1 }), transport: { get: vi.fn() } },
       global: { stubs: { NotificationCardRenderer: true } },
     });
-    expect(w.find('[data-test="stack-header"]').exists()).toBe(false);
+    expect(w.find('[data-test="stack-header"]').exists()).toBe(true);
+    expect(w.get('[data-test="stack-total"]').text()).toBe("1");
+  });
+
+  it("a group of one with a groupKey offers See all in its footer", async () => {
+    const w = mount(StackRow, {
+      props: { entry: entry({ groupTotal: 1 }), transport: { get: vi.fn() } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(w.find('[data-test="stack-see-all"]').exists()).toBe(true);
+    await w.get('[data-test="stack-see-all"]').trigger("click");
+    expect(w.emitted("see-all")?.[0]).toEqual(["dsr:#1042", "DSAR #1042", false]);
+  });
+
+  it("a group of one with NO groupKey has no See all", async () => {
+    const w = mount(StackRow, {
+      props: { entry: entry({ groupTotal: 1, groupKey: undefined }), transport: { get: vi.fn() } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(w.find('[data-test="stack-see-all"]').exists()).toBe(false);
+  });
+
+  it("header reads as a plain notification: group glyph + priority wash, and NO stack-lines", () => {
+    const w = mount(StackRow, {
+      props: { entry: entry({ topPriority: "critical" }), transport: { get: vi.fn() } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    const header = w.get('[data-test="stack-header"]');
+    // Priority is the wash; the header carries no thread/priority line.
+    expect(header.classes()).toContain("nt-wash-critical");
+    expect(header.classes()).not.toContain("nt-prio-line");
+    expect(header.classes()).not.toContain("nt-thread");
+    // Collapsed: the thread only appears once the members open.
+    expect(w.find(".nt-thread").exists()).toBe(false);
+    // The group glyph sits where a card's read-circle would.
+    expect(header.find('[data-test="stack-glyph"]').exists()).toBe(true);
+  });
+
+  it("a normal-topped header has no wash (falls back to the sunken hover utility)", () => {
+    const w = mount(StackRow, {
+      props: { entry: entry({ topPriority: "normal" }), transport: { get: vi.fn() } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    const header = w.get('[data-test="stack-header"]');
+    expect(header.classes()).not.toContain("nt-wash-critical");
+    expect(header.classes()).toContain("hover:bg-sunken/50");
+  });
+
+  it("expanded footer is a plain control row with no thread/priority lines", async () => {
+    const get = vi.fn().mockResolvedValue({ items: [feedItem({ id: "m1" })], nextCursor: null });
+    const w = mount(StackRow, {
+      props: { entry: entry({ read: false }), transport: { get } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    const footer = w.get('[data-test="stack-footer"]');
+    expect(footer.classes()).not.toContain("nt-thread");
+    expect(footer.classes()).not.toContain("nt-prio-line");
+    // The footer lives OUTSIDE the threaded region.
+    expect(w.get(".nt-thread").find('[data-test="stack-footer"]').exists()).toBe(false);
+  });
+
+  it("threads the members with two neutral lines and a per-member priority wash", async () => {
+    const get = vi.fn().mockResolvedValue({
+      items: [
+        feedItem({ id: "m1", priority: "critical" }),
+        feedItem({ id: "m2", priority: "normal" }),
+      ],
+      nextCursor: null,
+    });
+    const w = mount(StackRow, {
+      props: { entry: entry(), transport: { get } },
+      global: { stubs: { NotificationCardRenderer: true } },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    // The open members region carries the outer neutral thread.
+    expect(w.get('[data-test="stack-peek"]').classes()).toContain("nt-thread");
+    // Both members sit on the inner neutral line; priority is the wash (critical → red flush).
+    expect(w.findAll('[data-test="stack-peek"] .nt-prio-line').length).toBe(2);
+    expect(w.find('[data-test="stack-peek"] .nt-wash-critical').exists()).toBe(true);
+  });
+
+  it("mark-all optimistically flips every loaded peek member read (and emits the key)", async () => {
+    const get = vi.fn().mockResolvedValue({
+      items: [feedItem({ id: "m1", read: false }), feedItem({ id: "m2", read: false })],
+      nextCursor: null,
+    });
+    const w = mount(StackRow, {
+      props: { entry: entry({ read: false }), transport: { get } },
+      global: {
+        stubs: {
+          NotificationCardRenderer: {
+            props: ["notification"],
+            template: `<div class="mem" :data-read="String(notification.read)" />`,
+          },
+        },
+      },
+    });
+    await w.get('[data-test="stack-header"]').trigger("click");
+    await Promise.resolve();
+    expect(w.findAll(".mem").every((m) => m.attributes("data-read") === "false")).toBe(true);
+    await w.get('[data-test="stack-mark-all"]').trigger("click");
+    expect(w.emitted("mark-all-read")?.[0]).toEqual(["dsr:#1042"]);
+    await Promise.resolve();
+    expect(w.findAll(".mem").every((m) => m.attributes("data-read") === "true")).toBe(true);
   });
 });
