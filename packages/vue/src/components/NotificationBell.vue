@@ -1,10 +1,18 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
-import { Bell } from "@lucide/vue";
 import Icon from "../ui/Icon.vue";
 import { useFeed } from "../provider/context";
 import { usePanel } from "../provider/context";
+import { useUi } from "../theming/useUi";
 import NotificationPopover from "./NotificationPopover.vue";
+
+const parts = {
+  root: "relative grid size-9 place-items-center rounded-md text-muted transition-colors duration-100 hover:bg-sunken hover:text-text",
+  badge:
+    "absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[11px] font-semibold tabular-nums text-danger-ink",
+} as const;
+const props = defineProps<{ ui?: Partial<Record<keyof typeof parts, string>> }>();
+const ui = useUi("bell", parts, () => props.ui);
 
 const feed = useFeed();
 const panel = usePanel();
@@ -58,7 +66,7 @@ onBeforeUnmount(() => {
     <button
       ref="bellButton"
       type="button"
-      class="relative grid size-9 place-items-center rounded-md text-muted transition-colors duration-100 hover:bg-sunken hover:text-text"
+      :class="ui('root')"
       :aria-label="
         feed.counts.unread > 0 ? `Notifications, ${feed.counts.unread} unread` : 'Notifications'
       "
@@ -66,12 +74,8 @@ onBeforeUnmount(() => {
       :aria-expanded="panel.isOpen"
       @click="toggle"
     >
-      <Icon :icon="Bell" :size="18" />
-      <span
-        v-if="feed.counts.unread > 0"
-        class="absolute -right-0.5 -top-0.5 grid min-w-4 place-items-center rounded-full bg-danger px-1 font-mono text-[11px] font-semibold tabular-nums text-danger-ink"
-        aria-hidden="true"
-      >
+      <Icon name="bell" :size="18" />
+      <span v-if="feed.counts.unread > 0" :class="ui('badge')" aria-hidden="true">
         {{ badge }}
       </span>
     </button>
