@@ -29,4 +29,20 @@ describe("GET /", () => {
       expect(res.body).toContain(`value="${scope}"`);
     }
   });
+
+  it("exposes the send-count, burst seed, and one-subject thread controls", async () => {
+    const app = buildApp(cfg);
+    const res = await app.inject({ method: "GET", url: "/" });
+
+    // Send-N-times on the custom form.
+    expect(res.body).toContain('id="custom-count"');
+    // Reproducible-demo seed on the burst form.
+    expect(res.body).toContain('id="burst-seed"');
+    // The preset panel loads into the custom form rather than emitting directly.
+    expect(res.body).toContain("Load into Custom form");
+    // The one-subject thread (grouping demo) panel + its own count/seed.
+    expect(res.body).toContain('id="thread-form"');
+    expect(res.body).toContain('id="thread-count"');
+    expect(res.body).toContain('id="thread-seed"');
+  });
 });

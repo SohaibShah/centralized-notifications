@@ -236,6 +236,133 @@ describe("POST /emit", () => {
     expect(calls).toHaveLength(0);
   });
 
+  it("custom: count publishes that many distinct copies in one hub call", async () => {
+    const { fetchImpl, calls } = fakeFetch();
+    const app = buildApp(cfg, { fetchImpl });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/emit",
+      headers: { "content-type": "application/json" },
+      payload: {
+        mode: "custom",
+        module: "dsr",
+        title: "Repeated alert",
+        description: "Sent several times",
+        priority: "high",
+        actions: ["approve"],
+        count: 3,
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ published: 3 });
+    expect(calls).toHaveLength(1);
+    const body = JSON.parse(calls[0]!.init.body as string) as Notification[];
+    expect(body).toHaveLength(3);
+    // Each copy is a distinct notification (fresh id) so the hub keeps all three.
+    expect(new Set(body.map((n) => n.id)).size).toBe(3);
+    for (const n of body) {
+      expect(n.title).toBe("Repeated alert");
+      expectDispatchActionsMatchCatalog(n);
+    }
+  });
+
+  it("custom: omitting count defaults to publishing one", async () => {
+    const { fetchImpl } = fakeFetch();
+    const app = buildApp(cfg, { fetchImpl });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/emit",
+      headers: { "content-type": "application/json" },
+      payload: {
+        mode: "custom",
+        module: "dsr",
+        title: "One only",
+        description: "No count given",
+        priority: "normal",
+        actions: ["approve"],
+      },
+    });
+
+    expect(res.json()).toEqual({ published: 1 });
+  });
+
+  it("custom: count over MAX_BURST -> 400, hub never called", async () => {
+    const { fetchImpl, calls } = fakeFetch();
+    const app = buildApp(cfg, { fetchImpl });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/emit",
+      headers: { "content-type": "application/json" },
+      payload: {
+        mode: "custom",
+        module: "dsr",
+        title: "Too many",
+        description: "over the cap",
+        priority: "low",
+        actions: ["approve"],
+        count: 10_000,
+      },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("subject: publishes a thread of `count` updates that all share one #id", async () => {
+    const { fetchImpl, calls } = fakeFetch();
+    const app = buildApp(cfg, { fetchImpl });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/emit",
+      headers: { "content-type": "application/json" },
+      payload: { mode: "subject", count: 5, seed: 7 },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ published: 5 });
+    const body = JSON.parse(calls[0]!.init.body as string) as Notification[];
+    expect(body).toHaveLength(5);
+    const subjects = body.map((n) => n.title.match(/#\d+/)?.[0]);
+    expect(new Set(subjects).size).toBe(1); // one shared subject across the thread
+  });
+
+  it("subject: count over MAX_BURST -> 400, hub never called", async () => {
+    const { fetchImpl, calls } = fakeFetch();
+    const app = buildApp(cfg, { fetchImpl });
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/emit",
+      headers: { "content-type": "application/json" },
+      payload: { mode: "subject", count: 10_000 },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(calls).toHaveLength(0);
+  });
+
+  it("subject: the same seed reproduces the same subject #id", async () => {
+    const subjectOf = async (seed: number) => {
+      const { fetchImpl, calls } = fakeFetch();
+      const app = buildApp(cfg, { fetchImpl });
+      await app.inject({
+        method: "POST",
+        url: "/emit",
+        headers: { "content-type": "application/json" },
+        payload: { mode: "subject", count: 3, seed },
+      });
+      const body = JSON.parse(calls[0]!.init.body as string) as Notification[];
+      return body[0]!.title.match(/#\d+/)?.[0];
+    };
+
+    expect(await subjectOf(99)).toBe(await subjectOf(99));
+  });
+
   it("hub rejecting the publish surfaces as a 502, not a silent 200", async () => {
     const { fetchImpl } = fakeFetch(500);
     const app = buildApp(cfg, { fetchImpl });

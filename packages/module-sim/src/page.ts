@@ -287,20 +287,25 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
           <p class="empty">Select a module to see its actions.</p>
         </fieldset>
       </div>
+      <div class="field">
+        <label for="custom-count">Send how many</label>
+        <input id="custom-count" name="count" type="number" min="1" max="${MAX_BURST}" value="1" required aria-describedby="custom-count-hint" />
+        <p class="hint" id="custom-count-hint">Publishes this many copies (each a distinct notification). Max ${MAX_BURST}.</p>
+      </div>
       <button class="submit" type="submit">Emit custom notification</button>
       <div class="result" id="custom-result" role="status" aria-live="polite"></div>
     </form>
   </section>
 
   <section class="panel" aria-labelledby="preset-heading">
-    <h2 id="preset-heading"><span class="eyebrow">Preset</span> One-click scenario</h2>
-    <p class="hint">A named, deterministic scenario for one module.</p>
+    <h2 id="preset-heading"><span class="eyebrow">Preset</span> Start from a scenario</h2>
+    <p class="hint">Pick a named scenario, load it into the Custom panel, then tweak and emit.</p>
     <form id="preset-form" novalidate>
       <div class="field">
         <label for="preset-select">Preset</label>
         <select id="preset-select" name="preset" required></select>
       </div>
-      <button class="submit" type="submit">Emit preset</button>
+      <button class="submit" type="submit">Load into Custom form</button>
       <div class="result" id="preset-result" role="status" aria-live="polite"></div>
     </form>
   </section>
@@ -313,8 +318,31 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
         <label for="burst-count">Count</label>
         <input id="burst-count" name="count" type="number" min="1" max="${MAX_BURST}" value="5" required />
       </div>
+      <div class="field">
+        <label for="burst-seed">Seed (optional)</label>
+        <input id="burst-seed" name="seed" type="number" inputmode="numeric" placeholder="e.g. 42" aria-describedby="burst-seed-hint" />
+        <p class="hint" id="burst-seed-hint">Same seed + count reproduces the same batch — set one for a repeatable demo. Leave blank for random.</p>
+      </div>
       <button class="submit" type="submit">Emit burst</button>
       <div class="result" id="burst-result" role="status" aria-live="polite"></div>
+    </form>
+  </section>
+
+  <section class="panel" aria-labelledby="thread-heading">
+    <h2 id="thread-heading"><span class="eyebrow">Thread</span> One subject, many updates</h2>
+    <p class="hint">A sequence of related DSR updates sharing one <code>#id</code> — the feed collapses them into a single group. Use it to demo grouping.</p>
+    <form id="thread-form" novalidate>
+      <div class="field">
+        <label for="thread-count">Updates</label>
+        <input id="thread-count" name="count" type="number" min="1" max="${MAX_BURST}" value="4" required />
+      </div>
+      <div class="field">
+        <label for="thread-seed">Seed (optional)</label>
+        <input id="thread-seed" name="seed" type="number" inputmode="numeric" placeholder="e.g. 7" aria-describedby="thread-seed-hint" />
+        <p class="hint" id="thread-seed-hint">Fixes which <code>#id</code> the thread uses, for a repeatable demo. Leave blank for random.</p>
+      </div>
+      <button class="submit" type="submit">Emit thread</button>
+      <div class="result" id="thread-result" role="status" aria-live="polite"></div>
     </form>
   </section>
 </main>
@@ -323,7 +351,7 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
 (function () {
   "use strict";
 
-  /** @type {{ modules: { key: string, actions: { name: string, label: string, method: string }[] }[], presets: string[] } | null} */
+  /** @type {{ modules: { key: string, actions: { name: string, label: string, method: string }[] }[], presets: { id: string, label: string, module: string, title: string, description: string, priority: string, category?: string, actionNames: string[], audienceScope: string }[] } | null} */
   var catalogData = null;
 
   function el(id) { return document.getElementById(id); }
@@ -347,12 +375,38 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
   function renderPresetOptions() {
     var select = el("preset-select");
     select.innerHTML = "";
-    catalogData.presets.forEach(function (id) {
+    catalogData.presets.forEach(function (preset) {
       var opt = document.createElement("option");
-      opt.value = id;
-      opt.textContent = id;
+      opt.value = preset.id;
+      opt.textContent = preset.label;
       select.appendChild(opt);
     });
+  }
+
+  // Prefills the Custom panel from a preset summary (client-side only — no /emit call). The
+  // operator then edits any field and emits from the Custom form. Returns the preset's label
+  // for the status line, or null if the id isn't in the catalog.
+  function loadPresetIntoCustom(id) {
+    var preset = catalogData.presets.find(function (p) { return p.id === id; });
+    if (!preset) return null;
+
+    el("custom-module").value = preset.module;
+    renderActionsForModule(preset.module);
+    el("custom-title").value = preset.title;
+    el("custom-description").value = preset.description;
+    el("custom-priority").value = preset.priority;
+    el("custom-count").value = "1";
+
+    el("custom-audience-scope").value = preset.audienceScope;
+    renderAudienceScope(preset.audienceScope);
+
+    // Check exactly the actions the preset names (renderActionsForModule just rebuilt them).
+    var wanted = preset.actionNames || [];
+    Array.prototype.slice
+      .call(document.querySelectorAll('#custom-actions-fieldset input[name="action"]'))
+      .forEach(function (input) { input.checked = wanted.indexOf(input.value) !== -1; });
+
+    return preset.label;
   }
 
   function renderActionsForModule(moduleKey) {
@@ -500,6 +554,16 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
       audience.id = audienceId;
     }
 
+    var count = parseInt(el("custom-count").value, 10);
+    if (!Number.isInteger(count) || count < 1) {
+      showResult(resultNode, "error", "Send count must be a positive integer.");
+      return;
+    }
+    if (count > ${MAX_BURST}) {
+      showResult(resultNode, "error", "Send count cannot exceed " + ${MAX_BURST} + ".");
+      return;
+    }
+
     var payload = {
       mode: "custom",
       module: el("custom-module").value,
@@ -507,6 +571,7 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
       description: el("custom-description").value,
       priority: el("custom-priority").value,
       actions: actions,
+      count: count,
       audience: audience,
     };
 
@@ -524,17 +589,12 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
   el("preset-form").addEventListener("submit", function (event) {
     event.preventDefault();
     var resultNode = el("preset-result");
-    var payload = { mode: "preset", preset: el("preset-select").value };
-
-    postEmit(payload).then(function (result) {
-      if (result.ok) {
-        showResult(resultNode, "ok", JSON.stringify(result.body));
-      } else {
-        showResult(resultNode, "error", "Error " + result.status + ": " + JSON.stringify(result.body));
-      }
-    }).catch(function (err) {
-      showResult(resultNode, "error", "Request failed: " + err.message);
-    });
+    var label = loadPresetIntoCustom(el("preset-select").value);
+    if (label === null) {
+      showResult(resultNode, "error", "Unknown preset.");
+      return;
+    }
+    showResult(resultNode, "ok", 'Loaded "' + label + '" into the Custom panel — edit and emit there.');
   });
 
   el("burst-form").addEventListener("submit", function (event) {
@@ -551,6 +611,50 @@ export const CONTROL_CENTER_HTML = `<!doctype html>
       return;
     }
     var payload = { mode: "burst", count: count };
+    var seedField = el("burst-seed").value.trim();
+    if (seedField !== "") {
+      var seed = parseInt(seedField, 10);
+      if (!Number.isInteger(seed)) {
+        showResult(resultNode, "error", "Seed must be an integer (or blank).");
+        return;
+      }
+      payload.seed = seed;
+    }
+
+    postEmit(payload).then(function (result) {
+      if (result.ok) {
+        showResult(resultNode, "ok", JSON.stringify(result.body));
+      } else {
+        showResult(resultNode, "error", "Error " + result.status + ": " + JSON.stringify(result.body));
+      }
+    }).catch(function (err) {
+      showResult(resultNode, "error", "Request failed: " + err.message);
+    });
+  });
+
+  el("thread-form").addEventListener("submit", function (event) {
+    event.preventDefault();
+    var resultNode = el("thread-result");
+    var count = parseInt(el("thread-count").value, 10);
+    var maxBurst = ${MAX_BURST};
+    if (!Number.isInteger(count) || count < 1) {
+      showResult(resultNode, "error", "Updates must be a positive integer.");
+      return;
+    }
+    if (count > maxBurst) {
+      showResult(resultNode, "error", "Updates cannot exceed " + maxBurst + ".");
+      return;
+    }
+    var payload = { mode: "subject", count: count };
+    var seedField = el("thread-seed").value.trim();
+    if (seedField !== "") {
+      var seed = parseInt(seedField, 10);
+      if (!Number.isInteger(seed)) {
+        showResult(resultNode, "error", "Seed must be an integer (or blank).");
+        return;
+      }
+      payload.seed = seed;
+    }
 
     postEmit(payload).then(function (result) {
       if (result.ok) {
