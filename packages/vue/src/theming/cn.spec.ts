@@ -16,6 +16,6 @@ describe("cn", () => {
   });
 
   it("drops falsy inputs and keeps non-conflicting classes", () => {
-    expect(cn("px-2", undefined, false && "hidden", "py-1")).toBe("px-2 py-1");
+    expect(cn("px-2", undefined, null, false, "py-1")).toBe("px-2 py-1");
   });
 });
