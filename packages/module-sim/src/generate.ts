@@ -38,9 +38,11 @@ interface BurstTemplate {
   actionNames: string[];
 }
 
-// One burst scenario per known module. Every entry names catalog actions that module
-// actually exposes (see packages/module-sim/src/modules/*.ts) — buildActions() below
-// resolves them via `makeAction()`, so the emitted action shape is always the real one.
+// Several burst scenarios per known module (varied priority + category), so a random burst
+// looks like a real, mixed feed and exercises the per-category snooze/mute settings — not the
+// same four notifications every time. Every entry names catalog actions that module actually
+// exposes (see packages/module-sim/src/modules/*.ts); `pickActions()` below resolves them via
+// `makeAction()`, so the emitted action shape is always the real one, and a typo throws loudly.
 const MODULE_TEMPLATES: Record<string, BurstTemplate[]> = {
   dsr: [
     {
@@ -48,7 +50,25 @@ const MODULE_TEMPLATES: Record<string, BurstTemplate[]> = {
       snoozable: true,
       category: "sla",
       title: "DSR approaching SLA breach",
-      describe: () => "A data-subject request is close to its deadline.",
+      describe: (rng) =>
+        `A data-subject request is within ${2 + Math.floor(rng() * 22)} hours of its statutory deadline.`,
+      actionNames: ["approve", "reject"],
+    },
+    {
+      priority: "high",
+      snoozable: true,
+      category: "requests",
+      title: "New subject access request",
+      describe: () => "A new DSAR was filed and needs identity verification before it can proceed.",
+      actionNames: ["approve", "reject"],
+    },
+    {
+      priority: "normal",
+      snoozable: true,
+      category: "requests",
+      title: "DSR documents uploaded",
+      describe: (rng) =>
+        `The requester uploaded ${1 + Math.floor(rng() * 4)} supporting documents for your review.`,
       actionNames: ["approve", "reject"],
     },
   ],
@@ -57,8 +77,25 @@ const MODULE_TEMPLATES: Record<string, BurstTemplate[]> = {
       priority: "high",
       snoozable: false,
       category: "approvals",
-      title: "Access request awaiting your approval",
-      describe: () => "A user requested elevated access to a data catalog.",
+      title: "Over-privileged access flagged",
+      describe: () => "A user holds elevated access to a data catalog that appears unused.",
+      actionNames: ["revoke"],
+    },
+    {
+      priority: "critical",
+      snoozable: false,
+      category: "approvals",
+      title: "Standing admin grant needs review",
+      describe: (rng) =>
+        `An admin grant has been active for ${30 + Math.floor(rng() * 90)} days without use.`,
+      actionNames: ["revoke"],
+    },
+    {
+      priority: "normal",
+      snoozable: true,
+      category: "access-reviews",
+      title: "Quarterly access review due",
+      describe: () => "Access certifications for your team are open and awaiting sign-off.",
       actionNames: ["revoke"],
     },
   ],
@@ -66,9 +103,26 @@ const MODULE_TEMPLATES: Record<string, BurstTemplate[]> = {
     {
       priority: "normal",
       snoozable: true,
+      category: "scans",
       title: "Sensitive data found in new data stores",
       describe: (rng) =>
         `The latest scan classified sensitive data in ${1 + Math.floor(rng() * 5)} stores.`,
+      actionNames: ["rescan"],
+    },
+    {
+      priority: "high",
+      snoozable: true,
+      category: "scans",
+      title: "Unclassified data store detected",
+      describe: () => "A newly connected data store has no classification yet.",
+      actionNames: ["rescan"],
+    },
+    {
+      priority: "low",
+      snoozable: true,
+      category: "scans",
+      title: "Weekly mapping scan complete",
+      describe: () => "The scheduled scan finished with no new sensitive-data findings.",
       actionNames: ["rescan"],
     },
   ],
@@ -80,6 +134,22 @@ const MODULE_TEMPLATES: Record<string, BurstTemplate[]> = {
       title: "Assessments due this week",
       describe: (rng) =>
         `${1 + Math.floor(rng() * 6)} assessments assigned to you are still in draft.`,
+      actionNames: ["snooze"],
+    },
+    {
+      priority: "normal",
+      snoozable: true,
+      category: "reminders",
+      title: "Assessment awaiting your review",
+      describe: () => "A completed assessment needs your sign-off before it can close.",
+      actionNames: ["snooze"],
+    },
+    {
+      priority: "high",
+      snoozable: true,
+      category: "reminders",
+      title: "Overdue assessment",
+      describe: (rng) => `An assessment passed its due date ${1 + Math.floor(rng() * 5)} days ago.`,
       actionNames: ["snooze"],
     },
   ],
@@ -238,6 +308,8 @@ export function generateSubjectBurst(count = 4, seed?: number): Notification[] {
 }
 
 interface PresetDef {
+  /** Human-readable name shown in the control-center preset menu. */
+  label: string;
   module: string;
   title: string;
   description: string;
@@ -249,18 +321,25 @@ interface PresetDef {
 
 export const PRESET_IDS = [
   "critical-dsr",
+  "high-dsr-new-request",
   "high-access-approval",
+  "critical-access-standing-admin",
   "normal-data-mapping-scan",
+  "high-data-mapping-unclassified",
   "low-assessment-reminder",
+  "normal-assessment-review",
+  "high-assessment-overdue",
 ] as const;
 
 export type PresetId = (typeof PRESET_IDS)[number];
 
-/** Named, deterministic per-module scenarios for the dev/QA "one-click" generator — no RNG,
- * so a preset always produces the same body (module-sim's replacement for the old admin
- * generator's `backend/src/sim/presets.ts`). */
+/** Named, deterministic per-module scenarios for the dev/QA generator — no RNG, so a preset
+ * always produces the same body (module-sim's replacement for the old admin generator's
+ * `backend/src/sim/presets.ts`). The control center uses these as starting points: picking one
+ * prefills the Custom form (see `presetSummaries()`), which the operator then edits and emits. */
 const PRESETS: Record<PresetId, PresetDef> = {
   "critical-dsr": {
+    label: "DSR · SLA breach (critical)",
     module: "dsr",
     title: "DSR approaching SLA breach",
     description: "A data-subject request is within 24 hours of its statutory deadline.",
@@ -269,7 +348,18 @@ const PRESETS: Record<PresetId, PresetDef> = {
     category: "sla",
     actionNames: ["approve", "reject"],
   },
+  "high-dsr-new-request": {
+    label: "DSR · New request (high)",
+    module: "dsr",
+    title: "New subject access request",
+    description: "A new DSAR was filed and needs identity verification before it can proceed.",
+    priority: "high",
+    snoozable: true,
+    category: "requests",
+    actionNames: ["approve", "reject"],
+  },
   "high-access-approval": {
+    label: "Access · Over-privileged grant (high)",
     module: "access-governance",
     title: "Access request awaiting your approval",
     description: "A user requested elevated access to a data catalog.",
@@ -278,15 +368,38 @@ const PRESETS: Record<PresetId, PresetDef> = {
     category: "approvals",
     actionNames: ["revoke"],
   },
+  "critical-access-standing-admin": {
+    label: "Access · Standing admin grant (critical)",
+    module: "access-governance",
+    title: "Standing admin grant needs review",
+    description: "An admin grant has been active for 90 days without use.",
+    priority: "critical",
+    snoozable: false,
+    category: "approvals",
+    actionNames: ["revoke"],
+  },
   "normal-data-mapping-scan": {
+    label: "Data mapping · Sensitive data found (normal)",
     module: "data-mapping",
     title: "Sensitive data found in new data stores",
     description: "The latest scan classified sensitive data in 3 stores.",
     priority: "normal",
     snoozable: true,
+    category: "scans",
+    actionNames: ["rescan"],
+  },
+  "high-data-mapping-unclassified": {
+    label: "Data mapping · Unclassified store (high)",
+    module: "data-mapping",
+    title: "Unclassified data store detected",
+    description: "A newly connected data store has no classification yet.",
+    priority: "high",
+    snoozable: true,
+    category: "scans",
     actionNames: ["rescan"],
   },
   "low-assessment-reminder": {
+    label: "Assessments · Due this week (low)",
     module: "assessments",
     title: "Assessments due this week",
     description: "4 assessments assigned to you are still in draft.",
@@ -295,7 +408,61 @@ const PRESETS: Record<PresetId, PresetDef> = {
     category: "reminders",
     actionNames: ["snooze"],
   },
+  "normal-assessment-review": {
+    label: "Assessments · Awaiting review (normal)",
+    module: "assessments",
+    title: "Assessment awaiting your review",
+    description: "A completed assessment needs your sign-off before it can close.",
+    priority: "normal",
+    snoozable: true,
+    category: "reminders",
+    actionNames: ["snooze"],
+  },
+  "high-assessment-overdue": {
+    label: "Assessments · Overdue (high)",
+    module: "assessments",
+    title: "Overdue assessment",
+    description: "An assessment passed its due date 3 days ago.",
+    priority: "high",
+    snoozable: true,
+    category: "reminders",
+    actionNames: ["snooze"],
+  },
 };
+
+/** A JSON-serializable projection of a preset for the control-center catalog: everything the
+ * page needs to prefill the Custom form (module, title, description, priority, actions), plus a
+ * display `label`. All built-in presets target the global audience, so `audienceScope` is
+ * always `"global"` today — carried explicitly so the page can restore the audience picker. */
+export interface PresetSummary {
+  id: PresetId;
+  label: string;
+  module: string;
+  title: string;
+  description: string;
+  priority: NotificationPriority;
+  category?: string;
+  actionNames: string[];
+  audienceScope: AudienceScope;
+}
+
+/** Projects every preset to a `PresetSummary` (menu order = `PRESET_IDS`). */
+export function presetSummaries(): PresetSummary[] {
+  return PRESET_IDS.map((id) => {
+    const def = PRESETS[id];
+    return {
+      id,
+      label: def.label,
+      module: def.module,
+      title: def.title,
+      description: def.description,
+      priority: def.priority,
+      ...(def.category ? { category: def.category } : {}),
+      actionNames: def.actionNames,
+      audienceScope: "global" as const,
+    };
+  });
+}
 
 /** Builds the named preset's scenario as a one-item, actionable, contract-valid batch. */
 export function generatePreset(id: PresetId): Notification[] {

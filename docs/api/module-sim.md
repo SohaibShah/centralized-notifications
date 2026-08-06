@@ -54,27 +54,30 @@ tool, not exposed in production). It does authenticate _itself_ **to the hub**: 
 outbound call it makes carries the shared `INTERNAL_INTAKE_TOKEN` as `x-internal-token`
 (see [Side effects](#side-effects-1) below).
 
-Generates a batch of actionable, contract-valid notifications
+Generates a batch of contract-valid notifications
 ([`src/generate.ts`](../../packages/module-sim/src/generate.ts)) and publishes them to the
 hub's `POST /internal/publish` (already documented under [notifications](./notifications.md) —
-this section only covers what `/emit` itself does). Every generated notification carries at
-least one real `kind: "dispatch"` action drawn from its module's catalog (see
-[Action reference](#action-reference)) and is validated against `notificationSchema` before
-being sent, so `/emit` never hands the hub a shape that wouldn't pass the publish contract.
+this section only covers what `/emit` itself does). Notifications from the `burst`, `preset`,
+and `custom` modes each carry at least one real `kind: "dispatch"` action drawn from their
+module's catalog (see [Action reference](#action-reference)); the `subject` mode is the one
+exception — it deliberately emits **non-actionable** thread updates for the grouping demo (see
+its section below). Every generated notification is validated against `notificationSchema`
+before being sent, so `/emit` never hands the hub a shape that wouldn't pass the publish
+contract.
 
 ### Request
 
-Body is a zod discriminated union on `mode` — one of three shapes.
+Body is a zod discriminated union on `mode` — one of four shapes.
 
 **`mode: "burst"`** — generates `count` notifications at random, spread across the four
 modules (audience scope is also round-robined across the batch, so every scope is
 represented once `count >= 4`).
 
-| Field   | Type      | Required | Notes                                                                                                        |
-| ------- | --------- | -------- | ------------------------------------------------------------------------------------------------------------ |
-| `mode`  | `"burst"` | yes      |                                                                                                              |
-| `count` | number    | yes      | Integer, min 1. Above `MAX_BURST` (currently `50`, exported from `routes/emit.ts`) → `400`.                  |
-| `seed`  | number    | no       | Integer. Same `seed` + `count` → the same batch (mulberry32 PRNG). Omitted → time-seeded, non-deterministic. |
+| Field   | Type      | Required | Notes                                                                                                                                                                               |
+| ------- | --------- | -------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`  | `"burst"` | yes      |                                                                                                                                                                                     |
+| `count` | number    | yes      | Integer, min 1, max `MAX_BURST` (currently `50`, exported from `routes/emit.ts`) — enforced by the zod schema (`.max(MAX_BURST)`). Over-cap → generic `invalid request body` `400`. |
+| `seed`  | number    | no       | Integer. Same `seed` + `count` → the same batch (mulberry32 PRNG). Omitted → time-seeded, non-deterministic.                                                                        |
 
 ```json
 { "mode": "burst", "count": 10, "seed": 42 }
@@ -88,30 +91,55 @@ given preset always produces the same body).
 | `mode`   | `"preset"` | yes      |                                                                         |
 | `preset` | string     | yes      | One of the ids below (exported as `PRESET_IDS` from `src/generate.ts`). |
 
-| Preset id                  | Module              | Priority | Snoozable | Category    | Actions             |
-| -------------------------- | ------------------- | -------- | --------- | ----------- | ------------------- |
-| `critical-dsr`             | `dsr`               | critical | yes       | `sla`       | `approve`, `reject` |
-| `high-access-approval`     | `access-governance` | high     | no        | `approvals` | `revoke`            |
-| `normal-data-mapping-scan` | `data-mapping`      | normal   | yes       | —           | `rescan`            |
-| `low-assessment-reminder`  | `assessments`       | low      | yes       | `reminders` | `snooze`            |
+| Preset id                        | Module              | Priority | Snoozable | Category    | Actions             |
+| -------------------------------- | ------------------- | -------- | --------- | ----------- | ------------------- |
+| `critical-dsr`                   | `dsr`               | critical | yes       | `sla`       | `approve`, `reject` |
+| `high-dsr-new-request`           | `dsr`               | high     | yes       | `requests`  | `approve`, `reject` |
+| `high-access-approval`           | `access-governance` | high     | no        | `approvals` | `revoke`            |
+| `critical-access-standing-admin` | `access-governance` | critical | no        | `approvals` | `revoke`            |
+| `normal-data-mapping-scan`       | `data-mapping`      | normal   | yes       | `scans`     | `rescan`            |
+| `high-data-mapping-unclassified` | `data-mapping`      | high     | yes       | `scans`     | `rescan`            |
+| `low-assessment-reminder`        | `assessments`       | low      | yes       | `reminders` | `snooze`            |
+| `normal-assessment-review`       | `assessments`       | normal   | yes       | `reminders` | `snooze`            |
+| `high-assessment-overdue`        | `assessments`       | high     | yes       | `reminders` | `snooze`            |
 
-Every preset is emitted with `audience: { scope: "global" }`.
+Every preset is emitted with `audience: { scope: "global" }`, and always publishes exactly
+one notification (a fresh `id` each call, so repeated one-clicks aren't deduped by the hub).
 
 ```json
 { "mode": "preset", "preset": "critical-dsr" }
 ```
 
-**`mode: "custom"`** — one hand-built notification.
+**`mode: "subject"`** — publishes a thread of related updates that all share one `#<id>` in
+the title (`generateSubjectBurst`, e.g. `DSAR #4821 received → identity verified → …`), which
+the feed's grouping collapses into a single stack — a one-click grouping demo. All updates are
+in the `dsr` module, `category: "requests"`. They are deliberately **non-actionable** (no
+`actions`, empty `description`) — the grouping demo doesn't need actions, unlike `custom` whose
+notifications must be actionable. The last update in the thread is `high` priority, the rest
+`normal`.
 
-| Field         | Type       | Required | Notes                                                                                                                                                                                                                                                                                                    |
-| ------------- | ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mode`        | `"custom"` | yes      |                                                                                                                                                                                                                                                                                                          |
-| `module`      | string     | yes      | Must be one of the four registered modules (see [Action reference](#action-reference)). Unknown module → `400`.                                                                                                                                                                                          |
-| `title`       | string     | yes      | Min length 1.                                                                                                                                                                                                                                                                                            |
-| `description` | string     | yes      |                                                                                                                                                                                                                                                                                                          |
-| `priority`    | string     | yes      | One of `low`, `normal`, `high`, `critical`.                                                                                                                                                                                                                                                              |
-| `actions`     | string[]   | yes      | 1–5 action names, resolved against `module`'s catalog. Any name not in that module's catalog → `400`.                                                                                                                                                                                                    |
-| `audience`    | object     | no       | Shared `audienceSchema` (`{ scope, id? }`). `scope` is one of `global` / `team` / `role` / `user`. Omitted → defaults to `{ scope: "global" }`. Non-global scopes require an `id` (missing id → `400`, hub never called). For `team` the id is a team key, for `role` a role key, for `user` a username. |
+| Field   | Type        | Required | Notes                                                                                                                                                   |
+| ------- | ----------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`  | `"subject"` | yes      |                                                                                                                                                         |
+| `count` | number      | no       | Integer, min 1, max `MAX_BURST` (`50`), enforced by the zod schema (`.max(MAX_BURST)`). Omitted → `4`. Over-cap → generic `invalid request body` `400`. |
+| `seed`  | number      | no       | Integer. Fixes which `#<id>` the thread uses (mulberry32 PRNG), for a repeatable demo. Omitted → time-seeded, non-deterministic.                        |
+
+```json
+{ "mode": "subject", "count": 5, "seed": 7 }
+```
+
+**`mode: "custom"`** — one hand-built notification (optionally published as several copies).
+
+| Field         | Type       | Required | Notes                                                                                                                                                                                                                                                                                                                                        |
+| ------------- | ---------- | -------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mode`        | `"custom"` | yes      |                                                                                                                                                                                                                                                                                                                                              |
+| `module`      | string     | yes      | Must be one of the four registered modules (see [Action reference](#action-reference)). Unknown module → `400`.                                                                                                                                                                                                                              |
+| `title`       | string     | yes      | Min length 1.                                                                                                                                                                                                                                                                                                                                |
+| `description` | string     | yes      |                                                                                                                                                                                                                                                                                                                                              |
+| `priority`    | string     | yes      | One of `low`, `normal`, `high`, `critical`.                                                                                                                                                                                                                                                                                                  |
+| `actions`     | string[]   | yes      | 1–5 action names, resolved against `module`'s catalog. Any name not in that module's catalog → `400`.                                                                                                                                                                                                                                        |
+| `count`       | number     | no       | Integer, min 1, max `MAX_BURST` (`50`), enforced by the zod schema (`.max(MAX_BURST)`). Omitted → `1`. The route publishes this many **distinct copies** — each gets a fresh `id`, so the hub keeps all of them (lets an operator stack a group or fill the feed from one edited template). Over-cap → generic `invalid request body` `400`. |
+| `audience`    | object     | no       | Shared `audienceSchema` (`{ scope, id? }`). `scope` is one of `global` / `team` / `role` / `user`. Omitted → defaults to `{ scope: "global" }`. Non-global scopes require an `id` (missing id → `400`, hub never called). For `team` the id is a team key, for `role` a role key, for `user` a username.                                     |
 
 Emitted with `snoozable: true` (fixed — not caller-configurable in this mode). The
 `audience` is caller-configurable via the `audience` field above and defaults to
@@ -135,19 +163,19 @@ Emitted with `snoozable: true` (fixed — not caller-configurable in this mode).
 ```
 
 `published` is the number of notifications actually sent to the hub — equal to `count` for
-`burst`, always `1` for `preset`/`custom`.
+`burst`, `subject`, and `custom` (custom defaults to `1` when `count` is omitted), and always
+`1` for `preset`.
 
 ### Errors
 
-| Status | Body                                                                        | Reason                                                                                                                                               |
-| ------ | --------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 400    | `{ "error": "invalid request body", "issues": [...] }`                      | Body failed the `mode` discriminated-union schema (zod issues included as-is).                                                                       |
-| 400    | `{ "error": "count exceeds max burst of 50" }`                              | `burst.count > MAX_BURST`.                                                                                                                           |
-| 400    | `{ "error": "<message>" }`                                                  | Burst or preset generation threw internally (e.g. a preset referencing an unregistered module) — surfaced as `400` rather than crashing the request. |
-| 400    | `{ "error": "unknown module: \"<module>\"" }`                               | Custom mode: `module` isn't one of the four registered modules.                                                                                      |
-| 400    | `{ "error": "module \"<module>\" has no catalog action named \"<name>\"" }` | Custom mode: an `actions` entry isn't in that module's catalog.                                                                                      |
-| 502    | `{ "error": "hub unreachable" }`                                            | The outbound call to the hub threw (network error, hub not running, etc).                                                                            |
-| 502    | `{ "error": "hub rejected publish", "status": <n> }`                        | The hub responded with a non-2xx status.                                                                                                             |
+| Status | Body                                                                        | Reason                                                                                                                                                                                                                                                                          |
+| ------ | --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 400    | `{ "error": "invalid request body", "issues": [...] }`                      | Body failed the `mode` discriminated-union schema (zod issues included as-is). Includes an over-cap `count` in any batch mode — all of `burst`/`subject`/`custom` enforce `.max(MAX_BURST)` via the schema, so there is no longer a distinct "count exceeds max burst" message. |
+| 400    | `{ "error": "<message>" }`                                                  | Burst, subject, or preset generation threw internally (e.g. a preset referencing an unregistered module) — surfaced as `400` rather than crashing the request.                                                                                                                  |
+| 400    | `{ "error": "unknown module: \"<module>\"" }`                               | Custom mode: `module` isn't one of the four registered modules.                                                                                                                                                                                                                 |
+| 400    | `{ "error": "module \"<module>\" has no catalog action named \"<name>\"" }` | Custom mode: an `actions` entry isn't in that module's catalog.                                                                                                                                                                                                                 |
+| 502    | `{ "error": "hub unreachable" }`                                            | The outbound call to the hub threw (network error, hub not running, etc).                                                                                                                                                                                                       |
+| 502    | `{ "error": "hub rejected publish", "status": <n> }`                        | The hub responded with a non-2xx status.                                                                                                                                                                                                                                        |
 
 ### Side effects
 
@@ -198,10 +226,17 @@ No body, no params.
     }
   ],
   "presets": [
-    "critical-dsr",
-    "high-access-approval",
-    "normal-data-mapping-scan",
-    "low-assessment-reminder"
+    {
+      "id": "critical-dsr",
+      "label": "DSR · SLA breach (critical)",
+      "module": "dsr",
+      "title": "DSR approaching SLA breach",
+      "description": "A data-subject request is within 24 hours of its statutory deadline.",
+      "priority": "critical",
+      "category": "sla",
+      "actionNames": ["approve", "reject"],
+      "audienceScope": "global"
+    }
   ]
 }
 ```
@@ -209,9 +244,26 @@ No body, no params.
 `modules` is built from `ALL_MODULES`
 ([`src/modules/registry.ts`](../../packages/module-sim/src/modules/registry.ts)) — the same
 four modules and the same action names/labels/methods documented in the
-[Action reference](#action-reference) table below. `presets` is `PRESET_IDS`, exported from
-[`src/generate.ts`](../../packages/module-sim/src/generate.ts) — the same four ids
-documented under `POST /emit`'s ["preset" section](#post-emit) above.
+[Action reference](#action-reference) table below.
+
+`presets` is `presetSummaries()`, exported from
+[`src/generate.ts`](../../packages/module-sim/src/generate.ts) — an array of `PresetSummary`
+**objects** (previously a plain array of preset-id strings), one per id in `PRESET_IDS`, in
+that menu order. There are **9** presets today (the same ids/attributes documented under
+`POST /emit`'s ["preset" section](#post-emit) above). Each object carries everything the page
+needs to prefill the Custom form when a preset is selected:
+
+| Field           | Type     | Notes                                                                                                               |
+| --------------- | -------- | ------------------------------------------------------------------------------------------------------------------- |
+| `id`            | string   | The `PresetId` — what a `{ mode: "preset", preset }` emit would use.                                                |
+| `label`         | string   | Human-readable display name shown in the preset menu.                                                               |
+| `module`        | string   | One of the four registered module keys.                                                                             |
+| `title`         | string   | Preset title.                                                                                                       |
+| `description`   | string   | Preset body.                                                                                                        |
+| `priority`      | string   | One of `low` / `normal` / `high` / `critical`.                                                                      |
+| `category`      | string   | Optional — present only when the preset defines one.                                                                |
+| `actionNames`   | string[] | Catalog action names the preset attaches (the page pre-checks these in the Custom form).                            |
+| `audienceScope` | string   | Always `"global"` for every built-in preset today (carried explicitly so the page can restore the audience picker). |
 
 Each catalog entry's `makeAction` function is deliberately **not** included in this
 response: it isn't JSON-serializable (it's a function), and including it would leak
@@ -248,17 +300,20 @@ whether a `public/` directory survives the `tsup` bundle next to `dist/index.js`
 route behaves identically under `tsx src/index.ts` (dev) and `node dist/index.js` (build),
 regardless of process cwd).
 
-The page has three panels, each posting same-origin to this same service's
-[`POST /emit`](#post-emit) (documented above) with the mode it corresponds to:
+The page has four panels. Three post same-origin to this service's
+[`POST /emit`](#post-emit) (documented above); the **Preset** panel is the exception — it
+does **not** call `/emit`, it prefills the Custom panel client-side:
 
-| Panel  | Behavior                                                                                                                                                                                                                                     |
-| ------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Custom | Fetches [`GET /catalog`](#get-catalog) on page load to populate a module dropdown and, per selected module, a checkbox list of that module's actions. Submits `{ mode: "custom", module, title, description, priority, actions, audience }`. |
-| Preset | Fetches [`GET /catalog`](#get-catalog) for the list of preset ids. Submits `{ mode: "preset", preset }`.                                                                                                                                     |
-| Burst  | A count input capped client-side at `MAX_BURST` (currently `50` — the same constant `POST /emit` enforces server-side). Submits `{ mode: "burst", count }`.                                                                                  |
+| Panel  | Behavior                                                                                                                                                                                                                                                                                                                     |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Custom | Fetches [`GET /catalog`](#get-catalog) on page load to populate a module dropdown and, per selected module, a checkbox list of that module's actions. Has a **Send how many** count input (capped client-side at `MAX_BURST`). Submits `{ mode: "custom", module, title, description, priority, actions, count, audience }`. |
+| Preset | Fetches [`GET /catalog`](#get-catalog) for the preset summaries. Submitting **loads the selected preset into the Custom form** (module, title, description, priority, audience scope, and the preset's actions pre-checked) client-side — no `/emit` call — so the operator can tweak and emit from the Custom panel.        |
+| Burst  | A count input capped client-side at `MAX_BURST` (currently `50` — the same constant `POST /emit` enforces server-side) plus an optional **Seed** input. Submits `{ mode: "burst", count, seed? }`.                                                                                                                           |
+| Thread | A count ("Updates") input capped client-side at `MAX_BURST` plus an optional **Seed** input. Submits `{ mode: "subject", count, seed? }` — the one-subject grouping demo.                                                                                                                                                    |
 
-Each panel shows the `/emit` response (`{ "published": N }`) or error inline in its own
-status region — no page reload, no shared state between panels.
+Each `/emit`-backed panel shows the response (`{ "published": N }`) or error inline in its own
+status region; the Preset panel shows a "Loaded … into the Custom panel" confirmation. No page
+reload, no shared state between panels other than Preset writing into the Custom form.
 
 ### Errors
 

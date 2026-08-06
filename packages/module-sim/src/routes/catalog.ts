@@ -1,5 +1,5 @@
 import type { FastifyInstance } from "fastify";
-import { PRESET_IDS } from "../generate";
+import { presetSummaries, type PresetSummary } from "../generate";
 import { ALL_MODULES } from "../modules/registry";
 
 export interface CatalogActionDto {
@@ -15,7 +15,7 @@ export interface CatalogModuleDto {
 
 export interface CatalogResponse {
   modules: CatalogModuleDto[];
-  presets: readonly string[];
+  presets: PresetSummary[];
 }
 
 /**
@@ -24,7 +24,8 @@ export interface CatalogResponse {
  * a second copy of the action list in the page's JS. Deliberately projects each
  * `ActionCatalogEntry` down to `{ name, label, method }`: `makeAction` is a function (not
  * JSON-serializable) and is internal to generate.ts/emit.ts, so it must never leak into this
- * response. Also returns `PRESET_IDS` so the Preset panel doesn't need its own route.
+ * response. Also returns the preset SUMMARIES (id, label, and the fields the page uses to
+ * prefill the Custom form when a preset is picked) — no server round-trip per preset needed.
  */
 export function registerCatalogRoute(app: FastifyInstance): void {
   app.get("/catalog", async (): Promise<CatalogResponse> => {
@@ -36,6 +37,6 @@ export function registerCatalogRoute(app: FastifyInstance): void {
         method: entry.method,
       })),
     }));
-    return { modules, presets: PRESET_IDS };
+    return { modules, presets: presetSummaries() };
   });
 }

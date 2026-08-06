@@ -7,6 +7,7 @@ import {
   generateSubjectBurst,
   pickActions,
   PRESET_IDS,
+  presetSummaries,
 } from "./generate";
 import { lookupModule } from "./modules/registry";
 
@@ -97,6 +98,26 @@ describe("generatePreset", () => {
     const batch = generatePreset(id);
     expect(batch.length).toBeGreaterThan(0);
     for (const n of batch) expectActionable(n);
+  });
+});
+
+describe("presetSummaries", () => {
+  it("returns one prefill-able summary per preset, in PRESET_IDS order", () => {
+    const summaries = presetSummaries();
+    expect(summaries.map((s) => s.id)).toEqual([...PRESET_IDS]);
+
+    for (const s of summaries) {
+      expect(s.label.length).toBeGreaterThan(0);
+      expect(s.title.length).toBeGreaterThan(0);
+      expect(MODULE_KEYS).toContain(s.module);
+      expect(s.audienceScope).toBe("global");
+
+      // Every named action resolves against the module's real catalog — so a prefilled Custom
+      // form always checks boxes that map to real dispatch actions (mirrors pickActions' guard).
+      const mod = lookupModule(s.module)!;
+      expect(s.actionNames.length).toBeGreaterThan(0);
+      expect(() => pickActions(mod, s.actionNames)).not.toThrow();
+    }
   });
 });
 
