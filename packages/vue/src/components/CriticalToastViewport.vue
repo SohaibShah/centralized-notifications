@@ -5,7 +5,16 @@ import { usePanel } from "../provider/context";
 import { useFeed } from "../provider/context";
 import { usePreferences } from "../provider/context";
 import { shouldToast } from "../state/toast";
+import { useUi } from "../theming/useUi";
 import CriticalToast from "./CriticalToast.vue";
+
+const parts = {
+  root: "pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2",
+  overflow:
+    "pointer-events-auto rounded-full border border-line-strong bg-surface px-3 py-1 font-sans text-[11px] font-semibold text-muted shadow-md shadow-black/5",
+} as const;
+const props = defineProps<{ ui?: Partial<Record<keyof typeof parts, string>> }>();
+const ui = useUi("toast-viewport", parts, () => props.ui);
 
 const toasts = useToast();
 const panel = usePanel();
@@ -42,11 +51,8 @@ function view(id: string) {
 </script>
 
 <template>
-  <div class="pointer-events-none fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
-    <div
-      v-if="toasts.overflowCount > 0"
-      class="pointer-events-auto rounded-full border border-line-strong bg-surface px-3 py-1 font-sans text-[11px] font-semibold text-muted shadow-md shadow-black/5"
-    >
+  <div :class="ui('root')">
+    <div v-if="toasts.overflowCount > 0" :class="ui('overflow')">
       +{{ toasts.overflowCount }} earlier critical
     </div>
     <CriticalToast

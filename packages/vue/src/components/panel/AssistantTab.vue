@@ -1,10 +1,29 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from "vue";
-import { SendHorizontal, Sparkles } from "@lucide/vue";
 import Icon from "../../ui/Icon.vue";
 import { useChat } from "../../provider/context";
 import { useSettings } from "../../provider/context";
+import { useUi } from "../../theming/useUi";
 import MarkdownMessage from "./MarkdownMessage";
+
+const parts = {
+  root: "flex min-h-0 flex-1 flex-col",
+  scroller: "min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4",
+  empty: "flex items-start gap-2 text-[13px] leading-relaxed text-muted",
+  aiBubble:
+    "ai-bubble-border max-w-[82%] rounded-lg rounded-bl-sm px-3 py-2 text-[13px] leading-relaxed text-text",
+  userBubble:
+    "max-w-[82%] whitespace-pre-wrap rounded-lg rounded-br-sm bg-accent px-3 py-2 text-[13px] leading-relaxed text-accent-ink",
+  composer:
+    "flex items-end gap-2 rounded-lg border border-line-strong bg-sunken px-3 py-2 focus-within:border-accent",
+  input:
+    "max-h-32 flex-1 resize-none bg-transparent text-[13px] leading-relaxed text-text placeholder:text-faint focus:outline-none disabled:cursor-not-allowed",
+  sendButton:
+    "ai-gradient-bg grid size-7 shrink-0 place-items-center rounded-md text-accent-ink transition-opacity disabled:cursor-not-allowed disabled:opacity-40",
+  offState: "rounded-lg border border-line bg-sunken px-3 py-2 text-[13px] text-muted",
+} as const;
+const props = defineProps<{ ui?: Partial<Record<keyof typeof parts, string>> }>();
+const ui = useUi("assistant-tab", parts, () => props.ui);
 
 // Real streaming Q/A over the user's notifications. The thread + streaming live in the chat store;
 // this component owns only the draft input. Gated on the chatbotEnabled flag (the server enforces
@@ -84,18 +103,11 @@ watch(
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
-    <div
-      ref="scroller"
-      class="min-h-0 flex-1 space-y-3 overflow-y-auto px-4 py-4"
-      @scroll="onScroll"
-    >
+  <div :class="ui('root')">
+    <div ref="scroller" :class="ui('scroller')" @scroll="onScroll">
       <!-- Empty state: a short prompt before the first question. -->
-      <div
-        v-if="chat.thread.length === 0"
-        class="flex items-start gap-2 text-[13px] leading-relaxed text-muted"
-      >
-        <Icon :icon="Sparkles" :size="13" class="mt-0.5 shrink-0 text-ai-2" />
+      <div v-if="chat.thread.length === 0" :class="ui('empty')">
+        <Icon name="sparkles" :size="13" class="mt-0.5 shrink-0 text-ai-2" />
         <p>Ask me about your notifications — what's urgent, what's overdue, or anything else.</p>
       </div>
 
@@ -106,21 +118,14 @@ watch(
         :class="m.from === 'me' ? 'justify-end' : 'justify-start'"
       >
         <!-- AI answer: rendered as markdown, with inline [n#] citations as chips. -->
-        <div
-          v-if="m.from === 'ai'"
-          data-test="ai-answer"
-          class="ai-bubble-border max-w-[82%] rounded-lg rounded-bl-sm px-3 py-2 text-[13px] leading-relaxed text-text"
-        >
-          <Icon :icon="Sparkles" :size="13" class="mb-1 text-ai-2" />
+        <div v-if="m.from === 'ai'" data-test="ai-answer" :class="ui('aiBubble')">
+          <Icon name="sparkles" :size="13" class="mb-1 text-ai-2" />
           <MarkdownMessage :text="m.text" :sources="m.sources" />
           <span v-if="m.text === '' && chat.status === 'streaming'" class="text-faint">…</span>
         </div>
 
         <!-- User question: plain text, newlines preserved. -->
-        <p
-          v-else
-          class="max-w-[82%] whitespace-pre-wrap rounded-lg rounded-br-sm bg-accent px-3 py-2 text-[13px] leading-relaxed text-accent-ink"
-        >
+        <p v-else :class="ui('userBubble')">
           {{ m.text }}
         </p>
       </div>
@@ -128,11 +133,7 @@ watch(
 
     <div class="border-t border-line p-3">
       <!-- Composer — only when chat is enabled. -->
-      <form
-        v-if="settings.flags.chatbotEnabled"
-        class="flex items-end gap-2 rounded-lg border border-line-strong bg-sunken px-3 py-2 focus-within:border-accent"
-        @submit.prevent="onSubmit"
-      >
+      <form v-if="settings.flags.chatbotEnabled" :class="ui('composer')" @submit.prevent="onSubmit">
         <textarea
           ref="inputEl"
           v-model="draft"
@@ -141,7 +142,7 @@ watch(
           placeholder="Ask about your notifications…  (Shift+Enter for a new line)"
           aria-label="Ask the assistant"
           :disabled="chat.status === 'streaming'"
-          class="max-h-32 flex-1 resize-none bg-transparent text-[13px] leading-relaxed text-text placeholder:text-faint focus:outline-none disabled:cursor-not-allowed"
+          :class="ui('input')"
           @keydown="onKeydown"
           @input="autoGrow"
         />
@@ -150,20 +151,14 @@ watch(
           data-test="ai-send"
           aria-label="Send"
           :disabled="chat.status === 'streaming' || !draft.trim()"
-          class="ai-gradient-bg grid size-7 shrink-0 place-items-center rounded-md text-accent-ink transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+          :class="ui('sendButton')"
         >
-          <Icon :icon="SendHorizontal" :size="14" />
+          <Icon name="send-horizontal" :size="14" />
         </button>
       </form>
 
       <!-- Off state — server also enforces this; keep the messaging honest. -->
-      <p
-        v-else
-        data-test="ai-off"
-        class="rounded-lg border border-line bg-sunken px-3 py-2 text-[13px] text-muted"
-      >
-        AI chat is turned off.
-      </p>
+      <p v-else data-test="ai-off" :class="ui('offState')">AI chat is turned off.</p>
     </div>
   </div>
 </template>

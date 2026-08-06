@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, provide, toRef } from "vue";
+import { computed, onMounted, provide, toRef } from "vue";
 import { createCookieTransport } from "../transport/cookie-transport";
 import { connectSse as defaultConnectSse } from "../transport/sse";
 import { createFeedState } from "../state/feed";
@@ -11,8 +11,16 @@ import { createToastState } from "../state/toast";
 import { createPanelState } from "../state/panel";
 import { createNotificationActions } from "../state/actions";
 import { NOTIFICATIONS_KEY, type NotificationConfig, type NotificationsContext } from "./context";
+import { NOTIFICATION_UI_KEY, type NotificationUi } from "../theming/useUi";
+import { NOTIFICATION_ICONS_KEY, defaultIcons, type IconRegistry } from "../theming/icons";
 
-const props = defineProps<{ config: NotificationConfig }>();
+// `config` carries data/identity; `ui`/`icons` are the appearance surface — kept as their own
+// props so "what data" and "how it looks" stay separate at the call site.
+const props = defineProps<{
+  config: NotificationConfig;
+  ui?: NotificationUi;
+  icons?: IconRegistry;
+}>();
 
 // The connection fields (baseUrl/transport/connectSse) are resolved ONCE at setup — state is built a
 // single time. Only `config.user` is live (see the reactive `toRef` below); a host that reactively
@@ -57,6 +65,17 @@ const ctx: NotificationsContext = {
   baseUrl,
 };
 provide(NOTIFICATIONS_KEY, ctx);
+
+// Appearance surface, provided reactively so a host can swap themes at runtime. `ui` flows to every
+// component's useUi(); `icons` is the default registry merged with the host's overrides by name.
+provide(
+  NOTIFICATION_UI_KEY,
+  computed(() => props.ui),
+);
+provide(
+  NOTIFICATION_ICONS_KEY,
+  computed(() => ({ ...defaultIcons, ...(props.icons ?? {}) })),
+);
 
 // Load per-user preferences up front (not just when the settings page opens) so the critical-toast
 // preference and grouping toggle are live everywhere — the toast viewport is mounted app-wide and

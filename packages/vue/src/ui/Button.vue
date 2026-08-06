@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import { cva } from "class-variance-authority";
+import { cn } from "../lib/cn";
+import { useComponentUi } from "../theming/useUi";
 
 // Affordance comes from color/weight/spacing (not shadows), per the design system.
 // A caller's `class` and listeners fall through to the <button> automatically.
@@ -30,9 +32,14 @@ const props = defineProps<{
   size?: "sm" | "md";
   type?: "button" | "submit";
   disabled?: boolean;
+  ui?: { root?: string };
 }>();
 
-const classes = computed(() => button({ variant: props.variant, size: props.size }));
+// Precedence: cva base+variant  ←  provider ui.button.root  ←  instance ui.root (last wins via cn).
+const globalUi = useComponentUi("button");
+const classes = computed(() =>
+  cn(button({ variant: props.variant, size: props.size }), globalUi("root"), props.ui?.root),
+);
 </script>
 
 <template>

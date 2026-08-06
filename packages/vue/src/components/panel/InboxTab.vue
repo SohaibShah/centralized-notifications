@@ -1,21 +1,12 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
-import {
-  BellOff,
-  ChevronDown,
-  Inbox,
-  Layers,
-  RotateCw,
-  SearchX,
-  Sparkles,
-  WifiOff,
-} from "@lucide/vue";
 import type { FeedNotification, NotificationAction } from "@notifications/shared";
 import Button from "../../ui/Button.vue";
 import Chip from "../../ui/Chip.vue";
 import Icon from "../../ui/Icon.vue";
 import Skeleton from "../../ui/Skeleton.vue";
 import StatePanel from "../../ui/StatePanel.vue";
+import { useUi } from "../../theming/useUi";
 import { useFeed } from "../../provider/context";
 import { useSettings } from "../../provider/context";
 import { useSummary } from "../../provider/context";
@@ -26,6 +17,18 @@ import { relativeTime, exactTime } from "../../lib/time";
 import FeedList from "../components/FeedList.vue";
 import StackList from "../components/StackList.vue";
 import FeedBanner from "./FeedBanner.vue";
+
+const parts = {
+  root: "flex min-h-0 flex-1 flex-col",
+  summaryCard: "ai-gradient-border group relative mx-3 mt-3 shrink-0 overflow-hidden rounded-lg",
+  summaryToggle: "relative z-10 flex w-full items-center gap-1.5 rounded-lg px-3 py-2.5 text-left",
+  chipRow: "flex shrink-0 items-center gap-1.5 px-3 pb-2 pt-3",
+  mutedToggle:
+    "ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+  body: "flex min-h-0 flex-1 flex-col",
+} as const;
+const props = defineProps<{ ui?: Partial<Record<keyof typeof parts, string>> }>();
+const ui = useUi("inbox-tab", parts, () => props.ui);
 
 const feed = useFeed();
 const settings = useSettings();
@@ -151,13 +154,10 @@ async function onAction(
 </script>
 
 <template>
-  <div class="flex min-h-0 flex-1 flex-col">
+  <div :class="ui('root')">
     <!-- AI summary — static/canned this pass; chevron expands the fuller digest.
          Hidden entirely when an admin disables the AI-summary feature (global kill-switch). -->
-    <div
-      v-if="settings.flags.aiSummaryEnabled"
-      class="ai-gradient-border group relative mx-3 mt-3 shrink-0 overflow-hidden rounded-lg"
-    >
+    <div v-if="settings.flags.aiSummaryEnabled" :class="ui('summaryCard')">
       <span
         :key="bloomCount"
         data-test="ai-glow"
@@ -167,19 +167,19 @@ async function onAction(
       />
       <button
         type="button"
-        class="relative z-10 flex w-full items-center gap-1.5 rounded-lg px-3 py-2.5 text-left"
+        :class="ui('summaryToggle')"
         :aria-expanded="aiOpen"
         aria-controls="ai-summary-detail"
         @click="toggleSummary"
       >
-        <Icon :icon="Sparkles" :size="13" class="text-ai-2" />
+        <Icon name="sparkles" :size="13" class="text-ai-2" />
         <span
           data-test="ai-summary-label"
           class="font-mono text-[11px] font-semibold uppercase tracking-wide text-ai"
           >AI summary</span
         >
         <Icon
-          :icon="ChevronDown"
+          name="chevron-down"
           :size="14"
           class="ml-auto text-faint transition-transform"
           :class="{ 'rotate-180': aiOpen }"
@@ -208,7 +208,7 @@ async function onAction(
           data-test="ai-summary-loading"
           class="flex items-center gap-1.5 text-ai motion-safe:animate-pulse"
         >
-          <Icon :icon="Sparkles" :size="13" />
+          <Icon name="sparkles" :size="13" />
           <span class="font-medium">Loading your summary…</span>
         </div>
 
@@ -234,7 +234,7 @@ async function onAction(
               @click="summary.refresh()"
             >
               <Icon
-                :icon="RotateCw"
+                name="rotate-cw"
                 :size="12"
                 :class="{ 'motion-safe:animate-spin': summary.refreshing }"
               />
@@ -253,12 +253,7 @@ async function onAction(
             :aria-busy="summary.refreshing ? 'true' : undefined"
             @click="summary.refresh()"
           >
-            <Icon
-              v-if="summary.refreshing"
-              :icon="RotateCw"
-              :size="12"
-              class="motion-safe:animate-spin"
-            />
+            <Icon v-if="summary.refreshing" name="rotate-cw" :size="12" class="motion-safe:animate-spin" />
             {{ summary.refreshing ? "Generating…" : "Generate now" }}
           </button>
         </p>
@@ -277,7 +272,7 @@ async function onAction(
       </div>
     </div>
 
-    <div class="flex shrink-0 items-center gap-1.5 px-3 pb-2 pt-3">
+    <div :class="ui('chipRow')">
       <Chip :active="!feed.isFiltered" @click="feed.clearFilters()">All</Chip>
       <Chip :active="feed.unreadOnly" @click="feed.toggleUnreadOnly()">
         Unread
@@ -312,14 +307,15 @@ async function onAction(
       <button
         type="button"
         data-test="muted-view-toggle"
-        class="ml-auto inline-flex size-7 shrink-0 items-center justify-center rounded-md transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        :class="isMutedView ? 'bg-sunken text-text' : 'text-faint hover:bg-sunken hover:text-muted'"
+        :class="
+          ui('mutedToggle', isMutedView ? 'bg-sunken text-text' : 'text-faint hover:bg-sunken hover:text-muted')
+        "
         :aria-pressed="isMutedView"
         :title="isMutedView ? 'Hide muted notifications' : 'Show muted notifications'"
         :aria-label="isMutedView ? 'Hide muted notifications' : 'Show muted notifications'"
         @click="toggleMutedView"
       >
-        <Icon :icon="BellOff" :size="15" />
+        <Icon name="bell-off" :size="15" />
       </button>
     </div>
 
@@ -327,7 +323,7 @@ async function onAction(
     <FeedBanner
       v-if="isMutedView"
       data-test="muted-view-banner"
-      :icon="BellOff"
+      icon="bell-off"
       label="Snoozed & muted notifications"
     />
 
@@ -335,14 +331,14 @@ async function onAction(
     <FeedBanner
       v-else-if="feed.activeGroup !== null"
       data-test="group-view-banner"
-      :icon="Layers"
+      icon="layers"
       :label="feed.activeGroupLabel || 'Group'"
       exit-label="Exit group"
       @exit="feed.exitGroup()"
     />
 
     <!-- Body: loading / error / empty / filtered-empty / populated -->
-    <div class="flex min-h-0 flex-1 flex-col">
+    <div :class="ui('body')">
       <div v-if="feed.status === 'loading'" class="px-3 py-2" aria-hidden="true">
         <div v-for="i in 5" :key="i" class="flex gap-3 border-b border-line py-3">
           <Skeleton class="mt-1 size-2 rounded-full" />
@@ -355,7 +351,7 @@ async function onAction(
 
       <StatePanel
         v-else-if="feed.status === 'error'"
-        :icon="WifiOff"
+        icon="wifi-off"
         title="Couldn't load your notifications"
         :description="feed.error ?? 'Check your connection and try again.'"
       >
@@ -366,21 +362,21 @@ async function onAction(
 
       <StatePanel
         v-else-if="isEmpty"
-        :icon="Inbox"
+        icon="inbox"
         title="You're all caught up"
         description="New notifications from your modules will appear here as they arrive — live."
       />
 
       <StatePanel
         v-else-if="isMutedEmpty"
-        :icon="BellOff"
+        icon="bell-off"
         title="Nothing muted"
         description="Notifications you've snoozed or muted will appear here. Manage your rules in Settings."
       />
 
       <StatePanel
         v-else-if="isFilteredEmpty"
-        :icon="SearchX"
+        icon="search-x"
         title="No notifications match your filters"
         description="Try removing a filter or clearing your search."
       >

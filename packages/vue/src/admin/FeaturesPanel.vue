@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { ToggleRight } from "@lucide/vue";
 import Button from "../ui/Button.vue";
 import Spinner from "../ui/Spinner.vue";
 import StatePanel from "../ui/StatePanel.vue";
@@ -8,7 +7,16 @@ import FormRenderer from "../forms/FormRenderer.vue";
 import { featuresForm } from "../forms/features.form";
 import type { FormValues } from "../forms/types";
 import { useSettings, useTransport } from "../provider/context";
+import { useUi } from "../theming/useUi";
 import type { FeatureFlags } from "../state/settings";
+
+const parts = {
+  root: "",
+  title: "font-display text-[16px] font-medium text-text",
+  description: "mb-3 mt-0.5 text-[12px] text-muted",
+} as const;
+const props = defineProps<{ ui?: Partial<Record<keyof typeof parts, string>> }>();
+const ui = useUi("admin-features", parts, () => props.ui);
 
 const settings = useSettings();
 const transport = useTransport();
@@ -47,15 +55,15 @@ async function onSubmit(values: FormValues): Promise<void> {
 </script>
 
 <template>
-  <section>
-    <h2 class="font-display text-[16px] font-medium text-text">Features</h2>
-    <p class="mb-3 mt-0.5 text-[12px] text-muted">Turn platform features on or off for everyone.</p>
+  <section :class="ui('root')">
+    <h2 :class="ui('title')">Features</h2>
+    <p :class="ui('description')">Turn platform features on or off for everyone.</p>
 
     <div v-if="status === 'loading'" class="flex justify-center py-10"><Spinner :size="18" /></div>
 
     <StatePanel
       v-else-if="status === 'error'"
-      :icon="ToggleRight"
+      icon="toggle-right"
       title="Couldn't load settings"
       description="Something went wrong fetching the feature settings."
     >

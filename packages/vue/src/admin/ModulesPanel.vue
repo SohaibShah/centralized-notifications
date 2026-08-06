@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { Boxes } from "@lucide/vue";
 import type { NotificationPriority } from "@notifications/shared";
 import { moduleBaseUrlSchema, NOTIFICATION_PRIORITIES } from "@notifications/shared";
 import Button from "../ui/Button.vue";
@@ -10,7 +9,18 @@ import StatePanel from "../ui/StatePanel.vue";
 import { priorityLabel } from "../design/tokens";
 import { relativeTime } from "../lib/time";
 import { useTransport } from "../provider/context";
+import { useUi } from "../theming/useUi";
 import { createAdminApi, type AdminModule } from "./adminApi";
+
+const parts = {
+  root: "",
+  title: "font-display text-[16px] font-medium text-text",
+  description: "mt-0.5 text-[12px] text-muted",
+  row: "border-b border-line py-2.5",
+  toggle: "relative inline-block h-[18px] w-[32px] rounded-full transition-colors duration-100",
+} as const;
+const props = defineProps<{ ui?: Partial<Record<keyof typeof parts, string>> }>();
+const ui = useUi("admin-modules", parts, () => props.ui);
 
 type Sort = "critical" | "total" | "recent" | "name";
 
@@ -100,9 +110,9 @@ async function toggle(m: AdminModule): Promise<void> {
 </script>
 
 <template>
-  <section>
-    <h2 class="font-display text-[16px] font-medium text-text">Modules</h2>
-    <p class="mt-0.5 text-[12px] text-muted">
+  <section :class="ui('root')">
+    <h2 :class="ui('title')">Modules</h2>
+    <p :class="ui('description')">
       The modules that can send notifications. Disable one to stop it reaching anyone — existing
       items stay; new ones are recorded but suppressed. Each module's base URL is its API root —
       where action callbacks are sent.
@@ -112,7 +122,7 @@ async function toggle(m: AdminModule): Promise<void> {
 
     <StatePanel
       v-else-if="status === 'error'"
-      :icon="Boxes"
+      icon="boxes"
       title="Couldn't load modules"
       description="Something went wrong fetching the module list."
     >
@@ -121,7 +131,7 @@ async function toggle(m: AdminModule): Promise<void> {
 
     <StatePanel
       v-else-if="modules.length === 0"
-      :icon="Boxes"
+      icon="boxes"
       title="No modules configured"
       description="Modules are seeded in the database; none were returned."
     />
@@ -162,7 +172,7 @@ async function toggle(m: AdminModule): Promise<void> {
         <span class="w-10 text-right">On</span>
       </div>
 
-      <div v-for="m in visible" :key="m.key" class="border-b border-line py-2.5">
+      <div v-for="m in visible" :key="m.key" :class="ui('row')">
         <div class="flex items-center gap-3">
           <div class="min-w-0 flex-1">
             <span class="truncate text-[13px] font-semibold text-text">{{ m.label }}</span>
@@ -192,8 +202,7 @@ async function toggle(m: AdminModule): Promise<void> {
               :aria-checked="m.enabled"
               :aria-label="`${m.enabled ? 'Disable' : 'Enable'} ${m.label}`"
               :data-test="`toggle-${m.key}`"
-              class="relative inline-block h-[18px] w-[32px] rounded-full transition-colors duration-100"
-              :class="m.enabled ? 'bg-accent' : 'bg-line-strong'"
+              :class="ui('toggle', m.enabled ? 'bg-accent' : 'bg-line-strong')"
               @click="toggle(m)"
             >
               <span

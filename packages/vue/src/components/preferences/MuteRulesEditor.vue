@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed } from "vue";
-import { BellOff, ChevronDown, Clock, RotateCcw } from "@lucide/vue";
 import type {
   CategoryMuteTarget,
   ModuleMuteTarget,
@@ -11,6 +10,19 @@ import type {
 import { usePreferences } from "../../provider/context";
 import { muteStatusLabel, resolveSnoozeUntil, SNOOZE_OPTIONS } from "../../preferences/snooze";
 import Icon from "../../ui/Icon.vue";
+import { useUi } from "../../theming/useUi";
+
+const parts = {
+  root: "flex flex-col gap-6",
+  groupTitle: "text-[11px] font-semibold text-faint",
+  row: "flex items-center justify-between gap-3 py-2.5",
+  resume:
+    "inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:bg-sunken hover:text-text",
+  snoozeSummary:
+    "inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-line-strong bg-surface px-2 py-1 text-[12px] font-medium text-text transition-colors hover:bg-sunken [&::-webkit-details-marker]:hidden",
+  muteToggle:
+    "inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-colors",
+} as const;
 
 /**
  * Per-user snooze/mute editor. Lists the host's module catalog and the user's categories (from
@@ -24,8 +36,10 @@ const props = defineProps<{
   categories: CategoryMuteTarget[];
   /** The user's IANA timezone — used to resolve "tomorrow morning". Defaults to the browser's. */
   timezone?: string;
+  ui?: Partial<Record<keyof typeof parts, string>>;
 }>();
 
+const ui = useUi("mute-editor", parts, () => props.ui);
 const preferences = usePreferences();
 const tz = computed(
   () => props.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC",
@@ -95,7 +109,7 @@ async function resume(row: Row): Promise<void> {
 </script>
 
 <template>
-  <div class="flex flex-col gap-6">
+  <div :class="ui('root')">
     <section
       v-for="group in [
         { title: 'Modules', rows: moduleRows },
@@ -107,14 +121,14 @@ async function resume(row: Row): Promise<void> {
     >
       <!-- Sub-heading under the "Snooze & mute" section — deliberately lighter/smaller than a section
            heading so the Modules/Categories grouping reads as subordinate. -->
-      <p class="text-[11px] font-semibold text-faint">{{ group.title }}</p>
+      <p :class="ui('groupTitle')">{{ group.title }}</p>
       <ul class="flex flex-col divide-y divide-line">
         <li
           v-for="row in group.rows"
           :key="`${row.kind}:${row.target}`"
           data-test="mute-row"
           :data-target="`${row.kind}:${row.target}`"
-          class="flex items-center justify-between gap-3 py-2.5"
+          :class="ui('row')"
         >
           <div class="min-w-0 flex-1">
             <p class="truncate text-[13px] font-medium text-text">{{ row.label }}</p>
@@ -151,18 +165,16 @@ async function resume(row: Row): Promise<void> {
               v-if="isActive(row)"
               type="button"
               data-test="mute-clear"
-              class="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] font-medium text-muted transition-colors hover:bg-sunken hover:text-text"
+              :class="ui('resume')"
               @click="resume(row)"
             >
-              <Icon :icon="RotateCcw" :size="13" /> Resume
+              <Icon name="rotate-ccw" :size="13" /> Resume
             </button>
 
             <details class="group relative">
-              <summary
-                class="inline-flex cursor-pointer list-none items-center gap-1 rounded-md border border-line-strong bg-surface px-2 py-1 text-[12px] font-medium text-text transition-colors hover:bg-sunken [&::-webkit-details-marker]:hidden"
-              >
-                <Icon :icon="Clock" :size="13" /> Snooze
-                <Icon :icon="ChevronDown" :size="12" class="text-faint" />
+              <summary :class="ui('snoozeSummary')">
+                <Icon name="clock" :size="13" /> Snooze
+                <Icon name="chevron-down" :size="12" class="text-faint" />
               </summary>
               <div
                 class="absolute right-0 z-10 mt-1 flex w-52 flex-col overflow-hidden rounded-lg border border-line-strong bg-surface py-1 shadow-lg shadow-black/5"
@@ -184,16 +196,18 @@ async function resume(row: Row): Promise<void> {
             <button
               type="button"
               data-test="mute-toggle"
-              class="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-[12px] font-medium transition-colors"
               :class="
-                ruleFor(row.kind, row.target)?.mutedUntil === null
-                  ? 'border-accent/30 bg-accent/10 text-accent'
-                  : 'border-line-strong bg-surface text-text hover:bg-sunken'
+                ui(
+                  'muteToggle',
+                  ruleFor(row.kind, row.target)?.mutedUntil === null
+                    ? 'border-accent/30 bg-accent/10 text-accent'
+                    : 'border-line-strong bg-surface text-text hover:bg-sunken',
+                )
               "
               :aria-pressed="ruleFor(row.kind, row.target)?.mutedUntil === null"
               @click="ruleFor(row.kind, row.target)?.mutedUntil === null ? resume(row) : mute(row)"
             >
-              <Icon :icon="BellOff" :size="13" />
+              <Icon name="bell-off" :size="13" />
               {{ ruleFor(row.kind, row.target)?.mutedUntil === null ? "Muted" : "Mute" }}
             </button>
           </div>

@@ -3,7 +3,17 @@ import { computed, onMounted, ref } from "vue";
 import { ApiError } from "../transport/cookie-transport";
 import { useTransport } from "../provider/context";
 import Button from "../ui/Button.vue";
+import { useUi } from "../theming/useUi";
 import { createAdminApi } from "./adminApi";
+
+const parts = {
+  root: "flex flex-col gap-5",
+  title: "font-display text-[16px] font-medium text-text",
+  description: "mt-0.5 text-[12px] text-muted",
+  row: "flex items-center gap-3 border-b border-line pb-4",
+} as const;
+const uiProps = defineProps<{ ui?: Partial<Record<keyof typeof parts, string>> }>();
+const ui = useUi("admin-maintenance", parts, () => uiProps.ui);
 
 const admin = createAdminApi(useTransport());
 const busy = ref(false);
@@ -66,16 +76,16 @@ async function saveRetention(): Promise<void> {
 </script>
 
 <template>
-  <section class="flex flex-col gap-5">
+  <section :class="ui('root')">
     <div>
-      <h2 class="font-display text-[16px] font-medium text-text">Maintenance</h2>
-      <p class="mt-0.5 text-[12px] text-muted">
+      <h2 :class="ui('title')">Maintenance</h2>
+      <p :class="ui('description')">
         Destructive, dev/QA only. These run immediately against the real database.
       </p>
     </div>
 
     <!-- Delete read -->
-    <div class="flex items-center gap-3 border-b border-line pb-4">
+    <div :class="ui('row')">
       <div class="min-w-0 flex-1">
         <div class="text-[13px] font-semibold text-text">Delete read ("Earlier")</div>
         <div class="text-[11px] text-faint">Removes every notification anyone has read.</div>
@@ -102,7 +112,7 @@ async function saveRetention(): Promise<void> {
     </div>
 
     <!-- Delete older than N -->
-    <div class="flex items-center gap-3 border-b border-line pb-4">
+    <div :class="ui('row')">
       <div class="min-w-0 flex-1">
         <div class="text-[13px] font-semibold text-text">Delete older than</div>
         <div class="text-[11px] text-faint">Defaults to the retention window.</div>
@@ -127,7 +137,7 @@ async function saveRetention(): Promise<void> {
     </div>
 
     <!-- Reset modules / settings -->
-    <div class="flex items-center gap-3 border-b border-line pb-4">
+    <div :class="ui('row')">
       <div class="min-w-0 flex-1">
         <div class="text-[13px] font-semibold text-text">Reset</div>
         <div class="text-[11px] text-faint">
