@@ -10,7 +10,6 @@ import {
   ShieldCheck,
 } from "@lucide/vue";
 import { useRouter } from "vue-router";
-import { Icon } from "@notifications/vue";
 import { useSessionStore } from "@/stores/session";
 
 // Role-aware navigation. Only "Dashboard" and "Settings" route to real (stub) pages this
@@ -62,7 +61,7 @@ async function signOut() {
         class="flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-muted transition-colors duration-100 hover:bg-sunken hover:text-text"
         exact-active-class="!bg-accent/10 !text-accent"
       >
-        <Icon :icon="LayoutDashboard" :size="16" />
+        <LayoutDashboard :size="16" :stroke-width="1.75" aria-hidden="true" />
         Dashboard
       </RouterLink>
 
@@ -73,7 +72,7 @@ async function signOut() {
         :title="`${item.label} — placeholder`"
         aria-disabled="true"
       >
-        <Icon :icon="item.icon" :size="16" />
+        <component :is="item.icon" :size="16" :stroke-width="1.75" aria-hidden="true" />
         {{ item.label }}
       </div>
 
@@ -83,7 +82,7 @@ async function signOut() {
         class="mt-1 flex items-center gap-2.5 rounded-md px-3 py-2 text-[13px] font-medium text-muted transition-colors duration-100 hover:bg-sunken hover:text-text"
         exact-active-class="!bg-accent/10 !text-accent"
       >
-        <Icon :icon="ShieldCheck" :size="16" />
+        <ShieldCheck :size="16" :stroke-width="1.75" aria-hidden="true" />
         Admin
       </RouterLink>
     </nav>
@@ -106,7 +105,7 @@ async function signOut() {
           title="Settings"
           aria-label="Settings"
         >
-          <Icon :icon="Settings" :size="16" />
+          <Settings :size="16" :stroke-width="1.75" aria-hidden="true" />
         </RouterLink>
         <button
           type="button"
@@ -114,7 +113,7 @@ async function signOut() {
           aria-label="Sign out"
           @click="signOut"
         >
-          <Icon :icon="LogOut" :size="16" />
+          <LogOut :size="16" :stroke-width="1.75" aria-hidden="true" />
         </button>
       </div>
     </div>
